@@ -46,3 +46,7 @@ python -m unreal_editor_mcp.server
 - 材质图构建与分析
 - Niagara 图与 Emitter 读写
 - Blueprint 信息读取与高级图命令透传
+
+## 提交约定
+
+- 本仓库的提交信息统一使用中文。

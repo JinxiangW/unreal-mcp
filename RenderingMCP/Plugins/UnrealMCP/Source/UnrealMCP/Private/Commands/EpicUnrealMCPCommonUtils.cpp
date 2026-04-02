@@ -26,6 +26,189 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+namespace
+{
+    FString NormalizePropertyKey(const FString& Input)
+    {
+        FString Result;
+        Result.Reserve(Input.Len());
+        for (TCHAR Ch : Input)
+        {
+            if (FChar::IsAlnum(Ch))
+            {
+                Result.AppendChar(FChar::ToLower(Ch));
+            }
+        }
+        return Result;
+    }
+
+    FProperty* FindPropertyByFlexibleName(UStruct* OwnerStruct, const FString& PropertyName)
+    {
+        if (!OwnerStruct)
+        {
+            return nullptr;
+        }
+
+        if (FProperty* ExactProperty = OwnerStruct->FindPropertyByName(*PropertyName))
+        {
+            return ExactProperty;
+        }
+
+        const FString Target = NormalizePropertyKey(PropertyName);
+        for (TFieldIterator<FProperty> It(OwnerStruct); It; ++It)
+        {
+            FProperty* Candidate = *It;
+            if (NormalizePropertyKey(Candidate->GetName()) == Target)
+            {
+                return Candidate;
+            }
+        }
+
+        return nullptr;
+    }
+
+    bool SetStructFieldsFromObject(UStruct* StructType, void* StructData,
+        const TSharedPtr<FJsonObject>& JsonObject, FString& OutErrorMessage)
+    {
+        if (!StructType || !StructData || !JsonObject.IsValid())
+        {
+            OutErrorMessage = TEXT("Invalid struct assignment context");
+            return false;
+        }
+
+        TArray<FString> FailedFields;
+        for (const auto& Pair : JsonObject->Values)
+        {
+            FProperty* NestedProperty = FindPropertyByFlexibleName(StructType, Pair.Key);
+            if (!NestedProperty)
+            {
+                FailedFields.Add(Pair.Key + TEXT(": Property not found"));
+                continue;
+            }
+
+            void* NestedAddr = NestedProperty->ContainerPtrToValuePtr<void>(StructData);
+            FString FieldError;
+            bool bFieldSet = false;
+
+            if (FBoolProperty* BoolProp = CastField<FBoolProperty>(NestedProperty))
+            {
+                BoolProp->SetPropertyValue(NestedAddr, Pair.Value->AsBool());
+                bFieldSet = true;
+            }
+            else if (FIntProperty* IntProp = CastField<FIntProperty>(NestedProperty))
+            {
+                IntProp->SetPropertyValue(NestedAddr, static_cast<int32>(Pair.Value->AsNumber()));
+                bFieldSet = true;
+            }
+            else if (FFloatProperty* FloatProp = CastField<FFloatProperty>(NestedProperty))
+            {
+                FloatProp->SetPropertyValue(NestedAddr, Pair.Value->AsNumber());
+                bFieldSet = true;
+            }
+            else if (FDoubleProperty* DoubleProp = CastField<FDoubleProperty>(NestedProperty))
+            {
+                DoubleProp->SetPropertyValue(NestedAddr, Pair.Value->AsNumber());
+                bFieldSet = true;
+            }
+            else if (FStrProperty* StrProp = CastField<FStrProperty>(NestedProperty))
+            {
+                StrProp->SetPropertyValue(NestedAddr, Pair.Value->AsString());
+                bFieldSet = true;
+            }
+            else if (FNameProperty* NameProp = CastField<FNameProperty>(NestedProperty))
+            {
+                NameProp->SetPropertyValue(NestedAddr, FName(*Pair.Value->AsString()));
+                bFieldSet = true;
+            }
+            else if (FTextProperty* TextProp = CastField<FTextProperty>(NestedProperty))
+            {
+                TextProp->SetPropertyValue(NestedAddr, FText::FromString(Pair.Value->AsString()));
+                bFieldSet = true;
+            }
+            else if (FStructProperty* StructProp = CastField<FStructProperty>(NestedProperty))
+            {
+                if (StructProp->Struct == TBaseStructure<FLinearColor>::Get())
+                {
+                    FLinearColor* Color = static_cast<FLinearColor*>(NestedAddr);
+                    if (Pair.Value->Type == EJson::Object)
+                    {
+                        const TSharedPtr<FJsonObject>* Obj = nullptr;
+                        if (Pair.Value->TryGetObject(Obj))
+                        {
+                            double R = Color->R, G = Color->G, B = Color->B, A = Color->A;
+                            Obj->Get()->TryGetNumberField(TEXT("r"), R);
+                            Obj->Get()->TryGetNumberField(TEXT("g"), G);
+                            Obj->Get()->TryGetNumberField(TEXT("b"), B);
+                            Obj->Get()->TryGetNumberField(TEXT("a"), A);
+                            *Color = FLinearColor(R, G, B, A);
+                            bFieldSet = true;
+                        }
+                    }
+                }
+                else if (StructProp->Struct == TBaseStructure<FColor>::Get())
+                {
+                    FColor* Color = static_cast<FColor*>(NestedAddr);
+                    if (Pair.Value->Type == EJson::Object)
+                    {
+                        const TSharedPtr<FJsonObject>* Obj = nullptr;
+                        if (Pair.Value->TryGetObject(Obj))
+                        {
+                            double R = Color->R, G = Color->G, B = Color->B, A = Color->A;
+                            Obj->Get()->TryGetNumberField(TEXT("r"), R);
+                            Obj->Get()->TryGetNumberField(TEXT("g"), G);
+                            Obj->Get()->TryGetNumberField(TEXT("b"), B);
+                            Obj->Get()->TryGetNumberField(TEXT("a"), A);
+                            *Color = FColor(
+                                static_cast<uint8>(FMath::Clamp(R, 0.0, 255.0)),
+                                static_cast<uint8>(FMath::Clamp(G, 0.0, 255.0)),
+                                static_cast<uint8>(FMath::Clamp(B, 0.0, 255.0)),
+                                static_cast<uint8>(FMath::Clamp(A, 0.0, 255.0)));
+                            bFieldSet = true;
+                        }
+                    }
+                }
+
+                if (!bFieldSet && Pair.Value->Type == EJson::Object)
+                {
+                    const TSharedPtr<FJsonObject>* Obj = nullptr;
+                    if (Pair.Value->TryGetObject(Obj))
+                    {
+                        bFieldSet = SetStructFieldsFromObject(StructProp->Struct, NestedAddr, *Obj, FieldError);
+                    }
+                }
+            }
+
+            if (!bFieldSet)
+            {
+                if (FieldError.IsEmpty())
+                {
+                    FieldError = FString::Printf(TEXT("Unsupported property type: %s"), *NestedProperty->GetClass()->GetName());
+                }
+                FailedFields.Add(Pair.Key + TEXT(": ") + FieldError);
+                continue;
+            }
+
+            const FString OverrideFieldName = FString::Printf(TEXT("bOverride_%s"), *Pair.Key);
+            if (FProperty* OverrideProp = FindPropertyByFlexibleName(StructType, OverrideFieldName))
+            {
+                if (FBoolProperty* BoolOverrideProp = CastField<FBoolProperty>(OverrideProp))
+                {
+                    void* OverrideAddr = OverrideProp->ContainerPtrToValuePtr<void>(StructData);
+                    BoolOverrideProp->SetPropertyValue(OverrideAddr, true);
+                }
+            }
+        }
+
+        if (FailedFields.Num() > 0)
+        {
+            OutErrorMessage = FString::Join(FailedFields, TEXT("; "));
+            return false;
+        }
+
+        return true;
+    }
+}
+
 // JSON Utilities
 TSharedPtr<FJsonObject> FEpicUnrealMCPCommonUtils::CreateErrorResponse(const FString& Message)
 {
@@ -564,7 +747,7 @@ bool FEpicUnrealMCPCommonUtils::SetObjectProperty(UObject* Object, const FString
         return false;
     }
 
-    FProperty* Property = Object->GetClass()->FindPropertyByName(*PropertyName);
+    FProperty* Property = FindPropertyByFlexibleName(Object->GetClass(), PropertyName);
     if (!Property)
     {
         OutErrorMessage = FString::Printf(TEXT("Property not found: %s"), *PropertyName);
@@ -597,6 +780,16 @@ bool FEpicUnrealMCPCommonUtils::SetObjectProperty(UObject* Object, const FString
     else if (Property->IsA<FStrProperty>())
     {
         ((FStrProperty*)Property)->SetPropertyValue(PropertyAddr, Value->AsString());
+        return true;
+    }
+    else if (Property->IsA<FNameProperty>())
+    {
+        ((FNameProperty*)Property)->SetPropertyValue(PropertyAddr, FName(*Value->AsString()));
+        return true;
+    }
+    else if (Property->IsA<FTextProperty>())
+    {
+        ((FTextProperty*)Property)->SetPropertyValue(PropertyAddr, FText::FromString(Value->AsString()));
         return true;
     }
     else if (Property->IsA<FByteProperty>())
@@ -745,6 +938,17 @@ bool FEpicUnrealMCPCommonUtils::SetObjectProperty(UObject* Object, const FString
                     OutErrorMessage = FString::Printf(TEXT("Could not find enum value for '%s'"), *EnumValueName);
                     return false;
                 }
+            }
+        }
+    }
+    else if (FStructProperty* StructProperty = CastField<FStructProperty>(Property))
+    {
+        if (Value->Type == EJson::Object)
+        {
+            const TSharedPtr<FJsonObject>* Obj = nullptr;
+            if (Value->TryGetObject(Obj))
+            {
+                return SetStructFieldsFromObject(StructProperty->Struct, PropertyAddr, *Obj, OutErrorMessage);
             }
         }
     }

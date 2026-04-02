@@ -280,6 +280,9 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
                      CommandType == TEXT("spawn_actor") ||
                      CommandType == TEXT("delete_actor") ||
                      CommandType == TEXT("get_actors") ||
+                     CommandType == TEXT("batch_spawn_actors") ||
+                     CommandType == TEXT("batch_delete_actors") ||
+                     CommandType == TEXT("batch_set_actors_properties") ||
                      CommandType == TEXT("set_actor_properties") ||
                      CommandType == TEXT("get_actor_properties"))
             {

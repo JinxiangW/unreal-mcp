@@ -47,6 +47,23 @@
 #include "Editor/UnrealEd/Public/FileHelpers.h"
 #include "Engine/Level.h"
 
+namespace
+{
+    FString NormalizeEnvironmentPropertyKey(const FString& Input)
+    {
+        FString Result;
+        Result.Reserve(Input.Len());
+        for (TCHAR Ch : Input)
+        {
+            if (FChar::IsAlnum(Ch))
+            {
+                Result.AppendChar(FChar::ToLower(Ch));
+            }
+        }
+        return Result;
+    }
+}
+
 // ============================================================================
 // Viewport Screenshot
 // ============================================================================
@@ -427,6 +444,7 @@ bool FEpicUnrealMCPEnvironmentCommands::SetPropertyByName(UObject* Object, const
     }
 
     // Try to find property on the object itself
+    const FString NormalizedPropertyName = NormalizeEnvironmentPropertyKey(PropertyName);
     FProperty* Property = Object->GetClass()->FindPropertyByName(*PropertyName);
     
     if (Property)
@@ -443,17 +461,28 @@ bool FEpicUnrealMCPEnvironmentCommands::SetPropertyByName(UObject* Object, const
         TArray<TPair<FString, FString>> ComponentMappings;
         
         // Light properties
-        if (PropertyName == TEXT("intensity") || PropertyName == TEXT("color") || 
-            PropertyName == TEXT("cast_shadows") || PropertyName == TEXT("temperature") ||
-            PropertyName == TEXT("attenuation_radius") || PropertyName == TEXT("outer_cone_angle") ||
-            PropertyName == TEXT("inner_cone_angle") || PropertyName == TEXT("source_radius") ||
-            PropertyName == TEXT("use_temperature"))
+        if (NormalizedPropertyName == TEXT("intensity") || NormalizedPropertyName == TEXT("lightcolor") || 
+            NormalizedPropertyName == TEXT("color") || NormalizedPropertyName == TEXT("castshadows") ||
+            NormalizedPropertyName == TEXT("temperature") || NormalizedPropertyName == TEXT("attenuationradius") ||
+            NormalizedPropertyName == TEXT("outerconeangle") || NormalizedPropertyName == TEXT("innerconeangle") ||
+            NormalizedPropertyName == TEXT("sourceradius") || NormalizedPropertyName == TEXT("usetemperature"))
         {
-            ComponentMappings.Add(TPair<FString, FString>(TEXT("LightComponent"), PropertyName));
-            ComponentMappings.Add(TPair<FString, FString>(TEXT("PointLightComponent"), PropertyName));
-            ComponentMappings.Add(TPair<FString, FString>(TEXT("SpotLightComponent"), PropertyName));
-            ComponentMappings.Add(TPair<FString, FString>(TEXT("DirectionalLightComponent"), PropertyName));
-            ComponentMappings.Add(TPair<FString, FString>(TEXT("RectLightComponent"), PropertyName));
+            FString ComponentPropertyName = PropertyName;
+            if (NormalizedPropertyName == TEXT("lightcolor") || NormalizedPropertyName == TEXT("color")) ComponentPropertyName = TEXT("LightColor");
+            else if (NormalizedPropertyName == TEXT("castshadows")) ComponentPropertyName = TEXT("CastShadows");
+            else if (NormalizedPropertyName == TEXT("attenuationradius")) ComponentPropertyName = TEXT("AttenuationRadius");
+            else if (NormalizedPropertyName == TEXT("outerconeangle")) ComponentPropertyName = TEXT("OuterConeAngle");
+            else if (NormalizedPropertyName == TEXT("innerconeangle")) ComponentPropertyName = TEXT("InnerConeAngle");
+            else if (NormalizedPropertyName == TEXT("sourceradius")) ComponentPropertyName = TEXT("SourceRadius");
+            else if (NormalizedPropertyName == TEXT("usetemperature")) ComponentPropertyName = TEXT("UseTemperature");
+            else if (NormalizedPropertyName == TEXT("temperature")) ComponentPropertyName = TEXT("Temperature");
+            else if (NormalizedPropertyName == TEXT("intensity")) ComponentPropertyName = TEXT("Intensity");
+
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("LightComponent"), ComponentPropertyName));
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("PointLightComponent"), ComponentPropertyName));
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("SpotLightComponent"), ComponentPropertyName));
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("DirectionalLightComponent"), ComponentPropertyName));
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("RectLightComponent"), ComponentPropertyName));
         }
         // Mesh properties
         else if (PropertyName == TEXT("static_mesh") || PropertyName == TEXT("material") ||
@@ -463,7 +492,7 @@ bool FEpicUnrealMCPEnvironmentCommands::SetPropertyByName(UObject* Object, const
             ComponentMappings.Add(TPair<FString, FString>(TEXT("MeshComponent"), PropertyName));
         }
         // Transform shortcuts
-        else if (PropertyName == TEXT("location"))
+        else if (NormalizedPropertyName == TEXT("location"))
         {
             // Handle location via SetActorLocation
             if (Value->Type == EJson::Object)
@@ -490,7 +519,7 @@ bool FEpicUnrealMCPEnvironmentCommands::SetPropertyByName(UObject* Object, const
                 }
             }
         }
-        else if (PropertyName == TEXT("rotation"))
+        else if (NormalizedPropertyName == TEXT("rotation"))
         {
             // Handle rotation via SetActorRotation
             if (Value->Type == EJson::Object)
@@ -517,7 +546,7 @@ bool FEpicUnrealMCPEnvironmentCommands::SetPropertyByName(UObject* Object, const
                 }
             }
         }
-        else if (PropertyName == TEXT("scale"))
+        else if (NormalizedPropertyName == TEXT("scale"))
         {
             // Handle scale via SetActorScale3D
             if (Value->Type == EJson::Object)
@@ -545,12 +574,44 @@ bool FEpicUnrealMCPEnvironmentCommands::SetPropertyByName(UObject* Object, const
             }
         }
 
+        else if (NormalizedPropertyName == TEXT("settings"))
+        {
+            if (APostProcessVolume* PPVolume = Cast<APostProcessVolume>(Actor))
+            {
+                if (FEpicUnrealMCPCommonUtils::SetObjectProperty(PPVolume, TEXT("Settings"), Value, OutError))
+                {
+                    return true;
+                }
+            }
+        }
+
         // Try each component mapping
         for (const auto& Mapping : ComponentMappings)
         {
             UActorComponent* Component = FindActorComponent(Actor, Mapping.Key);
             if (Component)
             {
+                if (NormalizedPropertyName == TEXT("lightcolor") || NormalizedPropertyName == TEXT("color"))
+                {
+                    if (ULightComponent* LightComponent = Cast<ULightComponent>(Component))
+                    {
+                        if (Value->Type == EJson::Object)
+                        {
+                            const TSharedPtr<FJsonObject>* ColorObj = nullptr;
+                            if (Value->TryGetObject(ColorObj))
+                            {
+                                double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
+                                ColorObj->Get()->TryGetNumberField(TEXT("r"), R);
+                                ColorObj->Get()->TryGetNumberField(TEXT("g"), G);
+                                ColorObj->Get()->TryGetNumberField(TEXT("b"), B);
+                                ColorObj->Get()->TryGetNumberField(TEXT("a"), A);
+                                LightComponent->SetLightColor(FLinearColor(R, G, B, A), false);
+                                return true;
+                            }
+                        }
+                    }
+                }
+
                 // Try to set the property on the component
                 if (FEpicUnrealMCPCommonUtils::SetObjectProperty(Component, Mapping.Value, Value, OutError))
                 {
@@ -1060,8 +1121,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEnvironmentCommands::HandleSetActorPropert
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
     }
 
-    const TSharedPtr<FJsonObject>* PropertiesObj;
-    if (!Params->TryGetObjectField(TEXT("properties"), PropertiesObj))
+    const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
+    const bool bHasPropertiesObject = Params->TryGetObjectField(TEXT("properties"), PropertiesObj);
+    const bool bHasTransformFields = Params->HasField(TEXT("location")) || Params->HasField(TEXT("rotation")) || Params->HasField(TEXT("scale"));
+    if (!bHasPropertiesObject && !bHasTransformFields)
     {
         return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'properties' parameter"));
     }
@@ -1091,16 +1154,40 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEnvironmentCommands::HandleSetActorPropert
     TArray<FString> ModifiedProperties;
     TArray<FString> FailedProperties;
 
-    for (const auto& Pair : PropertiesObj->Get()->Values)
+    auto TrySetNamedValue = [&](const FString& Key, const TSharedPtr<FJsonValue>& JsonValue)
     {
         FString Error;
-        if (SetPropertyByName(TargetActor, Pair.Key, Pair.Value, Error))
+        if (SetPropertyByName(TargetActor, Key, JsonValue, Error))
         {
-            ModifiedProperties.Add(Pair.Key);
+            ModifiedProperties.Add(Key);
         }
         else
         {
-            FailedProperties.Add(Pair.Key + TEXT(": ") + Error);
+            FailedProperties.Add(Key + TEXT(": ") + Error);
+        }
+    };
+
+    if (bHasTransformFields)
+    {
+        if (Params->HasField(TEXT("location")))
+        {
+            TrySetNamedValue(TEXT("location"), Params->Values[TEXT("location")]);
+        }
+        if (Params->HasField(TEXT("rotation")))
+        {
+            TrySetNamedValue(TEXT("rotation"), Params->Values[TEXT("rotation")]);
+        }
+        if (Params->HasField(TEXT("scale")))
+        {
+            TrySetNamedValue(TEXT("scale"), Params->Values[TEXT("scale")]);
+        }
+    }
+
+    if (bHasPropertiesObject)
+    {
+        for (const auto& Pair : PropertiesObj->Get()->Values)
+        {
+            TrySetNamedValue(Pair.Key, Pair.Value);
         }
     }
 

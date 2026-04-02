@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "unreal-editor": {
+      "command": "python",
+      "args": ["-m", "unreal_editor_mcp.server"],
+      "cwd": "D:/ue-mcp/unreal-mcp",
+      "env": {
+        "UE_HOST": "127.0.0.1",
+        "UE_PORT": "55557"
+      }
+    }
+  }
+}

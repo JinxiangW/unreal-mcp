@@ -59,6 +59,9 @@ private:
     /** Batch set properties on multiple assets */
     TSharedPtr<FJsonObject> HandleBatchSetAssetsProperties(const TSharedPtr<FJsonObject>& Params);
 
+    /** Execute Python inside the running Unreal Editor. */
+    TSharedPtr<FJsonObject> HandleRunPython(const TSharedPtr<FJsonObject>& Params);
+
     // ============================================================================
     // Reflection Helpers for Assets
     // ============================================================================

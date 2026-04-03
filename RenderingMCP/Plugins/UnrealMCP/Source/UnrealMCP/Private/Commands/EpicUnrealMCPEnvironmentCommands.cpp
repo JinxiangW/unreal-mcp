@@ -465,7 +465,8 @@ bool FEpicUnrealMCPEnvironmentCommands::SetPropertyByName(UObject* Object, const
             NormalizedPropertyName == TEXT("color") || NormalizedPropertyName == TEXT("castshadows") ||
             NormalizedPropertyName == TEXT("temperature") || NormalizedPropertyName == TEXT("attenuationradius") ||
             NormalizedPropertyName == TEXT("outerconeangle") || NormalizedPropertyName == TEXT("innerconeangle") ||
-            NormalizedPropertyName == TEXT("sourceradius") || NormalizedPropertyName == TEXT("usetemperature"))
+            NormalizedPropertyName == TEXT("sourceradius") || NormalizedPropertyName == TEXT("usetemperature") ||
+            NormalizedPropertyName == TEXT("intensityunits"))
         {
             FString ComponentPropertyName = PropertyName;
             if (NormalizedPropertyName == TEXT("lightcolor") || NormalizedPropertyName == TEXT("color")) ComponentPropertyName = TEXT("LightColor");
@@ -476,6 +477,7 @@ bool FEpicUnrealMCPEnvironmentCommands::SetPropertyByName(UObject* Object, const
             else if (NormalizedPropertyName == TEXT("sourceradius")) ComponentPropertyName = TEXT("SourceRadius");
             else if (NormalizedPropertyName == TEXT("usetemperature")) ComponentPropertyName = TEXT("UseTemperature");
             else if (NormalizedPropertyName == TEXT("temperature")) ComponentPropertyName = TEXT("Temperature");
+            else if (NormalizedPropertyName == TEXT("intensityunits")) ComponentPropertyName = TEXT("IntensityUnits");
             else if (NormalizedPropertyName == TEXT("intensity")) ComponentPropertyName = TEXT("Intensity");
 
             ComponentMappings.Add(TPair<FString, FString>(TEXT("LightComponent"), ComponentPropertyName));
@@ -483,6 +485,16 @@ bool FEpicUnrealMCPEnvironmentCommands::SetPropertyByName(UObject* Object, const
             ComponentMappings.Add(TPair<FString, FString>(TEXT("SpotLightComponent"), ComponentPropertyName));
             ComponentMappings.Add(TPair<FString, FString>(TEXT("DirectionalLightComponent"), ComponentPropertyName));
             ComponentMappings.Add(TPair<FString, FString>(TEXT("RectLightComponent"), ComponentPropertyName));
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("LocalLightComponent"), ComponentPropertyName));
+        }
+        else if (NormalizedPropertyName == TEXT("mobility"))
+        {
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("SpotLightComponent"), TEXT("Mobility")));
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("PointLightComponent"), TEXT("Mobility")));
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("DirectionalLightComponent"), TEXT("Mobility")));
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("RectLightComponent"), TEXT("Mobility")));
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("LocalLightComponent"), TEXT("Mobility")));
+            ComponentMappings.Add(TPair<FString, FString>(TEXT("SceneComponent"), TEXT("Mobility")));
         }
         // Mesh properties
         else if (PropertyName == TEXT("static_mesh") || PropertyName == TEXT("material") ||

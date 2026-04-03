@@ -1,0 +1,1 @@
+"""Asset harness package."""

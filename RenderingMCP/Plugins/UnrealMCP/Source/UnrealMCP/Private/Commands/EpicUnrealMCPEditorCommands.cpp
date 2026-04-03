@@ -33,10 +33,12 @@
 #include "Materials/MaterialInterface.h"
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
+#include "IPythonScriptPlugin.h"
 #include "Factories/TextureFactory.h"
 #include "Engine/StaticMesh.h"
 #include "StaticMeshAttributes.h"
 #include "MeshDescription.h"
+#include "Serialization/JsonSerializer.h"
 
 // Niagara System creation support
 #include "NiagaraSystem.h"
@@ -96,8 +98,95 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
     {
         return HandleBatchSetAssetsProperties(Params);
     }
+    else if (CommandType == TEXT("run_python"))
+    {
+        return HandleRunPython(Params);
+    }
     
     return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown editor command: %s"), *CommandType));
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleRunPython(const TSharedPtr<FJsonObject>& Params)
+{
+    FString Code;
+    if (!Params->TryGetStringField(TEXT("code"), Code) || Code.IsEmpty())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'code' parameter"));
+    }
+
+    const FString Marker = TEXT("__UNREAL_MCP_JSON__:");
+
+    IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
+    if (!PythonPlugin)
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("PythonScriptPlugin module is not loaded"));
+    }
+
+    if (!PythonPlugin->IsPythonInitialized())
+    {
+        PythonPlugin->ForceEnablePythonAtRuntime();
+    }
+
+    if (!PythonPlugin->IsPythonInitialized())
+    {
+        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Python is not initialized in the current editor session"));
+    }
+
+    FString ExecutionModeString = TEXT("ExecuteFile");
+    Params->TryGetStringField(TEXT("execution_mode"), ExecutionModeString);
+
+    FPythonCommandEx PythonCommand;
+    PythonCommand.Command = Code;
+    PythonCommand.ExecutionMode = EPythonCommandExecutionMode::ExecuteFile;
+    PythonCommand.Flags = EPythonCommandFlags::Unattended;
+
+    if (ExecutionModeString.Equals(TEXT("ExecuteStatement"), ESearchCase::IgnoreCase))
+    {
+        PythonCommand.ExecutionMode = EPythonCommandExecutionMode::ExecuteStatement;
+    }
+    else if (ExecutionModeString.Equals(TEXT("EvaluateStatement"), ESearchCase::IgnoreCase))
+    {
+        PythonCommand.ExecutionMode = EPythonCommandExecutionMode::EvaluateStatement;
+    }
+
+    const bool bSuccess = PythonPlugin->ExecPythonCommandEx(PythonCommand);
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), bSuccess);
+    ResultObj->SetStringField(TEXT("execution_mode"), ExecutionModeString);
+    ResultObj->SetStringField(TEXT("command_result"), PythonCommand.CommandResult);
+
+    TArray<TSharedPtr<FJsonValue>> LogArray;
+    FString MarkerPayload;
+    for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
+    {
+        TSharedPtr<FJsonObject> LogEntryObj = MakeShared<FJsonObject>();
+        LogEntryObj->SetStringField(TEXT("type"), LexToString(Entry.Type));
+        LogEntryObj->SetStringField(TEXT("output"), Entry.Output);
+        LogArray.Add(MakeShared<FJsonValueObject>(LogEntryObj));
+
+        if (Entry.Output.StartsWith(Marker))
+        {
+            MarkerPayload = Entry.Output.RightChop(Marker.Len());
+        }
+    }
+    ResultObj->SetArrayField(TEXT("log_output"), LogArray);
+
+    if (!MarkerPayload.IsEmpty())
+    {
+        TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(MarkerPayload);
+        TSharedPtr<FJsonObject> ParsedObj;
+        if (FJsonSerializer::Deserialize(Reader, ParsedObj) && ParsedObj.IsValid())
+        {
+            ResultObj->SetObjectField(TEXT("parsed_result"), ParsedObj);
+        }
+        else
+        {
+            ResultObj->SetStringField(TEXT("parsed_result_raw"), MarkerPayload);
+        }
+    }
+
+    return ResultObj;
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGetActorsInLevel(const TSharedPtr<FJsonObject>& Params)

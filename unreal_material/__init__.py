@@ -1,0 +1,1 @@
+"""Material asset harness package."""

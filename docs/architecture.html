@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unreal Harness Architecture</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a30;
+      --panel-2: #18233f;
+      --line: #35508f;
+      --text: #ecf2ff;
+      --muted: #a9b8db;
+      --accent: #65b7ff;
+      --green: #5dd39e;
+      --amber: #ffce73;
+      --violet: #b298ff;
+      --red: #ff8c8c;
+      --shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(180deg, #0a0f1d 0%, #0e1530 100%);
+      color: var(--text);
+    }
+
+    .page {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    .hero {
+      display: grid;
+      gap: 14px;
+      margin-bottom: 24px;
+      padding: 24px;
+      border: 1px solid rgba(101, 183, 255, 0.2);
+      background: rgba(18, 26, 48, 0.8);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero p {
+      color: var(--muted);
+      line-height: 1.6;
+      max-width: 1100px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    .diagram {
+      display: grid;
+      gap: 18px;
+    }
+
+    .row-title {
+      font-size: 14px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+
+    .layer {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(18, 26, 48, 0.72);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid.cols-1 { grid-template-columns: 1fr; }
+    .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .card {
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--panel-2);
+      min-height: 120px;
+    }
+
+    .card h3 {
+      font-size: 17px;
+      margin-bottom: 8px;
+    }
+
+    .card p {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    .card ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .accent { border-color: rgba(101, 183, 255, 0.28); }
+    .green { border-color: rgba(93, 211, 158, 0.28); }
+    .amber { border-color: rgba(255, 206, 115, 0.28); }
+    .violet { border-color: rgba(178, 152, 255, 0.28); }
+    .red { border-color: rgba(255, 140, 140, 0.28); }
+
+    .card .label {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .flow {
+      display: grid;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .flow-step {
+      position: relative;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .flow-step strong {
+      color: var(--text);
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    @media (max-width: 1100px) {
+      .grid.cols-4,
+      .grid.cols-3,
+      .grid.cols-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <h1>Unreal Harness 架构草案</h1>
+      <p>
+        目标不是继续堆一个“大而全”的 MCP，而是构建一个总控层负责路由和统一错误模型，
+        再把具体执行拆到按问题域划分的子 harness。Scene / Asset / Material Asset 优先改为 UE Python 后端，
+        Material Graph、Blueprint Graph 和部分 Niagara / 底层桥接继续保留在 C++ 插件层。
+      </p>
+      <div class="legend">
+        <span><i class="dot" style="background:#65b7ff"></i>总控 / 路由</span>
+        <span><i class="dot" style="background:#5dd39e"></i>UE Python 子域</span>
+        <span><i class="dot" style="background:#ffce73"></i>C++ 插件子域</span>
+        <span><i class="dot" style="background:#b298ff"></i>共享协议与验证</span>
+        <span><i class="dot" style="background:#ff8c8c"></i>待清理旧实现</span>
+      </div>
+    </section>
+
+    <section class="diagram">
+      <div class="layer">
+        <div class="row-title">Top Layer</div>
+        <div class="grid cols-1">
+          <div class="card accent">
+            <span class="label">总控入口</span>
+            <h3>unreal-orchestrator</h3>
+            <p>统一接收 AI 请求，做任务分类、preflight、子 harness 路由、结果归一化、错误分层和最终验证。</p>
+            <ul>
+              <li>选择 scene / asset / material / material-graph / niagara / blueprint / diagnostics</li>
+              <li>统一 capability 探测</li>
+              <li>统一返回格式与错误码</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="row-title">Domain Harnesses</div>
+        <div class="grid cols-4">
+          <div class="card green">
+            <span class="label">UE Python</span>
+            <h3>unreal-scene</h3>
+            <p>场景布光、后处理、Actor 摆放、Level / Viewport 操作。</p>
+            <ul>
+              <li>高层命令优先</li>
+              <li>避免直接裸写 properties</li>
+            </ul>
+          </div>
+          <div class="card green">
+            <span class="label">UE Python</span>
+            <h3>unreal-asset</h3>
+            <p>通用资产 CRUD、批量修改、导入、路径查询。</p>
+            <ul>
+              <li>AssetTools / EditorAssetLibrary</li>
+              <li>适合稳定通用资产流</li>
+            </ul>
+          </div>
+          <div class="card green">
+            <span class="label">UE Python</span>
+            <h3>unreal-material</h3>
+            <p>材质资产、材质实例、参数设置和基础属性管理。</p>
+            <ul>
+              <li>适合 UE Python 稳定落地</li>
+              <li>不承担复杂 graph editing</li>
+            </ul>
+          </div>
+          <div class="card amber">
+            <span class="label">C++ 主 / 混合</span>
+            <h3>unreal-niagara</h3>
+            <p>Niagara 图和 emitter 操作。优先保留混合模式，后续再收缩接口。</p>
+          </div>
+        </div>
+        <div class="grid cols-4" style="margin-top:16px;">
+          <div class="card amber">
+            <span class="label">C++ 主 / 混合</span>
+            <h3>unreal-material-graph</h3>
+            <p>材质节点、连线、图构建、复杂图重构。单独作为 graph 编辑域处理。</p>
+          </div>
+          <div class="card green">
+            <span class="label">UE Python</span>
+            <h3>unreal-blueprint-info</h3>
+            <p>蓝图读取、结构分析、内容快照、基础信息聚合。</p>
+          </div>
+          <div class="card amber">
+            <span class="label">C++ 主</span>
+            <h3>unreal-blueprint-graph</h3>
+            <p>节点、连线、变量、函数、事件图编辑。完整图编辑能力保留在插件层。</p>
+          </div>
+          <div class="card violet">
+            <span class="label">跨域</span>
+            <h3>unreal-diagnostics</h3>
+            <p>日志检查、能力探测、协议排障、回归验证、风险提示。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="row-title">Execution Backends</div>
+        <div class="grid cols-2">
+          <div class="card green">
+            <span class="label">默认执行层</span>
+            <h3>UE Python Runtime</h3>
+            <p>通过 PythonScriptPlugin 调用 Editor API，承担大多数高层编辑器语义。</p>
+            <ul>
+              <li>场景编辑更稳</li>
+              <li>资产/材质工作流更贴近编辑器语义</li>
+              <li>减少 Actor/Component/Struct 手工映射</li>
+            </ul>
+          </div>
+          <div class="card amber">
+            <span class="label">保留能力层</span>
+            <h3>C++ Plugin Backend</h3>
+            <p>保留协议入口、命令注册、Blueprint Graph 编辑、部分 Niagara / 底层补齐能力。</p>
+            <ul>
+              <li>TCP / bridge / registry</li>
+              <li>复杂图编辑和反射缺口</li>
+              <li>性能敏感或 Python 缺失的能力</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="row-title">Shared Infrastructure</div>
+        <div class="grid cols-3">
+          <div class="card violet">
+            <h3>Capability Registry</h3>
+            <p>单一真实能力源。总控和子 harness 都从这里读命令面，不再手写多份命令表。</p>
+          </div>
+          <div class="card violet">
+            <h3>Error Model</h3>
+            <p>统一 transport / protocol / capability / validation / runtime / partial-apply 错误层级。</p>
+          </div>
+          <div class="card violet">
+            <h3>Post-Apply Verification</h3>
+            <p>修改后强制回读关键状态，必要时补截图，而不是只返回 success。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="row-title">Migration Flow</div>
+        <div class="flow">
+          <div class="flow-step"><strong>Phase 1</strong> 建立 `unreal-orchestrator` 和问题域分类，保持现有功能还能跑。</div>
+          <div class="flow-step"><strong>Phase 2</strong> 优先重写 `scene / asset / material` 到 UE Python 后端。</div>
+          <div class="flow-step"><strong>Phase 3</strong> 单独抽出 `material-graph`，不要与普通材质资产流混合。</div>
+          <div class="flow-step"><strong>Phase 4</strong> 清理旧的 C++ 高层属性路由，只保留必要底层能力和复杂图编辑。</div>
+          <div class="flow-step"><strong>Phase 5</strong> 收敛 Niagara 和 Blueprint Graph 的边界，统一 capability registry 和错误模型。</div>
+        </div>
+        <p class="footer-note">
+          原则：对外维持一个“总体可控”的入口，对内按域拆分实现；高层编辑语义优先落 UE Python，复杂图编辑和协议层留在 C++ 插件。
+        </p>
+      </div>
+
+      <div class="layer red">
+        <div class="row-title">Legacy To Retire</div>
+        <div class="grid cols-2">
+          <div class="card red">
+            <h3>旧式高层属性路由</h3>
+            <p>尤其是把场景编辑业务压成 `set_actor_properties(properties={...})` 的路径，应逐步收缩。</p>
+          </div>
+          <div class="card red">
+            <h3>多处手工同步命令表</h3>
+            <p>Python wrapper、bridge、具体 handler 三处手动同步，是当前最容易漂移的源头。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

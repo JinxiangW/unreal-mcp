@@ -235,7 +235,8 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
                      CommandType == TEXT("set_asset_properties") ||
                      CommandType == TEXT("get_asset_properties") ||
                      CommandType == TEXT("batch_create_assets") ||
-                     CommandType == TEXT("batch_set_assets_properties"))
+                     CommandType == TEXT("batch_set_assets_properties") ||
+                     CommandType == TEXT("run_python"))
             {
                 ResultJson = EditorCommands->HandleCommand(CommandType, Params);
             }

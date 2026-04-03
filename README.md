@@ -7,7 +7,13 @@
 - `unreal_editor_mcp/`
   - 独立 Python MCP server
   - TCP 连接 Unreal 插件
-  - 资产 / Actor / Level / Viewport / Material / Niagara / Blueprint 工作流
+  - 当前主要作为 internal / fallback 层保留
+- `unreal_orchestrator/`
+  - 新的总控 harness 骨架
+  - 负责问题域路由与能力目录
+- `unreal_scene/`, `unreal_asset/`, `unreal_material/`
+  - 新子域 harness 的第一阶段骨架
+  - 当前通过 `unreal_editor_mcp` 做 fallback 执行
 - `RenderingMCP/`
   - Unreal 测试工程
   - `Plugins/UnrealMCP` 插件源码
@@ -24,6 +30,12 @@ pip install -r requirements.txt
 
 ```bash
 python -m unreal_editor_mcp.server
+```
+
+## 启动总控骨架
+
+```bash
+python -m unreal_orchestrator.server
 ```
 
 默认连接到：
@@ -46,6 +58,27 @@ python -m unreal_editor_mcp.server
 - 材质图构建与分析
 - Niagara 图与 Emitter 读写
 - Blueprint 信息读取与高级图命令透传
+
+## Harness 索引
+
+- Repo skill：`skills/ue-harness/SKILL.md`
+- legacy 定位与退役清单：`docs/legacy.md`
+- 分类索引：`docs/categories.md`
+- 架构方案：`docs/proposal.md`
+- 架构图：`docs/architecture.html`
+- 功能清单：`docs/inventory.md`
+- 高层命令：`docs/commands.md`
+- 并行 checklist：`docs/parallel.md`
+- 测试方案：`docs/test-plan.md`
+- 结果校验：`docs/verification.md`
+- 静默工作流：`docs/workflow.md`
+
+## 当前阶段
+
+- `unreal_orchestrator` 已建立总控入口和分类目录
+- `unreal_scene` / `unreal_asset` / `unreal_material` 已建立第一阶段高层接口骨架
+- `unreal_editor_mcp` 现在主要作为 internal / fallback 层保留
+- 下一阶段会把 `scene / asset / material asset` 逐步切到 UE Python 后端
 
 ## 提交约定
 

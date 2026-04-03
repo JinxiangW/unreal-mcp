@@ -62,6 +62,8 @@ python -m unreal_orchestrator.server
 ## Harness 索引
 
 - Repo skill：`skills/ue-harness/SKILL.md`
+- Unity->UE 迁移 skill：`skills/unity-to-ue/SKILL.md`
+- Unity->UE 迁移案例：`docs/migrations/README.md`
 - legacy 定位与退役清单：`docs/legacy.md`
 - 分类索引：`docs/categories.md`
 - 架构方案：`docs/proposal.md`

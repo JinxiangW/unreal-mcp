@@ -65,8 +65,8 @@
 推荐参数：
 
 ```powershell
-Start-Process -FilePath "F:\GFFEngines\Main\Engine\Binaries\Win64\UnrealEditor.exe" -ArgumentList @(
-  "F:\GFFEngines\Main_Client\Client.uproject",
+Start-Process -FilePath $env:UE_EDITOR_EXE -ArgumentList @(
+  $env:UE_PROJECT_PATH,
   "-NoSplash",
   "-NoSound",
   "-NoRHIValidation",
@@ -92,8 +92,8 @@ Start-Process -FilePath "F:\GFFEngines\Main\Engine\Binaries\Win64\UnrealEditor.e
 2. `get_editor_ready_state`
 3. 必要时 `wait_for_editor_ready`
 4. 再执行 guarded 的域命令
-5. 只有 orchestrator 尚未覆盖时，才直接调用域 harness
-6. `unreal_editor_mcp` raw 工具仅作为 fallback
+5. 需要进一步缩 schema 时，优先切到 domain harness
+6. `unreal_editor_mcp` raw 工具仅作为 internal / fallback
 
 注意：
 
@@ -151,6 +151,17 @@ Start-Process -FilePath "F:\GFFEngines\Main\Engine\Binaries\Win64\UnrealEditor.e
 - 再决定是否继续执行
 
 因此后续更推荐通过 orchestrator 发高风险命令，而不是会话侧自己盲打 raw 工具。
+
+## 当前恢复结果
+
+当前仓库已经在真实 `MyToon` 项目上验证过下面链路：
+
+- 强制关闭 `UnrealEditor`
+- 重新静默启动
+- 等待 transport 与 Unreal Python ready
+- 再执行 orchestrator 查询命令完成 smoke test
+
+这条恢复链路当前可用于 MCP / harness 开发与回归测试。
 
 ## 重试策略
 

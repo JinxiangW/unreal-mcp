@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Dict
 
+from unreal_observability.token_usage import record_tool_usage
 from unreal_editor_mcp.common import send_command, with_unreal_connection
 
 
@@ -41,6 +43,7 @@ except Exception as exc:
 
 @with_unreal_connection
 def run_editor_python(code: str, execution_mode: str = "ExecuteFile") -> Dict[str, Any]:
+    started_at = time.perf_counter()
     response = send_command(
         "run_python",
         {
@@ -50,21 +53,56 @@ def run_editor_python(code: str, execution_mode: str = "ExecuteFile") -> Dict[st
     )
 
     if response.get("status") == "error":
-        return {
+        payload = {
             "success": False,
             "error": response.get("error", "Unknown run_python error"),
         }
+        record_tool_usage(
+            "unreal_harness_runtime.python_exec",
+            "run_editor_python",
+            request_payload={"execution_mode": execution_mode, "code": code},
+            response_payload=payload,
+            metadata={"status": "transport_error"},
+            started_at=started_at,
+        )
+        return payload
 
     result = response.get("result") or {}
     parsed = result.get("parsed_result")
     if isinstance(parsed, dict):
+        record_tool_usage(
+            "unreal_harness_runtime.python_exec",
+            "run_editor_python",
+            request_payload={"execution_mode": execution_mode, "code": code},
+            response_payload=parsed,
+            metadata={"status": "parsed_result"},
+            started_at=started_at,
+        )
         return parsed
 
     if result.get("success"):
-        return {"success": True, "run_python": result}
+        payload = {"success": True, "run_python": result}
+        record_tool_usage(
+            "unreal_harness_runtime.python_exec",
+            "run_editor_python",
+            request_payload={"execution_mode": execution_mode, "code": code},
+            response_payload=payload,
+            metadata={"status": "raw_success"},
+            started_at=started_at,
+        )
+        return payload
 
-    return {
+    payload = {
         "success": False,
         "error": result.get("command_result", "Python execution failed"),
         "run_python": result,
     }
+    record_tool_usage(
+        "unreal_harness_runtime.python_exec",
+        "run_editor_python",
+        request_payload={"execution_mode": execution_mode, "code": code},
+        response_payload=payload,
+        metadata={"status": "raw_failure"},
+        started_at=started_at,
+    )
+    return payload

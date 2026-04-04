@@ -12,9 +12,11 @@ from fastmcp import FastMCP
 from .catalog import get_domain, list_domains, route_text
 from unreal_asset.tools import (
     create_asset_with_properties as asset_create_asset_with_properties,
+    ensure_asset_with_properties as asset_ensure_asset_with_properties,
     get_asset_harness_info,
     import_fbx_asset,
     import_texture_asset,
+    query_assets_summary as asset_query_assets_summary,
     update_asset_properties as asset_update_asset_properties,
 )
 from unreal_diagnostics.tools import (
@@ -22,6 +24,7 @@ from unreal_diagnostics.tools import (
     get_editor_ready_state,
     get_harness_health,
     get_runtime_policy,
+    get_token_usage_summary,
     wait_for_editor_ready,
 )
 from unreal_material.tools import (
@@ -32,14 +35,20 @@ from unreal_material.tools import (
     set_material_instance_scalar_parameter as material_set_material_instance_scalar_parameter,
     set_material_instance_texture_parameter as material_set_material_instance_texture_parameter,
     set_material_instance_vector_parameter as material_set_material_instance_vector_parameter,
+    update_material_instance_parameters_and_verify as material_update_material_instance_parameters_and_verify,
     update_material_instance_properties as material_update_material_instance_properties,
 )
 from unreal_material_graph.tools import get_material_graph_harness_info
 from unreal_scene.tools import (
+    aim_actor_at as scene_aim_actor_at,
     create_spot_light_ring as scene_create_spot_light_ring,
     get_scene_backend_status,
     get_scene_harness_info,
+    query_scene_actors as scene_query_scene_actors,
+    query_scene_lights as scene_query_scene_lights,
+    set_post_process_overrides as scene_set_post_process_overrides,
     set_scene_light_intensity as scene_set_scene_light_intensity,
+    spawn_actor_with_defaults as scene_spawn_actor_with_defaults,
 )
 
 
@@ -55,6 +64,78 @@ logging.basicConfig(
 logger = logging.getLogger("UnrealOrchestrator")
 
 
+ENABLE_DEV_TOOLS = os.environ.get("UNREAL_MCP_ENABLE_DEV_TOOLS", "0") == "1"
+ENABLE_EXTENDED_TOOLS = os.environ.get("UNREAL_MCP_ENABLE_EXTENDED_TOOLS", "0") == "1"
+
+
+def _compact_preflight(preflight: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "ready": bool(preflight.get("ready", False)),
+        "transport_ok": bool(preflight.get("transport_ok", False)),
+        "python_ready": bool(preflight.get("python_ready", False)),
+        "current_level_summary": preflight.get("current_level_summary"),
+        "recommended_action": preflight.get("recommended_action"),
+    }
+
+
+def _result_success(result: Any) -> bool:
+    if not isinstance(result, dict):
+        return True
+    if "success" in result:
+        return bool(result.get("success"))
+    if result.get("status") == "error":
+        return False
+    if isinstance(result.get("result"), dict):
+        return bool(result["result"].get("success", result.get("status") == "success"))
+    return bool(result.get("status") == "success")
+
+
+def _summarize_result(result: Any) -> Any:
+    if not isinstance(result, dict):
+        return result
+    if "status" in result and isinstance(result.get("result"), dict):
+        inner = result["result"]
+        summary: Dict[str, Any] = {
+            "success": bool(inner.get("success", result.get("status") == "success"))
+        }
+        for key in (
+            "count",
+            "returned_count",
+            "total_count",
+            "offset",
+            "limit",
+            "path",
+            "asset_path",
+            "level_path",
+        ):
+            if key in inner:
+                summary[key] = inner[key]
+        for list_key in ("assets", "actors", "lights"):
+            if list_key in inner:
+                summary[list_key] = inner[list_key]
+        return summary
+    summary: Dict[str, Any] = {"success": bool(result.get("success", False))}
+    for key in (
+        "asset_path",
+        "asset_name",
+        "asset_class",
+        "parameter_name",
+        "changed",
+        "operation_id",
+        "targets",
+        "summary",
+        "failed_properties",
+        "modified_properties",
+        "error",
+        "message",
+    ):
+        if key in result:
+            summary[key] = result[key]
+    if len(summary) == 1:
+        return result
+    return summary
+
+
 def _guard_live_editor_call(
     operation: str,
     func,
@@ -62,34 +143,47 @@ def _guard_live_editor_call(
     wait_for_ready: bool = True,
     ready_timeout_seconds: int = 120,
     ready_poll_seconds: int = 5,
+    debug: bool = False,
     **kwargs,
 ) -> Dict[str, Any]:
     preflight = (
         wait_for_editor_ready(
             timeout_seconds=ready_timeout_seconds,
             poll_seconds=ready_poll_seconds,
+            debug=debug,
         )
         if wait_for_ready
-        else get_editor_ready_state()
+        else get_editor_ready_state(debug=debug)
     )
 
     if not preflight.get("ready"):
-        return {
+        payload = {
             "success": False,
             "operation": operation,
-            "preflight": preflight,
+            "ready": False,
+            "recommended_action": preflight.get("recommended_action"),
             "error": "Editor is not ready for this live-editor operation",
         }
+        if debug:
+            payload["preflight"] = preflight
+        else:
+            payload["preflight_summary"] = _compact_preflight(preflight)
+        return payload
 
     result = func(*args, **kwargs)
-    return {
-        "success": bool(result.get("success", False))
-        if isinstance(result, dict)
-        else True,
+    payload = {
+        "success": _result_success(result),
         "operation": operation,
-        "preflight": preflight,
-        "result": result,
+        "ready": True,
+        "recommended_action": preflight.get("recommended_action"),
     }
+    if debug:
+        payload["preflight"] = preflight
+        payload["result"] = result
+    else:
+        payload["preflight_summary"] = _compact_preflight(preflight)
+        payload["result_summary"] = _summarize_result(result)
+    return payload
 
 
 def set_scene_light_intensity(
@@ -144,6 +238,165 @@ def create_spot_light_ring(
         mobility,
         name_prefix,
         replace_existing,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def query_scene_actors(
+    actor_class: str | None = None,
+    name_filter: str | None = None,
+    limit: int = 20,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded compact scene actor query."""
+    return _guard_live_editor_call(
+        "scene.query_scene_actors",
+        scene_query_scene_actors,
+        actor_class,
+        name_filter,
+        limit,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def query_scene_lights(
+    limit: int = 20,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded compact scene light query."""
+    return _guard_live_editor_call(
+        "scene.query_scene_lights",
+        scene_query_scene_lights,
+        limit,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def aim_actor_at(
+    actor_name: str,
+    target: Dict[str, float],
+    preserve_roll: bool = True,
+    roll: float | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded actor aiming command with readback verification."""
+    return _guard_live_editor_call(
+        "scene.aim_actor_at",
+        scene_aim_actor_at,
+        actor_name,
+        target,
+        preserve_roll,
+        roll,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def set_post_process_overrides(
+    actor_name: str,
+    overrides: Dict[str, Any],
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded post-process override update with verification."""
+    return _guard_live_editor_call(
+        "scene.set_post_process_overrides",
+        scene_set_post_process_overrides,
+        actor_name,
+        overrides,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def spawn_actor_with_defaults(
+    actor_class: str,
+    name: str | None = None,
+    location: Dict[str, float] | None = None,
+    rotation: Dict[str, float] | None = None,
+    scale: Dict[str, float] | None = None,
+    actor_properties: Dict[str, Any] | None = None,
+    root_component_properties: Dict[str, Any] | None = None,
+    replace_existing: bool = False,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded actor spawn recipe with default property application."""
+    return _guard_live_editor_call(
+        "scene.spawn_actor_with_defaults",
+        scene_spawn_actor_with_defaults,
+        actor_class,
+        name,
+        location,
+        rotation,
+        scale,
+        actor_properties,
+        root_component_properties,
+        replace_existing,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def ensure_asset_with_properties(
+    asset_type: str,
+    name: str,
+    path: str = "/Game/",
+    properties: Dict[str, Any] | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded asset ensure workflow that creates or updates in one call."""
+    return _guard_live_editor_call(
+        "asset.ensure_asset_with_properties",
+        asset_ensure_asset_with_properties,
+        asset_type,
+        name,
+        path,
+        properties,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def query_assets_summary(
+    path: str = "/Game/",
+    asset_class: str | None = None,
+    name_filter: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded compact asset query."""
+    return _guard_live_editor_call(
+        "asset.query_assets_summary",
+        asset_query_assets_summary,
+        path,
+        asset_class,
+        name_filter,
+        limit,
+        offset,
         wait_for_ready=wait_for_ready,
         ready_timeout_seconds=ready_timeout_seconds,
         ready_poll_seconds=ready_poll_seconds,
@@ -331,6 +584,29 @@ def set_material_instance_texture_parameter(
     )
 
 
+def update_material_instance_parameters_and_verify(
+    asset_path: str,
+    scalar_parameters: Dict[str, float] | None = None,
+    vector_parameters: Dict[str, Dict[str, float]] | None = None,
+    texture_parameters: Dict[str, str] | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded material instance batch-parameter update with verification."""
+    return _guard_live_editor_call(
+        "material.update_material_instance_parameters_and_verify",
+        material_update_material_instance_parameters_and_verify,
+        asset_path,
+        scalar_parameters,
+        vector_parameters,
+        texture_parameters,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
 def get_harness_domains() -> Dict[str, Any]:
     """List orchestrator domains and planned backends."""
     return {"success": True, "domains": list_domains(), "count": len(list_domains())}
@@ -364,31 +640,50 @@ mcp = FastMCP("UnrealOrchestrator", lifespan=server_lifespan)
 for tool in [get_harness_domains, get_domain_design, route_harness_task]:
     mcp.tool()(tool)
 
-for tool in [
+DEFAULT_TOOLS = [
     get_scene_harness_info,
     get_scene_backend_status,
-    create_asset_with_properties,
-    update_asset_properties,
-    import_texture_asset,
-    import_fbx_asset,
+    query_scene_actors,
+    query_scene_lights,
+    ensure_asset_with_properties,
+    query_assets_summary,
     set_scene_light_intensity,
     create_spot_light_ring,
+    aim_actor_at,
+    set_post_process_overrides,
+    spawn_actor_with_defaults,
     get_asset_harness_info,
     get_material_harness_info,
-    create_material_asset,
-    create_material_instance_asset,
-    update_material_instance_properties,
-    get_material_instance_parameter_names,
-    set_material_instance_scalar_parameter,
-    set_material_instance_vector_parameter,
-    set_material_instance_texture_parameter,
+    update_material_instance_parameters_and_verify,
     get_material_graph_harness_info,
     get_harness_health,
     get_runtime_policy,
+    get_token_usage_summary,
     get_editor_ready_state,
     wait_for_editor_ready,
-    dev_launch_editor_and_wait_ready,
-]:
+]
+
+if ENABLE_EXTENDED_TOOLS:
+    DEFAULT_TOOLS.extend(
+        [
+            create_asset_with_properties,
+            update_asset_properties,
+            import_texture_asset,
+            import_fbx_asset,
+            create_material_asset,
+            create_material_instance_asset,
+            update_material_instance_properties,
+            get_material_instance_parameter_names,
+            set_material_instance_scalar_parameter,
+            set_material_instance_vector_parameter,
+            set_material_instance_texture_parameter,
+        ]
+    )
+
+if ENABLE_DEV_TOOLS:
+    DEFAULT_TOOLS.append(dev_launch_editor_and_wait_ready)
+
+for tool in DEFAULT_TOOLS:
     mcp.tool()(tool)
 
 

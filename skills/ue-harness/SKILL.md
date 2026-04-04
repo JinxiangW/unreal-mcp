@@ -9,7 +9,7 @@ metadata:
 ---
 
 ## Purpose
-当任务发生在 `D:\ue-mcp\unreal-mcp`，并且涉及 Unreal harness 的实现、扩展、测试或排障时，优先使用这份 skill。
+当任务发生在 `D:\unreal-mcp`，并且涉及 Unreal harness 的实现、扩展、测试或排障时，优先使用这份 skill。
 
 这份 skill 只保留最小必要规则，不重复展开所有长文档。
 

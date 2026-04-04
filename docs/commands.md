@@ -10,7 +10,7 @@
 
 ## Scene
 
-### 已开始实现
+### 已实现
 
 - `set_scene_light_intensity`
   - 输入：actor、intensity、unit、mobility
@@ -20,17 +20,36 @@
   - 输入：center、radius、z、count、target、intensity、unit、mobility
   - 价值：把批量摆灯、朝向、单位、可移动性收成一个配方
 
-### 下一批建议
+- `query_scene_actors`
+  - 输入：`actor_class`、`name_filter`、`limit`
+  - 价值：把常见场景查询收成 compact 命令，减少 raw `get_actors`
+
+- `query_scene_lights`
+  - 输入：`limit`
+  - 价值：直接返回灯光摘要，避免先全量 actor 再筛灯光
 
 - `aim_actor_at`
+  - 输入：`actor_name`、`target`、`preserve_roll`、`roll`
+  - 价值：把朝向计算和回读验证收成一次调用
+
 - `set_post_process_overrides`
+  - 输入：`actor_name`、`overrides`
+  - 价值：覆盖 flag 设置、赋值和回读验证
+
 - `spawn_actor_with_defaults`
+  - 输入：class、transform、actor/root component 默认值
+  - 价值：减少“创建 -> 再设属性 -> 再回读”链路
+
+### 下一批建议
+
 - `create_three_point_lighting`
 
 ## Asset
 
-### 第一批建议
+### 已实现
 
+- `query_assets_summary`
+- `ensure_asset_with_properties`
 - `create_asset_with_properties`
 - `import_texture_asset`
 - `import_fbx_asset`
@@ -44,16 +63,18 @@
 
 ## Material
 
-### 第一批建议
+### 已实现
 
 - `create_material_asset`
 - `create_material_instance_asset`
 - `update_material_instance_properties`
+- `update_material_instance_parameters_and_verify`
 
 说明：
 
 - 这里只覆盖材质资产和材质实例
 - 不把复杂材质图编辑放进这个域
+- 参数批量更新命令已包含写入与验证
 
 ## Material Graph
 
@@ -70,11 +91,12 @@
 
 ## Diagnostics
 
-### 第一批建议
+### 已实现
 
 - `get_harness_health`
 - `route_harness_task`
 - `get_domain_design`
+- `get_token_usage_summary`
 
 ## 进入高层命令的判断标准
 

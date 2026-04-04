@@ -48,6 +48,7 @@
   - `domain harness`
   - `commandlet only`
   - `legacy fallback`
+  - `internal/debug`
 - `验证状态`
   - `已做真实环境回归`
   - `仅做基础验证`
@@ -78,6 +79,8 @@
 - `delete_asset`
 - `batch_create_assets`
 - `batch_set_assets_properties`
+- `read_result_handle`
+- `release_result_handle`
 
 ### Level / Viewport
 
@@ -126,6 +129,13 @@
 - `read_blueprint_content`
 - `analyze_blueprint_graph`
 
+说明：
+
+- 当前 raw 工具已做 wrapper 层 token 优化
+- 查询类默认支持 `summary_only / fields / limit`
+- 图类和 Blueprint 内容默认摘要返回
+- 大结果支持 `saved_to` 与 `result_handle`
+
 ### Blueprint Graph
 
 - `blueprint_graph_command`
@@ -161,11 +171,18 @@
 | orchestrator | `route_harness_task` | 可用 | python | orchestrator | 仅做基础验证 | 未接入 |
 | scene | `get_scene_harness_info` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 未接入 |
 | scene | `get_scene_backend_status` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 未接入 |
+| scene | `query_scene_actors` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
+| scene | `query_scene_lights` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
 | scene | `set_scene_light_intensity` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
 | scene | `create_spot_light_ring` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
+| scene | `aim_actor_at` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
+| scene | `set_post_process_overrides` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
+| scene | `spawn_actor_with_defaults` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
 | scene | `inspect_scene_python_enums` | 可用 | live editor python | domain harness | 已做真实环境回归 | 未接入 |
 | asset | `get_asset_harness_info` | 可用 | python | orchestrator | 仅做基础验证 | 未接入 |
+| asset | `query_assets_summary` | 可用 | legacy tcp wrapper | orchestrator | 已做真实环境回归 | 部分接入 |
 | asset | `create_asset_with_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
+| asset | `ensure_asset_with_properties` | 可用 | mixed | orchestrator | 已做真实环境回归 | 部分接入 |
 | asset | `update_asset_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
 | asset | `import_texture_asset` | 可用 | commandlet | orchestrator | 已做真实环境回归 | 部分接入 |
 | asset | `import_fbx_asset` | 可用 | commandlet | orchestrator | 已做真实环境回归 | 部分接入 |
@@ -173,6 +190,7 @@
 | material | `create_material_asset` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
 | material | `create_material_instance_asset` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
 | material | `update_material_instance_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
+| material | `update_material_instance_parameters_and_verify` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
 | material | `get_material_instance_parameter_names` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
 | material | `set_material_instance_scalar_parameter` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
 | material | `set_material_instance_vector_parameter` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
@@ -182,7 +200,8 @@
 | diagnostics | `get_runtime_policy` | 可用 | python | orchestrator | 已做真实环境回归 | 未接入 |
 | diagnostics | `get_editor_ready_state` | 可用 | python | orchestrator | 已做真实环境回归 | 未接入 |
 | diagnostics | `wait_for_editor_ready` | 可用 | python | orchestrator | 已做真实环境回归 | 未接入 |
-| diagnostics | `dev_launch_editor_and_wait_ready` | 可用 | python | orchestrator | 仅做基础验证 | 未接入 |
+| diagnostics | `get_token_usage_summary` | 可用 | python | orchestrator | 已做真实环境回归 | 未接入 |
+| diagnostics | `dev_launch_editor_and_wait_ready` | 可用 | python | internal/debug | 已做真实环境回归 | 未接入 |
 
 ### Orchestrator
 
@@ -204,8 +223,13 @@
 
 - `get_scene_harness_info`
 - `get_scene_backend_status`
+- `query_scene_actors`
+- `query_scene_lights`
 - `set_scene_light_intensity`
 - `create_spot_light_ring`
+- `aim_actor_at`
+- `set_post_process_overrides`
+- `spawn_actor_with_defaults`
 - `inspect_scene_python_enums`
 
 备注：
@@ -222,6 +246,8 @@
 已实现：
 
 - `get_asset_harness_info`
+- `query_assets_summary`
+- `ensure_asset_with_properties`
 - `create_asset_with_properties`
 - `update_asset_properties`
 - `import_texture_asset`
@@ -244,6 +270,7 @@
 - `create_material_asset`
 - `create_material_instance_asset`
 - `update_material_instance_properties`
+- `update_material_instance_parameters_and_verify`
 - `get_material_instance_parameter_names`
 - `set_material_instance_scalar_parameter`
 - `set_material_instance_vector_parameter`
@@ -266,14 +293,16 @@
 当前已实现：
 
 - `get_harness_health`
+- `get_runtime_policy`
+- `get_editor_ready_state`
+- `wait_for_editor_ready`
+- `get_token_usage_summary`
+- `dev_launch_editor_and_wait_ready`（internal/debug）
 
 ## 3. 已规划但尚未完整实现的功能
 
 ### Scene
 
-- `aim_actor_at`
-- `set_post_process_overrides`
-- `spawn_actor_with_defaults`
 - `create_three_point_lighting`
 
 ### Asset
@@ -285,7 +314,6 @@
 ### Material
 
 - 更完整的材质实例参数层返回结构
-- 参数批量更新
 
 ### Material Graph
 
@@ -312,8 +340,9 @@
 
 ### 已适合使用的新链路
 
-- `scene` 的第一批高层命令
+- `scene` 的高层命令与 compact 查询
 - `asset` 的 create/update/import
+- `asset` 的 ensure/query 工作流
 - `material` 的资产/实例/参数层
 
 ### 仍依赖旧能力面或尚未拆分完成

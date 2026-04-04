@@ -26,28 +26,51 @@
 pip install -r requirements.txt
 ```
 
-## 启动 MCP
-
-```bash
-python -m unreal_editor_mcp.server
-```
-
-## 启动总控骨架
+## 启动默认 MCP
 
 ```bash
 python -m unreal_orchestrator.server
+```
+
+## 启动 raw / internal MCP
+
+```bash
+python -m unreal_editor_mcp.server_internal
+```
+
+## 启动 domain harness
+
+```bash
+python -m unreal_scene.server
+python -m unreal_asset.server
+python -m unreal_material.server
 ```
 
 默认连接到：
 
 - `UE_HOST=127.0.0.1`
 - `UE_PORT=55557`
+- `UE_PROJECT_PATH=<当前工作 .uproject>`
+- `UE_EDITOR_EXE=<UnrealEditor.exe 路径>`
+- `UE_EDITOR_CMD=<UnrealEditor-Cmd.exe 路径>`
 
 可通过环境变量覆盖。
 
 ## Unreal 侧
 
 使用 `RenderingMCP/RenderingMCP.uproject` 打开工程，确保 `Plugins/UnrealMCP` 被编译并启用。
+
+## 当前默认架构
+
+- `unreal_orchestrator`
+  - 默认入口
+  - 默认只暴露高层命令、诊断能力和 compact 查询
+- `unreal_scene` / `unreal_asset` / `unreal_material`
+  - domain harness
+  - 适合按域加载，进一步减少默认 schema
+- `unreal_editor_mcp`
+  - internal / debug / fallback
+  - 保留完整 raw 工具面
 
 ## 当前暴露的主要工作流
 
@@ -58,6 +81,8 @@ python -m unreal_orchestrator.server
 - 材质图构建与分析
 - Niagara 图与 Emitter 读写
 - Blueprint 信息读取与高级图命令透传
+- 高层摘要查询：`query_scene_actors`、`query_scene_lights`、`query_assets_summary`
+- 高层写入工作流：`ensure_asset_with_properties`、`update_material_instance_parameters_and_verify`
 
 ## Harness 索引
 
@@ -71,16 +96,18 @@ python -m unreal_orchestrator.server
 - 功能清单：`docs/inventory.md`
 - 高层命令：`docs/commands.md`
 - 并行 checklist：`docs/parallel.md`
+- token 优化 checklist：`docs/token-optimization-checklist.md`
 - 测试方案：`docs/test-plan.md`
 - 结果校验：`docs/verification.md`
 - 静默工作流：`docs/workflow.md`
 
 ## 当前阶段
 
-- `unreal_orchestrator` 已建立总控入口和分类目录
-- `unreal_scene` / `unreal_asset` / `unreal_material` 已建立第一阶段高层接口骨架
+- `unreal_orchestrator` 已作为默认入口，默认工具集已压缩
+- `unreal_scene` / `unreal_asset` / `unreal_material` 已可作为独立 domain harness 启动
 - `unreal_editor_mcp` 现在主要作为 internal / fallback 层保留
-- 下一阶段会把 `scene / asset / material asset` 逐步切到 UE Python 后端
+- 查询、图类、批量、属性类工具已接入摘要返回策略
+- 大结果已支持 `saved_to` / `result_handle`，并支持超阈值自动 offload
 
 ## 提交约定
 

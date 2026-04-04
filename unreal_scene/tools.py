@@ -15,6 +15,9 @@ from unreal_harness_runtime.python_exec import (
 )
 
 
+_run_editor_python = run_editor_python
+
+
 _LIGHT_UNIT_MAP = {
     "unitless": "UNITLESS",
     "candelas": "CANDELAS",
@@ -211,7 +214,7 @@ def _normalize_mobility(mobility: Optional[str]) -> Optional[str]:
 
 
 def _wrap_scene_python(body: str, helpers: str = _SCENE_PYTHON_HELPERS) -> str:
-    marker = _json_literal(_PYTHON_RESULT_MARKER)
+    marker = _json_literal(PYTHON_RESULT_MARKER)
     indented_body = "\n".join(
         f"    {line}" if line else "" for line in body.splitlines()
     )
@@ -249,11 +252,91 @@ def get_scene_harness_info() -> Dict[str, Any]:
         "high_level_commands": [
             "set_scene_light_intensity",
             "create_spot_light_ring",
+            "query_scene_actors",
+            "query_scene_lights",
             "aim_actor_at",
             "set_post_process_overrides",
             "spawn_actor_with_defaults",
         ],
     }
+
+
+def query_scene_actors(
+    actor_class: Optional[str] = None,
+    name_filter: Optional[str] = None,
+    limit: int = 20,
+) -> Dict[str, Any]:
+    """Return a compact actor list for common lookups."""
+    actor_class_expr = _python_literal(actor_class) if actor_class else "None"
+    name_filter_expr = _python_literal(name_filter) if name_filter else "None"
+    body = f"""
+actor_class_name = {actor_class_expr}
+name_filter = {name_filter_expr}
+limit = {int(limit)}
+
+results = []
+for actor in unreal.EditorLevelLibrary.get_all_level_actors():
+    actor_class_value = actor.get_class().get_name() if hasattr(actor, "get_class") else type(actor).__name__
+    if actor_class_name and actor_class_value != actor_class_name:
+        continue
+    actor_name = actor.get_name()
+    if name_filter and name_filter.lower() not in actor_name.lower():
+        continue
+    results.append({{
+        "name": actor_name,
+        "class": actor_class_value,
+        "path": actor.get_path_name(),
+        "location": _mcp_to_simple(actor.get_actor_location()),
+    }})
+results.sort(key=lambda item: item["name"])
+_mcp_emit({{"success": True, "actors": results[:limit], "count": len(results), "limit": limit}})
+"""
+    return _run_editor_python(_wrap_scene_python(body))
+
+
+def query_scene_lights(limit: int = 20) -> Dict[str, Any]:
+    """Return a compact list of light actors and their key intensity fields."""
+    body = f"""
+limit = {int(limit)}
+light_type_names = {{"PointLight", "SpotLight", "DirectionalLight", "SkyLight", "RectLight"}}
+
+results = []
+for actor in unreal.EditorLevelLibrary.get_all_level_actors():
+    actor_class_name = actor.get_class().get_name() if hasattr(actor, "get_class") else type(actor).__name__
+    if actor_class_name not in light_type_names:
+        continue
+    light_component = None
+    for prop_name in ("light_component", "directional_light_component", "sky_light_component"):
+        try:
+            light_component = actor.get_editor_property(prop_name)
+            if light_component is not None:
+                break
+        except Exception:
+            pass
+    intensity = None
+    intensity_units = None
+    if light_component is not None:
+        try:
+            intensity = light_component.get_editor_property("intensity")
+        except Exception:
+            intensity = None
+        try:
+            intensity_units = str(light_component.get_editor_property("intensity_units"))
+        except Exception:
+            intensity_units = None
+    results.append({{
+        "name": actor.get_name(),
+        "class": actor_class_name,
+        "path": actor.get_path_name(),
+        "location": _mcp_to_simple(actor.get_actor_location()),
+        "intensity": intensity,
+        "intensity_units": intensity_units,
+    }})
+
+results.sort(key=lambda item: item["name"])
+_mcp_emit({{"success": True, "lights": results[:limit], "count": len(results), "limit": limit}})
+"""
+    return _run_editor_python(_wrap_scene_python(body))
 
 
 def _new_operation_id(command_name: str) -> str:

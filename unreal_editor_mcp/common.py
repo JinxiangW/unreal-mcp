@@ -4,10 +4,13 @@ Common helpers for Unreal Editor MCP.
 
 import json
 import logging
+import time
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+from unreal_observability.token_usage import record_tool_usage
 
 from .connection import get_unreal_connection
 
@@ -58,6 +61,16 @@ def with_unreal_connection(func):
 def send_command(
     command: str, params: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
+    started_at = time.perf_counter()
     unreal = get_unreal_connection()
     response = unreal.send_command(command, params)
-    return response or {"success": False, "message": "No response from Unreal"}
+    payload = response or {"success": False, "message": "No response from Unreal"}
+    record_tool_usage(
+        "unreal_editor_mcp.transport",
+        command,
+        request_payload=params or {},
+        response_payload=payload,
+        metadata={"transport": "tcp"},
+        started_at=started_at,
+    )
+    return payload

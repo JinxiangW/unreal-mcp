@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from unreal_editor_mcp.tools import get_assets as raw_get_assets
 from unreal_harness_runtime.python_exec import (
     json_literal,
     python_literal,
@@ -31,6 +32,57 @@ def get_asset_harness_info() -> Dict[str, Any]:
             "World",
         ],
     }
+
+
+def query_assets_summary(
+    path: str = "/Game/",
+    asset_class: Optional[str] = None,
+    name_filter: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """Read a compact asset list for common browsing tasks."""
+    return raw_get_assets(
+        path=path,
+        asset_class=asset_class,
+        name_filter=name_filter,
+        limit=limit,
+        offset=offset,
+        summary_only=True,
+        fields=["name", "path", "class", "package"],
+    )
+
+
+def ensure_asset_with_properties(
+    asset_type: str,
+    name: str,
+    path: str = "/Game/",
+    properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Create the asset if missing, otherwise update it in place."""
+    asset_ref = f"{path.rstrip('/')}/{name}.{name}"
+    body = f"""
+asset_ref = {python_literal(asset_ref)}
+exists = unreal.EditorAssetLibrary.does_asset_exist(asset_ref)
+_mcp_emit({{"success": True, "asset_path": asset_ref, "exists": bool(exists)}})
+"""
+    exists_result = run_editor_python(wrap_editor_python(body))
+    if not exists_result.get("success"):
+        return exists_result
+
+    if exists_result.get("exists"):
+        update_result = update_asset_properties(asset_ref, properties or {})
+        update_result["action"] = "updated"
+        return update_result
+
+    create_result = create_asset_with_properties(
+        asset_type=asset_type,
+        name=name,
+        path=path,
+        properties=properties,
+    )
+    create_result["action"] = "created"
+    return create_result
 
 
 def create_asset_with_properties(

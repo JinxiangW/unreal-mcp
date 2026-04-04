@@ -2,20 +2,80 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict
 
 from unreal_editor_mcp.common import send_command
 from unreal_editor_mcp.tools import get_current_level
+from unreal_harness_runtime.config import (
+    get_editor_exe_path,
+    get_project_path,
+    get_runtime_paths,
+)
 from unreal_harness_runtime.python_exec import run_editor_python, wrap_editor_python
 
 from unreal_orchestrator.catalog import list_domains
 
 
-DEFAULT_EDITOR_EXE = Path(r"F:\GFFEngines\Main\Engine\Binaries\Win64\UnrealEditor.exe")
-DEFAULT_PROJECT_PATH = Path(r"F:\GFFEngines\Main_Client\Client.uproject")
+TOKEN_USAGE_LOG = Path(__file__).resolve().parents[1] / "logs" / "token_usage.jsonl"
+
+
+def _ready_level_summary(level_info: Dict[str, Any]) -> Dict[str, Any] | None:
+    if not isinstance(level_info, dict):
+        return None
+    if level_info.get("status") == "success":
+        result = level_info.get("result") or {}
+        return {
+            "success": bool(result.get("success", False)),
+            "level_name": result.get("level_name"),
+            "level_path": result.get("level_path"),
+        }
+    return {
+        "success": bool(level_info.get("success", False)),
+        "level_name": level_info.get("level_name"),
+        "level_path": level_info.get("level_path"),
+    }
+
+
+def _build_ready_state(
+    *,
+    success: bool = True,
+    ready: bool,
+    transport_ok: bool,
+    python_ready: bool,
+    recommended_action: str,
+    current_level: Dict[str, Any],
+    debug: bool,
+    mode: str = "usage",
+    auto_launch_allowed: bool = False,
+    transport_probe: Dict[str, Any] | None = None,
+    python_probe: Dict[str, Any] | None = None,
+    attempts: int | None = None,
+    error: str | None = None,
+) -> Dict[str, Any]:
+    state = {
+        "success": success,
+        "ready": ready,
+        "mode": mode,
+        "auto_launch_allowed": auto_launch_allowed,
+        "transport_ok": transport_ok,
+        "python_ready": python_ready,
+        "current_level_summary": _ready_level_summary(current_level),
+        "recommended_action": recommended_action,
+    }
+    if debug:
+        state["current_level"] = current_level
+        state["transport_probe"] = transport_probe
+        state["python_probe"] = python_probe
+        if attempts is not None:
+            state["attempts"] = attempts
+        if error is not None:
+            state["error"] = error
+    return state
 
 
 def get_harness_health() -> Dict[str, Any]:
@@ -24,6 +84,134 @@ def get_harness_health() -> Dict[str, Any]:
         "success": True,
         "domains": list_domains(),
         "current_level": get_current_level(),
+    }
+
+
+def get_token_usage_summary(top_n: int = 10) -> Dict[str, Any]:
+    """Summarize recorded token usage by component and operation."""
+    if not TOKEN_USAGE_LOG.exists():
+        return {
+            "success": True,
+            "log_exists": False,
+            "entries": 0,
+            "top_operations": [],
+        }
+
+    groups: Dict[tuple[str, str], Dict[str, float]] = defaultdict(
+        lambda: {
+            "count": 0,
+            "request_bytes": 0,
+            "response_bytes": 0,
+            "estimated_request_tokens": 0,
+            "estimated_response_tokens": 0,
+            "latency_ms_total": 0.0,
+        }
+    )
+    entries = 0
+    sessions = set()
+    cold_start_entries = []
+    hot_entries = []
+    with TOKEN_USAGE_LOG.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            entries += 1
+            session_id = record.get("session_id")
+            if session_id:
+                sessions.add(session_id)
+            if record.get("session_entry_index") == 1:
+                cold_start_entries.append(record)
+            elif record.get("session_entry_index"):
+                hot_entries.append(record)
+            key = (
+                record.get("component", "unknown"),
+                record.get("operation", "unknown"),
+            )
+            bucket = groups[key]
+            bucket["count"] += 1
+            bucket["request_bytes"] += record.get("request_bytes", 0)
+            bucket["response_bytes"] += record.get("response_bytes", 0)
+            bucket["estimated_request_tokens"] += record.get(
+                "estimated_request_tokens", 0
+            )
+            bucket["estimated_response_tokens"] += record.get(
+                "estimated_response_tokens", 0
+            )
+            bucket["latency_ms_total"] += record.get("latency_ms", 0.0)
+
+    ranked = sorted(
+        groups.items(),
+        key=lambda item: (
+            item[1]["estimated_response_tokens"],
+            item[1]["response_bytes"],
+            item[1]["count"],
+        ),
+        reverse=True,
+    )
+
+    top_operations = []
+    for (component, operation), stats in ranked[:top_n]:
+        count = max(1, int(stats["count"]))
+        top_operations.append(
+            {
+                "component": component,
+                "operation": operation,
+                "count": int(stats["count"]),
+                "avg_request_bytes": round(stats["request_bytes"] / count, 2),
+                "avg_response_bytes": round(stats["response_bytes"] / count, 2),
+                "avg_request_tokens": round(
+                    stats["estimated_request_tokens"] / count, 2
+                ),
+                "avg_response_tokens": round(
+                    stats["estimated_response_tokens"] / count, 2
+                ),
+                "avg_latency_ms": round(stats["latency_ms_total"] / count, 2),
+                "total_response_tokens": int(stats["estimated_response_tokens"]),
+            }
+        )
+
+    return {
+        "success": True,
+        "log_exists": True,
+        "log_path": str(TOKEN_USAGE_LOG),
+        "entries": entries,
+        "session_count": len(sessions),
+        "cold_start_summary": {
+            "entries": len(cold_start_entries),
+            "avg_response_tokens": round(
+                sum(
+                    item.get("estimated_response_tokens", 0)
+                    for item in cold_start_entries
+                )
+                / max(1, len(cold_start_entries)),
+                2,
+            ),
+            "avg_latency_ms": round(
+                sum(item.get("latency_ms", 0.0) for item in cold_start_entries)
+                / max(1, len(cold_start_entries)),
+                2,
+            ),
+        },
+        "hot_session_summary": {
+            "entries": len(hot_entries),
+            "avg_response_tokens": round(
+                sum(item.get("estimated_response_tokens", 0) for item in hot_entries)
+                / max(1, len(hot_entries)),
+                2,
+            ),
+            "avg_latency_ms": round(
+                sum(item.get("latency_ms", 0.0) for item in hot_entries)
+                / max(1, len(hot_entries)),
+                2,
+            ),
+        },
+        "operation_count": len(groups),
+        "top_operations": top_operations,
     }
 
 
@@ -43,10 +231,11 @@ def get_runtime_policy() -> Dict[str, Any]:
         "dev_only_tools": [
             "dev_launch_editor_and_wait_ready",
         ],
+        "runtime_paths": get_runtime_paths(),
     }
 
 
-def get_editor_ready_state() -> Dict[str, Any]:
+def get_editor_ready_state(debug: bool = False) -> Dict[str, Any]:
     """Check whether the current Unreal Editor session is ready for heavier commands."""
     tcp_probe = send_command("get_current_level", {})
     transport_ok = tcp_probe.get("status") == "success" and (
@@ -71,24 +260,24 @@ _mcp_emit({
     level_info = get_current_level() if transport_ok else tcp_probe
 
     ready = bool(transport_ok and python_ready)
-    return {
-        "success": True,
-        "ready": ready,
-        "mode": "usage",
-        "auto_launch_allowed": False,
-        "transport_ok": transport_ok,
-        "python_ready": python_ready,
-        "current_level": level_info,
-        "transport_probe": tcp_probe,
-        "python_probe": python_probe,
-        "recommended_action": "safe_to_continue" if ready else "wait_and_retry",
-    }
+    return _build_ready_state(
+        success=True,
+        ready=ready,
+        transport_ok=transport_ok,
+        python_ready=python_ready,
+        current_level=level_info,
+        transport_probe=tcp_probe,
+        python_probe=python_probe,
+        recommended_action="safe_to_continue" if ready else "wait_and_retry",
+        debug=debug,
+    )
 
 
 def wait_for_editor_ready(
     timeout_seconds: int = 120,
     poll_seconds: int = 5,
     usage_mode: str = "usage",
+    debug: bool = False,
 ) -> Dict[str, Any]:
     """Poll the editor until both transport and Unreal Python are ready."""
     deadline = time.time() + timeout_seconds
@@ -101,30 +290,43 @@ def wait_for_editor_ready(
 
     while time.time() < deadline:
         attempts += 1
-        last_state = get_editor_ready_state()
-        last_state["attempts"] = attempts
+        last_state = get_editor_ready_state(debug=debug)
+        if debug:
+            last_state["attempts"] = attempts
         if last_state.get("ready"):
             return last_state
         time.sleep(max(1, poll_seconds))
 
-    last_state["success"] = False
-    last_state["mode"] = usage_mode
-    last_state["error"] = (
-        f"Timed out waiting for editor readiness after {attempts} attempts"
+    return _build_ready_state(
+        success=False,
+        ready=False,
+        transport_ok=bool(last_state.get("transport_ok", False)),
+        python_ready=bool(last_state.get("python_ready", False)),
+        current_level=(
+            last_state.get("current_level", {})
+            if debug
+            else {"result": last_state.get("current_level_summary") or {}}
+        ),
+        transport_probe=last_state.get("transport_probe") if debug else None,
+        python_probe=last_state.get("python_probe") if debug else None,
+        recommended_action=(
+            "may_use_dev_launch_workflow"
+            if usage_mode == "dev"
+            else "open_editor_manually"
+        ),
+        debug=debug,
+        mode=usage_mode,
+        auto_launch_allowed=usage_mode == "dev",
+        attempts=attempts,
+        error=f"Timed out waiting for editor readiness after {attempts} attempts",
     )
-    last_state["auto_launch_allowed"] = usage_mode == "dev"
-    last_state["recommended_action"] = (
-        "may_use_dev_launch_workflow" if usage_mode == "dev" else "open_editor_manually"
-    )
-    last_state["attempts"] = attempts
-    return last_state
 
 
 def dev_launch_editor_and_wait_ready(
     timeout_seconds: int = 420,
     poll_seconds: int = 5,
-    editor_exe: str = str(DEFAULT_EDITOR_EXE),
-    project_path: str = str(DEFAULT_PROJECT_PATH),
+    editor_exe: str | None = None,
+    project_path: str | None = None,
 ) -> Dict[str, Any]:
     """Development-only helper that launches the editor and waits for readiness.
 
@@ -141,9 +343,11 @@ def dev_launch_editor_and_wait_ready(
             "state": pre_state,
         }
 
+    resolved_editor_exe = editor_exe or str(get_editor_exe_path())
+    resolved_project_path = project_path or str(get_project_path())
     command = [
-        editor_exe,
-        project_path,
+        resolved_editor_exe,
+        resolved_project_path,
         "-NoSplash",
         "-NoSound",
         "-NoRHIValidation",
@@ -155,6 +359,7 @@ def dev_launch_editor_and_wait_ready(
         timeout_seconds=timeout_seconds,
         poll_seconds=poll_seconds,
         usage_mode="dev",
+        debug=True,
     )
     return {
         "success": bool(final_state.get("ready")),

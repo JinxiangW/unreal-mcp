@@ -172,3 +172,83 @@ else:
     }})
 """
     return run_editor_python(wrap_editor_python(body))
+
+
+def update_material_instance_parameters_and_verify(
+    asset_path: str,
+    scalar_parameters: Dict[str, float] | None = None,
+    vector_parameters: Dict[str, Dict[str, float]] | None = None,
+    texture_parameters: Dict[str, str] | None = None,
+) -> Dict[str, Any]:
+    """Apply multiple parameter updates and return structured verification results."""
+    scalar_parameters = scalar_parameters or {}
+    vector_parameters = vector_parameters or {}
+    texture_parameters = texture_parameters or {}
+
+    if not scalar_parameters and not vector_parameters and not texture_parameters:
+        return {"success": False, "error": "No parameter updates requested"}
+
+    body = f"""
+asset_path = {python_literal(asset_path)}
+scalar_parameters = {json_literal(scalar_parameters)}
+vector_parameters = {json_literal(vector_parameters)}
+texture_parameters = {json_literal(texture_parameters)}
+
+instance = unreal.EditorAssetLibrary.load_asset(asset_path)
+if instance is None:
+    _mcp_emit({{"success": False, "error": f"Asset not found: {{asset_path}}"}})
+else:
+    changes = []
+    failed = []
+    verification = []
+
+    for parameter_name, value in scalar_parameters.items():
+        try:
+            changed = unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(instance, parameter_name, float(value))
+            actual = unreal.MaterialEditingLibrary.get_material_instance_scalar_parameter_value(instance, parameter_name)
+            changes.append({{"type": "scalar", "parameter": parameter_name, "changed": bool(changed)}})
+            verification.append({{"type": "scalar", "parameter": parameter_name, "expected": float(value), "actual": actual, "ok": abs(actual - float(value)) < 0.0001}})
+        except Exception as exc:
+            failed.append({{"type": "scalar", "parameter": parameter_name, "error": str(exc)}})
+
+    for parameter_name, value in vector_parameters.items():
+        try:
+            color = unreal.LinearColor(value.get('r', 0.0), value.get('g', 0.0), value.get('b', 0.0), value.get('a', 1.0))
+            changed = unreal.MaterialEditingLibrary.set_material_instance_vector_parameter_value(instance, parameter_name, color)
+            actual = unreal.MaterialEditingLibrary.get_material_instance_vector_parameter_value(instance, parameter_name)
+            actual_value = {{"r": actual.r, "g": actual.g, "b": actual.b, "a": actual.a}}
+            expected_value = {{"r": color.r, "g": color.g, "b": color.b, "a": color.a}}
+            changes.append({{"type": "vector", "parameter": parameter_name, "changed": bool(changed)}})
+            verification.append({{"type": "vector", "parameter": parameter_name, "expected": expected_value, "actual": actual_value, "ok": actual_value == expected_value}})
+        except Exception as exc:
+            failed.append({{"type": "vector", "parameter": parameter_name, "error": str(exc)}})
+
+    for parameter_name, texture_asset_path in texture_parameters.items():
+        try:
+            texture = unreal.EditorAssetLibrary.load_asset(texture_asset_path)
+            if texture is None:
+                raise Exception(f"Texture not found: {{texture_asset_path}}")
+            changed = unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, parameter_name, texture)
+            actual = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(instance, parameter_name)
+            actual_path = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(actual) if actual else None
+            changes.append({{"type": "texture", "parameter": parameter_name, "changed": bool(changed)}})
+            verification.append({{"type": "texture", "parameter": parameter_name, "expected": texture_asset_path, "actual": actual_path, "ok": actual_path == texture_asset_path}})
+        except Exception as exc:
+            failed.append({{"type": "texture", "parameter": parameter_name, "error": str(exc)}})
+
+    unreal.EditorAssetLibrary.save_loaded_asset(instance)
+    verified = (not failed) and all(item.get('ok', False) for item in verification)
+    _mcp_emit({{
+        "success": verified,
+        "asset_path": asset_path,
+        "requested": {{
+            "scalar": list(scalar_parameters.keys()),
+            "vector": list(vector_parameters.keys()),
+            "texture": list(texture_parameters.keys()),
+        }},
+        "changes": changes,
+        "failed": failed,
+        "verification": verification,
+    }})
+"""
+    return run_editor_python(wrap_editor_python(body))

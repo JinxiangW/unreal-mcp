@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict
 
 from fastmcp import FastMCP
+from unreal_diagnostics.tools import get_token_usage_summary
 
 
 _CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -46,6 +47,8 @@ from .tools import (
     import_texture,
     load_level,
     read_blueprint_content,
+    read_result_handle,
+    release_result_handle,
     save_current_level,
     set_actor_properties,
     set_asset_properties,
@@ -118,6 +121,9 @@ for tool in [
     read_blueprint_content,
     analyze_blueprint_graph,
     blueprint_graph_command,
+    get_token_usage_summary,
+    read_result_handle,
+    release_result_handle,
 ]:
     mcp.tool()(tool)
 

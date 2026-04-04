@@ -4,18 +4,15 @@ Connection management for Unreal Editor MCP.
 
 import json
 import logging
-import os
 import socket
 import struct
 import threading
 import time
 from typing import Any, Dict, Optional
 
+from unreal_harness_runtime.config import get_unreal_host, get_unreal_port
 
 logger = logging.getLogger("UnrealEditorMCP")
-
-UNREAL_HOST = os.environ.get("UE_HOST", "127.0.0.1")
-UNREAL_PORT = int(os.environ.get("UE_PORT", "55557"))
 
 
 class UnrealConnection:
@@ -76,14 +73,16 @@ class UnrealConnection:
             with self._lock:
                 self._close_socket_unsafe()
                 try:
+                    host = get_unreal_host()
+                    port = get_unreal_port()
                     logger.info(
                         "Connecting to Unreal at %s:%s (attempt %s)...",
-                        UNREAL_HOST,
-                        UNREAL_PORT,
+                        host,
+                        port,
                         attempt + 1,
                     )
                     self.socket = self._create_socket()
-                    self.socket.connect((UNREAL_HOST, UNREAL_PORT))
+                    self.socket.connect((host, port))
                     self.connected = True
                     self._last_error = None
                     return True

@@ -5,17 +5,17 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 
-from .python_exec import PYTHON_RESULT_MARKER
-
-
-DEFAULT_EDITOR_CMD = Path(
-    r"F:\GFFEngines\Main\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
+from unreal_observability.token_usage import record_tool_usage
+from .config import (
+    get_commandlet_script_path,
+    get_editor_cmd_path,
+    get_project_path,
 )
-DEFAULT_PROJECT_PATH = Path(r"F:\GFFEngines\Main_Client\Client.uproject")
-COMMANDLET_SCRIPT = Path(r"D:\ue-mcp\unreal-mcp\commandlets\asset_import_commandlet.py")
+from .python_exec import PYTHON_RESULT_MARKER
 
 
 def _normalize_arg(value: str) -> str:
@@ -44,17 +44,22 @@ def _extract_marker_payload(output: str) -> Dict[str, Any]:
 def run_python_commandlet(
     args: List[str], timeout_seconds: int = 1800
 ) -> Dict[str, Any]:
+    started_at = time.perf_counter()
+    editor_cmd = get_editor_cmd_path()
+    project_path = get_project_path()
+    commandlet_script = get_commandlet_script_path()
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as handle:
         result_file = Path(handle.name)
 
     normalized_args = [_normalize_arg(arg) for arg in args]
     normalized_args.extend(["--result-file", _normalize_arg(str(result_file))])
     script_command = subprocess.list2cmdline(
-        [COMMANDLET_SCRIPT.as_posix()] + normalized_args
+        [commandlet_script.as_posix()] + normalized_args
     )
     command = [
-        str(DEFAULT_EDITOR_CMD),
-        str(DEFAULT_PROJECT_PATH),
+        str(editor_cmd),
+        str(project_path),
         "-run=PythonScript",
         f"-Script={script_command}",
         "-unattended",
@@ -81,6 +86,18 @@ def run_python_commandlet(
         if completed.returncode != 0 and result.get("success"):
             result["success"] = False
             result["error"] = f"Commandlet exited with code {completed.returncode}"
+        record_tool_usage(
+            "unreal_harness_runtime.commandlet_exec",
+            "run_python_commandlet",
+            request_payload={"args": args, "timeout_seconds": timeout_seconds},
+            response_payload=result,
+            metadata={
+                "exit_code": completed.returncode,
+                "stdout_bytes": len((completed.stdout or "").encode("utf-8")),
+                "stderr_bytes": len((completed.stderr or "").encode("utf-8")),
+            },
+            started_at=started_at,
+        )
         return result
     finally:
         if result_file.exists():

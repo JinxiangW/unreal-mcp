@@ -50,23 +50,11 @@ public class UnrealMCP : ModuleRules
 			}
 		);
 		
-		// UE 5.7+ Stateless Niagara support - add Internal include paths
-		// NiagaraStatelessSimulationShader.h is in NiagaraShader/Internal/Stateless/
-		string NiagaraShaderPath = System.IO.Path.Combine(ModuleDirectory, "..", "..", "..", "..", "..", "..", "Engine", "Plugins", "FX", "Niagara", "Source", "NiagaraShader");
-		if (!System.IO.Directory.Exists(NiagaraShaderPath))
-		{
-			NiagaraShaderPath = "E:/UE/UE_5.7/Engine/Plugins/FX/Niagara/Source/NiagaraShader";
-		}
-		string NiagaraPath = System.IO.Path.Combine(ModuleDirectory, "..", "..", "..", "..", "..", "..", "Engine", "Plugins", "FX", "Niagara", "Source", "Niagara");
-		if (!System.IO.Directory.Exists(NiagaraPath))
-		{
-			NiagaraPath = "E:/UE/UE_5.7/Engine/Plugins/FX/Niagara/Source/Niagara";
-		}
-		string NiagaraEditorPath = System.IO.Path.Combine(ModuleDirectory, "..", "..", "..", "..", "..", "..", "Engine", "Plugins", "FX", "Niagara", "Source", "NiagaraEditor");
-		if (!System.IO.Directory.Exists(NiagaraEditorPath))
-		{
-			NiagaraEditorPath = "E:/UE/UE_5.7/Engine/Plugins/FX/Niagara/Source/NiagaraEditor";
-		}
+		// Optional Niagara internal headers for stateless support on newer engine versions.
+		string EnginePath = System.IO.Path.GetFullPath(Target.RelativeEnginePath);
+		string NiagaraShaderPath = System.IO.Path.Combine(EnginePath, "Plugins", "FX", "Niagara", "Source", "NiagaraShader");
+		string NiagaraPath = System.IO.Path.Combine(EnginePath, "Plugins", "FX", "Niagara", "Source", "Niagara");
+		string NiagaraEditorPath = System.IO.Path.Combine(EnginePath, "Plugins", "FX", "Niagara", "Source", "NiagaraEditor");
 		
 		// Add Internal include paths for Stateless API
 		if (System.IO.Directory.Exists(System.IO.Path.Combine(NiagaraShaderPath, "Internal")))

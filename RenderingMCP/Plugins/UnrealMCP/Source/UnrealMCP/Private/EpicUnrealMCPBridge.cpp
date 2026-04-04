@@ -305,11 +305,13 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
             {
                 ResultJson = BlueprintGraphCommands->HandleCommand(CommandType, Params);
             }
-            // Niagara Commands (4 consolidated tools)
+            // Niagara Commands
             else if (CommandType == TEXT("get_niagara_graph") ||
                      CommandType == TEXT("update_niagara_graph") ||
                      CommandType == TEXT("get_niagara_emitter") ||
-                     CommandType == TEXT("update_niagara_emitter"))
+                     CommandType == TEXT("update_niagara_emitter") ||
+                     CommandType == TEXT("get_niagara_compiled_code") ||
+                     CommandType == TEXT("get_niagara_particle_attributes"))
             {
                 ResultJson = NiagaraCommands->HandleCommand(CommandType, Params);
             }

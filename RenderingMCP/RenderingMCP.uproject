@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.7",
+	"EngineAssociation": "5.6",
 	"Category": "",
 	"Description": "Rendering MCP - Material and Texture Pipeline Tools",
 	"Modules": [
@@ -11,6 +11,10 @@
 		}
 	],
 	"Plugins": [
+		{
+			"Name": "RenderDocPlugin",
+			"Enabled": false
+		},
 		{
 			"Name": "ModelingToolsEditorMode",
 			"Enabled": true,

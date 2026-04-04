@@ -173,6 +173,21 @@ def _summarize_result(result: Any) -> Any:
     return summary
 
 
+def _input_error_result(operation: str, error: str) -> Dict[str, Any]:
+    domain = operation.split(".", 1)[0] if "." in operation else operation
+    return {
+        "success": False,
+        "operation_id": _new_orchestrator_operation_id(operation.replace(".", "_")),
+        "domain": domain,
+        "targets": [],
+        "applied_changes": [],
+        "failed_changes": [{"field": "input", "error": error}],
+        "post_state": {},
+        "verification": {"verified": False, "checks": []},
+        "error": error,
+    }
+
+
 def _guard_live_editor_call(
     operation: str,
     func,
@@ -207,7 +222,10 @@ def _guard_live_editor_call(
             payload["preflight_summary"] = _compact_preflight(preflight)
         return payload
 
-    result = func(*args, **kwargs)
+    try:
+        result = func(*args, **kwargs)
+    except ValueError as exc:
+        result = _input_error_result(operation, str(exc))
     payload = {
         "success": _result_success(result),
         "operation": operation,

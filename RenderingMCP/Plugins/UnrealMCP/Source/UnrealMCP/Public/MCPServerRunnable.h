@@ -6,6 +6,7 @@
 #include "Interfaces/IPv4/IPv4Address.h"
 
 class UEpicUnrealMCPBridge;
+class FJsonObject;
 
 /**
  * Runnable class for the MCP server thread
@@ -24,7 +25,8 @@ public:
 
 protected:
 	void HandleClientConnection(TSharedPtr<FSocket> ClientSocket);
-	void ProcessMessage(TSharedPtr<FSocket> Client, const FString& Message);
+	bool TryParseBufferedRequest(const TArray<uint8>& RequestBytes, TSharedPtr<FJsonObject>& OutJsonObject, FString& OutRequestText) const;
+	bool SendResponse(TSharedPtr<FSocket> Client, const FString& Response) const;
 
 private:
 	UEpicUnrealMCPBridge* Bridge;

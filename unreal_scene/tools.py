@@ -44,6 +44,15 @@ def _mcp_find_actor(actor_name):
             return actor
     return None
 
+def _mcp_get_actor_identifier(actor):
+    try:
+        label = actor.get_actor_label()
+        if label:
+            return label
+    except Exception:
+        pass
+    return actor.get_name()
+
 def _mcp_to_simple(value):
     if value is None or isinstance(value, (bool, int, str)):
         return value
@@ -291,10 +300,19 @@ for actor in unreal.EditorLevelLibrary.get_all_level_actors():
     if actor_class_name and actor_class_value != actor_class_name:
         continue
     actor_name = actor.get_name()
-    if name_filter and name_filter.lower() not in actor_name.lower():
+    actor_label = None
+    try:
+        actor_label = actor.get_actor_label()
+    except Exception:
+        actor_label = None
+    actor_identifier = _mcp_get_actor_identifier(actor)
+    search_text = name_filter.lower() if name_filter else None
+    if search_text and search_text not in actor_name.lower() and (not actor_label or search_text not in actor_label.lower()):
         continue
     results.append({{
-        "name": actor_name,
+        "name": actor_identifier,
+        "actor_name": actor_name,
+        "actor_label": actor_label,
         "class": actor_class_value,
         "path": actor.get_path_name(),
         "location": _mcp_to_simple(actor.get_actor_location()),
@@ -385,8 +403,15 @@ for actor in unreal.EditorLevelLibrary.get_all_level_actors():
             intensity_units = str(light_component.get_editor_property("intensity_units"))
         except Exception:
             intensity_units = None
+    actor_label = None
+    try:
+        actor_label = actor.get_actor_label()
+    except Exception:
+        actor_label = None
     results.append({{
-        "name": actor.get_name(),
+        "name": _mcp_get_actor_identifier(actor),
+        "actor_name": actor.get_name(),
+        "actor_label": actor_label,
         "class": actor_class_name,
         "path": actor.get_path_name(),
         "location": _mcp_to_simple(actor.get_actor_location()),
@@ -514,31 +539,93 @@ def set_scene_light_intensity(
     mobility: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Set a light's intensity with explicit units and optional mobility."""
-    normalized_unit = _normalize_light_unit(unit)
-    normalized_mobility = _normalize_mobility(mobility)
+    operation_id = _new_operation_id("set_scene_light_intensity")
+    try:
+        normalized_intensity = float(intensity)
+        normalized_unit = _normalize_light_unit(unit)
+        normalized_mobility = _normalize_mobility(mobility)
+    except (TypeError, ValueError) as exc:
+        return _scene_input_error(operation_id, str(exc), targets=[actor_name])
     mobility_literal = _python_literal(normalized_mobility)
     body = f"""
+operation_id = {_json_literal(operation_id)}
 actor_name = {_json_literal(actor_name)}
-actor = next((a for a in unreal.EditorLevelLibrary.get_all_level_actors() if a.get_name() == actor_name), None)
+actor = _mcp_find_actor(actor_name)
 if actor is None:
-    _mcp_emit({{"success": False, "error": f"Actor not found: {{actor_name}}"}})
+    _mcp_emit({{
+        "success": False,
+        "operation_id": operation_id,
+        "domain": "scene",
+        "targets": [actor_name],
+        "applied_changes": [],
+        "failed_changes": [{{"target": actor_name, "field": "actor", "error": f"Actor not found: {{actor_name}}"}}],
+        "post_state": {{}},
+        "verification": {{"verified": False, "checks": []}},
+        "error": f"Actor not found: {{actor_name}}",
+    }})
 else:
+    actor_key = _mcp_get_actor_identifier(actor)
     light_component = actor.get_component_by_class(unreal.LightComponent)
     if light_component is None:
-        _mcp_emit({{"success": False, "error": f"LightComponent not found on {{actor_name}}"}})
+        _mcp_emit({{
+            "success": False,
+            "operation_id": operation_id,
+            "domain": "scene",
+            "targets": [actor_key],
+            "applied_changes": [],
+            "failed_changes": [{{"target": actor_key, "field": "light_component", "error": f"LightComponent not found on {{actor_name}}"}}],
+            "post_state": {{}},
+            "verification": {{"verified": False, "checks": []}},
+            "error": f"LightComponent not found on {{actor_name}}",
+        }})
     else:
+        expected_units = None
         if hasattr(light_component, "intensity_units"):
             light_component.set_editor_property("intensity_units", unreal.LightUnits.{normalized_unit})
-        light_component.set_editor_property("intensity", {intensity})
+            expected_units = str(getattr(unreal.LightUnits, {_json_literal(normalized_unit)}))
+        light_component.set_editor_property("intensity", {normalized_intensity})
         requested_mobility = {mobility_literal}
         if requested_mobility is not None:
             light_component.set_editor_property("mobility", getattr(unreal.ComponentMobility, requested_mobility))
+        actual_intensity = light_component.get_editor_property("intensity")
+        actual_units = str(light_component.get_editor_property("intensity_units")) if hasattr(light_component, "intensity_units") else None
+        actual_mobility = str(light_component.get_editor_property("mobility"))
+        checks = [
+            _mcp_check(actor_key, "intensity", {normalized_intensity}, actual_intensity),
+        ]
+        applied_changes = [
+            {{"target": actor_key, "field": "intensity", "value": {normalized_intensity}}},
+        ]
+        if expected_units is not None:
+            checks.append(_mcp_check(actor_key, "intensity_units", expected_units, actual_units))
+            applied_changes.append({{"target": actor_key, "field": "intensity_units", "value": expected_units}})
+        if requested_mobility is not None:
+            expected_mobility = str(getattr(unreal.ComponentMobility, requested_mobility))
+            checks.append(_mcp_check(actor_key, "mobility", expected_mobility, actual_mobility))
+            applied_changes.append({{"target": actor_key, "field": "mobility", "value": expected_mobility}})
+        verified = all(item["ok"] for item in checks)
         _mcp_emit({{
-            "success": True,
-            "actor_name": actor_name,
-            "intensity": light_component.get_editor_property("intensity"),
-            "intensity_units": str(light_component.get_editor_property("intensity_units")) if hasattr(light_component, "intensity_units") else None,
-            "mobility": str(light_component.get_editor_property("mobility")),
+            "success": verified,
+            "operation_id": operation_id,
+            "domain": "scene",
+            "targets": [actor_key],
+            "applied_changes": applied_changes,
+            "failed_changes": [],
+            "post_state": {{
+                actor_key: {{
+                    "actor_name": actor.get_name(),
+                    "actor_label": actor.get_actor_label(),
+                    "intensity": actual_intensity,
+                    "intensity_units": actual_units,
+                    "mobility": actual_mobility,
+                }}
+            }},
+            "verification": {{"verified": verified, "checks": checks}},
+            "actor_name": actor.get_name(),
+            "actor_label": actor.get_actor_label(),
+            "intensity": actual_intensity,
+            "intensity_units": actual_units,
+            "mobility": actual_mobility,
         }})
 """
     return _run_editor_python(
@@ -559,26 +646,38 @@ def create_spot_light_ring(
     replace_existing: bool = True,
 ) -> Dict[str, Any]:
     """Create evenly spaced spot lights on a circle and aim them at a target point."""
+    operation_id = _new_operation_id("create_spot_light_ring")
     if count <= 0:
-        return {"success": False, "error": "count must be greater than 0"}
-
-    normalized_unit = _normalize_light_unit(intensity_unit)
-    normalized_mobility = _normalize_mobility(mobility) or "MOVABLE"
+        return _scene_input_error(
+            operation_id,
+            "count must be greater than 0",
+            targets=[name_prefix],
+        )
+    try:
+        normalized_center = _normalize_xyz(center, name="center")
+        normalized_target = _normalize_xyz(target, name="target")
+        normalized_radius = float(radius)
+        normalized_z = float(z)
+        normalized_intensity = float(intensity)
+        normalized_unit = _normalize_light_unit(intensity_unit)
+        normalized_mobility = _normalize_mobility(mobility) or "MOVABLE"
+    except (TypeError, ValueError) as exc:
+        return _scene_input_error(operation_id, str(exc), targets=[name_prefix])
 
     actor_updates = []
     for index in range(count):
         angle = (2.0 * math.pi * index) / count
-        x = center["x"] + radius * math.cos(angle)
-        y = center["y"] + radius * math.sin(angle)
-        dx = target["x"] - x
-        dy = target["y"] - y
-        dz = target["z"] - z
+        x = normalized_center["x"] + normalized_radius * math.cos(angle)
+        y = normalized_center["y"] + normalized_radius * math.sin(angle)
+        dx = normalized_target["x"] - x
+        dy = normalized_target["y"] - y
+        dz = normalized_target["z"] - normalized_z
         yaw = math.degrees(math.atan2(dy, dx))
         pitch = math.degrees(math.atan2(dz, math.hypot(dx, dy)))
         actor_updates.append(
             {
                 "name": f"{name_prefix}_{index + 1:02d}",
-                "location": {"x": x, "y": y, "z": z},
+                "location": {"x": x, "y": y, "z": normalized_z},
                 "rotation": {"pitch": pitch, "yaw": yaw, "roll": 0.0},
             }
         )
@@ -588,16 +687,10 @@ actor_updates = {_json_literal(actor_updates)}
 replace_existing = {str(replace_existing)}
 actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 
-def _find_actor(name):
-    for actor in unreal.EditorLevelLibrary.get_all_level_actors():
-        if actor.get_name() == name:
-            return actor
-    return None
-
 results = []
 for item in actor_updates:
     name = item["name"]
-    actor = _find_actor(name)
+    actor = _mcp_find_actor(name)
     if actor is not None and replace_existing:
         actor_subsystem.destroy_actor(actor)
         actor = None
@@ -616,10 +709,12 @@ for item in actor_updates:
     light_component = actor.get_component_by_class(unreal.SpotLightComponent)
     light_component.set_editor_property("mobility", getattr(unreal.ComponentMobility, {_json_literal(normalized_mobility)}))
     light_component.set_editor_property("intensity_units", getattr(unreal.LightUnits, {_json_literal(normalized_unit)}))
-    light_component.set_editor_property("intensity", {intensity})
+    light_component.set_editor_property("intensity", {normalized_intensity})
 
     results.append({{
-        "name": name,
+        "name": _mcp_get_actor_identifier(actor),
+        "actor_name": actor.get_name(),
+        "actor_label": actor.get_actor_label(),
         "location": item["location"],
         "rotation": item["rotation"],
         "intensity": light_component.get_editor_property("intensity"),
@@ -935,15 +1030,16 @@ else:
         else:
             if requested_name:
                 spawned_actor.set_actor_label(requested_name)
+            actor_key = _mcp_get_actor_identifier(spawned_actor)
             spawned_actor.set_actor_location(unreal.Vector(location["x"], location["y"], location["z"]), False, False)
             spawned_actor.set_actor_rotation(unreal.Rotator(rotation["pitch"], rotation["yaw"], rotation["roll"]), False)
             spawned_actor.set_actor_scale3d(unreal.Vector(scale["x"], scale["y"], scale["z"]))
 
             root_component = _mcp_get_root_component(spawned_actor)
             applied_changes = [
-                {{"target": spawned_actor.get_name(), "field": "location", "value": location}},
-                {{"target": spawned_actor.get_name(), "field": "rotation", "value": rotation}},
-                {{"target": spawned_actor.get_name(), "field": "scale", "value": scale}},
+                {{"target": actor_key, "field": "location", "value": location}},
+                {{"target": actor_key, "field": "rotation", "value": rotation}},
+                {{"target": actor_key, "field": "scale", "value": scale}},
             ]
             failed_changes = []
             actor_expected = {{}}
@@ -952,13 +1048,13 @@ else:
                     coerced_value = _mcp_coerce_property_value(raw_value)
                     spawned_actor.set_editor_property(field, coerced_value)
                     actor_expected[field] = _mcp_to_simple(coerced_value)
-                    applied_changes.append({{"target": spawned_actor.get_name(), "field": field, "value": actor_expected[field]}})
+                    applied_changes.append({{"target": actor_key, "field": field, "value": actor_expected[field]}})
                 except Exception as exc:
-                    failed_changes.append({{"target": spawned_actor.get_name(), "field": field, "error": str(exc)}})
+                    failed_changes.append({{"target": actor_key, "field": field, "error": str(exc)}})
 
             component_expected = {{}}
             if root_component is None and root_component_properties:
-                failed_changes.append({{"target": spawned_actor.get_name(), "field": "root_component", "error": "Actor has no root component"}})
+                failed_changes.append({{"target": actor_key, "field": "root_component", "error": "Actor has no root component"}})
             elif root_component is not None:
                 for field, raw_value in root_component_properties.items():
                     try:
@@ -966,11 +1062,10 @@ else:
                         coerced_value = _mcp_coerce_like(current_value, raw_value)
                         root_component.set_editor_property(field, coerced_value)
                         component_expected[field] = _mcp_to_simple(coerced_value)
-                        applied_changes.append({{"target": spawned_actor.get_name(), "field": f"root_component.{{field}}", "value": component_expected[field]}})
+                        applied_changes.append({{"target": actor_key, "field": f"root_component.{{field}}", "value": component_expected[field]}})
                     except Exception as exc:
-                        failed_changes.append({{"target": spawned_actor.get_name(), "field": f"root_component.{{field}}", "error": str(exc)}})
+                        failed_changes.append({{"target": actor_key, "field": f"root_component.{{field}}", "error": str(exc)}})
 
-            actor_key = requested_name or spawned_actor.get_name()
             checks = [
                 _mcp_check(actor_key, "location", location, spawned_actor.get_actor_location()),
                 _mcp_check(actor_key, "rotation", rotation, spawned_actor.get_actor_rotation()),

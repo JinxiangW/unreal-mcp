@@ -1,10 +1,8 @@
 ---
 name: unity-to-ue
 description: 仅用于 Unity -> UE 迁移任务，当前重点是场景灯光、曝光、坐标/朝向、子关卡写入。
-license: MIT
-compatibility: opencode
 metadata:
-  scope: repo-local
+  short-description: Unity to Unreal migration workflow for scene transfer tasks
   repo: unreal-mcp
   trigger: unity-to-ue-only
 ---

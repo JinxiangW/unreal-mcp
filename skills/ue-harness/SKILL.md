@@ -1,10 +1,8 @@
 ---
 name: ue-harness
 description: 使用 `unreal-mcp` 时的最小工作指南，覆盖域选择、默认入口、后端边界和测试顺序。
-license: MIT
-compatibility: opencode
 metadata:
-  scope: repo-local
+  short-description: Unreal harness workflow for the unreal-mcp workspace
   repo: unreal-mcp
 ---
 

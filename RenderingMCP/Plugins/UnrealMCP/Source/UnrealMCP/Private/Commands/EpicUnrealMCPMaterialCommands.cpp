@@ -87,6 +87,7 @@
 #include "Materials/MaterialExpressionObjectOrientation.h"
 #include "Factories/MaterialFactoryNew.h"
 #include "Factories/TextureFactory.h"
+#include "AssetImportTask.h"
 #include "EditorAssetLibrary.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
@@ -500,16 +501,45 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleImportTexture(cons
         UE_LOG(LogTemp, Log, TEXT("Deleted existing texture: %s"), *AssetPath);
     }
 
-    // Import the texture using AssetTools
+    // Import the texture using an automated import task. This matches the safer
+    // FBX path and avoids the direct ImportAssets() flow that can recurse into
+    // Interchange task processing while we're already running inside a game-thread task.
     UTexture2D* ImportedTexture = nullptr;
+    FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
+    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
 
-    IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
-    TArray<UObject*> ImportedAssets = AssetTools.ImportAssets(TArray<FString>{SourceFilePath}, DestinationPath);
+    UTextureFactory* TextureFactory = NewObject<UTextureFactory>();
+    TextureFactory->AddToRoot();
+    TextureFactory->SuppressImportOverwriteDialog();
 
-    if (ImportedAssets.Num() > 0)
+    UAssetImportTask* Task = NewObject<UAssetImportTask>();
+    Task->AddToRoot();
+    Task->bAutomated = true;
+    Task->bReplaceExisting = true;
+    Task->bSave = true;
+    Task->DestinationPath = DestinationPath;
+    Task->DestinationName = TextureName;
+    Task->Filename = SourceFilePath;
+    Task->Factory = TextureFactory;
+    TextureFactory->SetAssetImportTask(Task);
+
+    TArray<UAssetImportTask*> Tasks;
+    Tasks.Add(Task);
+    AssetToolsModule.Get().ImportAssetTasks(Tasks);
+
+    for (const FString& ImportedObjectPath : Task->ImportedObjectPaths)
     {
-        ImportedTexture = Cast<UTexture2D>(ImportedAssets[0]);
+        FAssetData AssetData = AssetRegistryModule.Get().GetAssetByObjectPath(FSoftObjectPath(ImportedObjectPath));
+        UObject* ImportedAsset = AssetData.GetAsset();
+        if (UTexture2D* CandidateTexture = Cast<UTexture2D>(ImportedAsset))
+        {
+            ImportedTexture = CandidateTexture;
+            break;
+        }
     }
+
+    Task->RemoveFromRoot();
+    TextureFactory->RemoveFromRoot();
 
     if (!ImportedTexture)
     {
@@ -522,7 +552,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleImportTexture(cons
         FString PackagePath = FPaths::GetPath(ImportedTexture->GetOutermost()->GetName());
         TArray<FAssetRenameData> RenameData;
         RenameData.Add(FAssetRenameData(ImportedTexture, PackagePath, TextureName));
-        AssetTools.RenameAssets(RenameData);
+        AssetToolsModule.Get().RenameAssets(RenameData);
     }
 
     // Get the final asset path

@@ -64,8 +64,7 @@ python -m unreal_material_graph.server
 - `docs/verification.md`
 - `docs/test-plan.md`
 - `docs/workflow.md`
-- `docs/proposal.md`
-
+- 
 ## 提交约定
 
 - 提交信息统一使用中文

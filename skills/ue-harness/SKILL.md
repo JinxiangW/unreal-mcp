@@ -22,8 +22,7 @@ metadata:
 
 如果要改行为或架构，再看：
 
-4. `docs/proposal.md`
-5. `docs/commands.md`
+4. 5. `docs/commands.md`
 
 如果要测试或交付，再看：
 

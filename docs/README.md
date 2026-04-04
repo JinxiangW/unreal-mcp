@@ -7,5 +7,4 @@
 - `verification.md`: 结果结构与校验要求
 - `test-plan.md`: 功能与稳健性测试方案
 - `workflow.md`: 静默启动与自动化工作流
-- `proposal.md`: 架构演进思路
 - `migrations/`: Unity -> UE 迁移案例

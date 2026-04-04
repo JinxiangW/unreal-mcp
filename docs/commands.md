@@ -19,14 +19,17 @@
 - `create_spot_light_ring`
   - 输入：center、radius、z、count、target、intensity、unit、mobility
   - 价值：把批量摆灯、朝向、单位、可移动性收成一个配方
+  - 返回：已补齐 `operation_id / post_state / verification / summary / items`
 
 - `query_scene_actors`
   - 输入：`actor_class`、`name_filter`、`limit`
   - 价值：把常见场景查询收成 compact 命令，减少 raw `get_actors`
+  - 返回：统一包含 `summary / filters / items`
 
 - `query_scene_lights`
   - 输入：`limit`
   - 价值：直接返回灯光摘要，避免先全量 actor 再筛灯光
+  - 返回：统一包含 `summary / filters / items`
 
 - `aim_actor_at`
   - 输入：`actor_name`、`target`、`preserve_roll`、`roll`
@@ -49,6 +52,7 @@
 ### 已实现
 
 - `query_assets_summary`
+  - 返回：失败时不再谎报 `verification=true`，并统一包含 `summary / filters / items`
 - `ensure_asset_with_properties`
 - `create_asset_with_properties`
 - `import_texture_asset`

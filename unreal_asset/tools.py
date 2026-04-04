@@ -13,6 +13,11 @@ from unreal_harness_runtime.python_exec import (
     wrap_editor_python,
 )
 from unreal_harness_runtime.commandlet_exec import run_python_commandlet
+from unreal_harness_runtime.result_format import (
+    build_query_summary,
+    structured_query_failure,
+    structured_query_success,
+)
 
 
 def _new_operation_id(action: str) -> str:
@@ -119,29 +124,62 @@ def query_assets_summary(
     )
     inner = result.get("result") or {}
     assets = inner.get("assets", [])
-    return {
-        "success": bool(
-            (result.get("status") == "success") and inner.get("success", True)
-        ),
-        "operation_id": operation_id,
-        "domain": "asset",
-        "targets": [item.get("path") for item in assets if item.get("path")],
-        "applied_changes": [],
-        "failed_changes": [],
-        "post_state": {
+    success = bool((result.get("status") == "success") and inner.get("success", True))
+    filters = {
+        "path": path,
+        "asset_class": asset_class,
+        "name_filter": name_filter,
+        "limit": inner.get("limit", limit),
+        "offset": inner.get("offset", offset),
+    }
+    summary = build_query_summary(
+        requested=inner.get("limit", limit),
+        returned=inner.get("returned_count", len(assets)),
+        total=inner.get("total_count", len(assets)),
+        offset=inner.get("offset", offset),
+        verified=inner.get("returned_count", len(assets)) if success else 0,
+    )
+
+    if not success:
+        error = (
+            result.get("error")
+            or inner.get("error")
+            or inner.get("message")
+            or "query_assets_summary failed"
+        )
+        return structured_query_failure(
+            operation_id=operation_id,
+            domain="asset",
+            target=path,
+            error=error,
+            summary=summary,
+            filters=filters,
+            post_state={
+                path: {
+                    "count": inner.get("total_count", len(assets)),
+                    "returned_count": inner.get("returned_count", len(assets)),
+                    "assets": assets,
+                }
+            }
+            if assets
+            else {},
+            result=inner,
+            extra={"path": path},
+        )
+
+    return structured_query_success(
+        operation_id=operation_id,
+        domain="asset",
+        targets=[item.get("path") for item in assets if item.get("path")],
+        post_state={
             path: {
                 "count": inner.get("total_count", len(assets)),
                 "returned_count": inner.get("returned_count", len(assets)),
                 "assets": assets,
             }
         },
-        "verification": {"verified": True, "checks": []},
-        "summary": {
-            "requested": inner.get("limit", limit),
-            "returned": inner.get("returned_count", len(assets)),
-            "total": inner.get("total_count", len(assets)),
-        },
-        "items": [
+        summary=summary,
+        items=[
             {
                 "target": item.get("path"),
                 "success": True,
@@ -149,9 +187,9 @@ def query_assets_summary(
             }
             for item in assets
         ],
-        "path": path,
-        "result": inner,
-    }
+        filters=filters,
+        extra={"path": path, "result": inner},
+    )
 
 
 def ensure_folder(path: str) -> Dict[str, Any]:

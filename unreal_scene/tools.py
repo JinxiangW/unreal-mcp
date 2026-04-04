@@ -13,6 +13,11 @@ from unreal_harness_runtime.python_exec import (
     PYTHON_RESULT_MARKER,
     run_editor_python,
 )
+from unreal_harness_runtime.result_format import (
+    build_query_summary,
+    structured_query_failure,
+    structured_query_success,
+)
 
 
 _run_editor_python = run_editor_python
@@ -321,46 +326,49 @@ results.sort(key=lambda item: item["name"])
 _mcp_emit({{"success": True, "actors": results[:limit], "count": len(results), "limit": limit}})
 """
     result = _run_editor_python(_wrap_scene_python(body))
+    filters = {
+        "actor_class": actor_class,
+        "name_filter": name_filter,
+        "limit": result.get("limit", limit) if result.get("success") else limit,
+        "offset": 0,
+    }
+    summary = build_query_summary(
+        requested=filters["limit"],
+        returned=len(result.get("actors", [])) if result.get("success") else 0,
+        total=result.get("count", 0),
+        offset=0,
+        verified=len(result.get("actors", [])) if result.get("success") else 0,
+    )
     if not result.get("success"):
-        return {
-            "success": False,
-            "operation_id": operation_id,
-            "domain": "scene",
-            "targets": [],
-            "applied_changes": [],
-            "failed_changes": [
-                {
-                    "target": None,
-                    "field": "query",
-                    "error": result.get("error", "query_scene_actors failed"),
-                }
-            ],
-            "post_state": {},
-            "verification": {"verified": False, "checks": []},
-            "error": result.get("error", "query_scene_actors failed"),
-        }
+        return structured_query_failure(
+            operation_id=operation_id,
+            domain="scene",
+            target=None,
+            error=result.get("error", "query_scene_actors failed"),
+            summary=summary,
+            filters=filters,
+        )
     actors = result.get("actors", [])
-    return {
-        "success": True,
-        "operation_id": operation_id,
-        "domain": "scene",
-        "targets": [item.get("name") for item in actors if item.get("name")],
-        "applied_changes": [],
-        "failed_changes": [],
-        "post_state": {
+    summary = build_query_summary(
+        requested=result.get("limit", limit),
+        returned=len(actors),
+        total=result.get("count", len(actors)),
+        offset=0,
+        verified=len(actors),
+    )
+    return structured_query_success(
+        operation_id=operation_id,
+        domain="scene",
+        targets=[item.get("name") for item in actors if item.get("name")],
+        post_state={
             "scene_query": {
                 "count": result.get("count", len(actors)),
                 "limit": result.get("limit", limit),
                 "actors": actors,
             }
         },
-        "verification": {"verified": True, "checks": []},
-        "summary": {
-            "returned": len(actors),
-            "total": result.get("count", len(actors)),
-            "limit": result.get("limit", limit),
-        },
-        "items": [
+        summary=summary,
+        items=[
             {
                 "target": item.get("name"),
                 "success": True,
@@ -368,8 +376,9 @@ _mcp_emit({{"success": True, "actors": results[:limit], "count": len(results), "
             }
             for item in actors
         ],
-        "actors": actors,
-    }
+        filters=filters,
+        extra={"actors": actors},
+    )
 
 
 def query_scene_lights(limit: int = 20) -> Dict[str, Any]:
@@ -423,46 +432,47 @@ results.sort(key=lambda item: item["name"])
 _mcp_emit({{"success": True, "lights": results[:limit], "count": len(results), "limit": limit}})
 """
     result = _run_editor_python(_wrap_scene_python(body))
+    filters = {
+        "limit": result.get("limit", limit) if result.get("success") else limit,
+        "offset": 0,
+    }
+    summary = build_query_summary(
+        requested=filters["limit"],
+        returned=len(result.get("lights", [])) if result.get("success") else 0,
+        total=result.get("count", 0),
+        offset=0,
+        verified=len(result.get("lights", [])) if result.get("success") else 0,
+    )
     if not result.get("success"):
-        return {
-            "success": False,
-            "operation_id": operation_id,
-            "domain": "scene",
-            "targets": [],
-            "applied_changes": [],
-            "failed_changes": [
-                {
-                    "target": None,
-                    "field": "query",
-                    "error": result.get("error", "query_scene_lights failed"),
-                }
-            ],
-            "post_state": {},
-            "verification": {"verified": False, "checks": []},
-            "error": result.get("error", "query_scene_lights failed"),
-        }
+        return structured_query_failure(
+            operation_id=operation_id,
+            domain="scene",
+            target=None,
+            error=result.get("error", "query_scene_lights failed"),
+            summary=summary,
+            filters=filters,
+        )
     lights = result.get("lights", [])
-    return {
-        "success": True,
-        "operation_id": operation_id,
-        "domain": "scene",
-        "targets": [item.get("name") for item in lights if item.get("name")],
-        "applied_changes": [],
-        "failed_changes": [],
-        "post_state": {
+    summary = build_query_summary(
+        requested=result.get("limit", limit),
+        returned=len(lights),
+        total=result.get("count", len(lights)),
+        offset=0,
+        verified=len(lights),
+    )
+    return structured_query_success(
+        operation_id=operation_id,
+        domain="scene",
+        targets=[item.get("name") for item in lights if item.get("name")],
+        post_state={
             "scene_query": {
                 "count": result.get("count", len(lights)),
                 "limit": result.get("limit", limit),
                 "lights": lights,
             }
         },
-        "verification": {"verified": True, "checks": []},
-        "summary": {
-            "returned": len(lights),
-            "total": result.get("count", len(lights)),
-            "limit": result.get("limit", limit),
-        },
-        "items": [
+        summary=summary,
+        items=[
             {
                 "target": item.get("name"),
                 "success": True,
@@ -470,8 +480,9 @@ _mcp_emit({{"success": True, "lights": results[:limit], "count": len(results), "
             }
             for item in lights
         ],
-        "lights": lights,
-    }
+        filters=filters,
+        extra={"lights": lights},
+    )
 
 
 def _new_operation_id(command_name: str) -> str:
@@ -683,11 +694,18 @@ def create_spot_light_ring(
         )
 
     body = f"""
+operation_id = {_json_literal(operation_id)}
 actor_updates = {_json_literal(actor_updates)}
 replace_existing = {str(replace_existing)}
 actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+expected_units = str(getattr(unreal.LightUnits, {_json_literal(normalized_unit)}))
+expected_mobility = str(getattr(unreal.ComponentMobility, {_json_literal(normalized_mobility)}))
 
-results = []
+applied_changes = []
+failed_changes = []
+items = []
+post_state = {{}}
+all_checks = []
 for item in actor_updates:
     name = item["name"]
     actor = _mcp_find_actor(name)
@@ -701,18 +719,29 @@ for item in actor_updates:
             unreal.Vector(item["location"]["x"], item["location"]["y"], item["location"]["z"]),
             unreal.Rotator(item["rotation"]["pitch"], item["rotation"]["yaw"], item["rotation"]["roll"]),
         )
-        actor.set_actor_label(name)
+        if actor is not None:
+            actor.set_actor_label(name)
+
+    if actor is None:
+        failed_changes.append({{"target": name, "field": "spawn", "error": f"Failed to create spotlight {{name}}"}})
+        items.append({{"target": name, "success": False, "error": f"Failed to create spotlight {{name}}"}})
+        continue
 
     actor.set_actor_location(unreal.Vector(item["location"]["x"], item["location"]["y"], item["location"]["z"]), False, False)
     actor.set_actor_rotation(unreal.Rotator(item["rotation"]["pitch"], item["rotation"]["yaw"], item["rotation"]["roll"]), False)
+    actor_key = _mcp_get_actor_identifier(actor)
 
     light_component = actor.get_component_by_class(unreal.SpotLightComponent)
+    if light_component is None:
+        failed_changes.append({{"target": actor_key, "field": "light_component", "error": "SpotLightComponent not found"}})
+        items.append({{"target": actor_key, "success": False, "error": "SpotLightComponent not found"}})
+        continue
     light_component.set_editor_property("mobility", getattr(unreal.ComponentMobility, {_json_literal(normalized_mobility)}))
     light_component.set_editor_property("intensity_units", getattr(unreal.LightUnits, {_json_literal(normalized_unit)}))
     light_component.set_editor_property("intensity", {normalized_intensity})
 
-    results.append({{
-        "name": _mcp_get_actor_identifier(actor),
+    actor_state = {{
+        "name": actor_key,
         "actor_name": actor.get_name(),
         "actor_label": actor.get_actor_label(),
         "location": item["location"],
@@ -720,12 +749,58 @@ for item in actor_updates:
         "intensity": light_component.get_editor_property("intensity"),
         "intensity_units": str(light_component.get_editor_property("intensity_units")),
         "mobility": str(light_component.get_editor_property("mobility")),
+    }}
+    checks = [
+        _mcp_check(actor_key, "location", item["location"], actor.get_actor_location()),
+        _mcp_check(actor_key, "rotation", item["rotation"], actor.get_actor_rotation()),
+        _mcp_check(actor_key, "intensity", {normalized_intensity}, actor_state["intensity"]),
+        _mcp_check(actor_key, "intensity_units", expected_units, actor_state["intensity_units"]),
+        _mcp_check(actor_key, "mobility", expected_mobility, actor_state["mobility"]),
+    ]
+    all_checks.extend(checks)
+    verified = all(check["ok"] for check in checks)
+
+    applied_changes.extend([
+        {{"target": actor_key, "field": "location", "value": item["location"]}},
+        {{"target": actor_key, "field": "rotation", "value": item["rotation"]}},
+        {{"target": actor_key, "field": "intensity", "value": {normalized_intensity}}},
+        {{"target": actor_key, "field": "intensity_units", "value": expected_units}},
+        {{"target": actor_key, "field": "mobility", "value": expected_mobility}},
+    ])
+    post_state[actor_key] = {{
+        "actor_name": actor_state["actor_name"],
+        "actor_label": actor_state["actor_label"],
+        "location": actor_state["location"],
+        "rotation": actor_state["rotation"],
+        "intensity": actor_state["intensity"],
+        "intensity_units": actor_state["intensity_units"],
+        "mobility": actor_state["mobility"],
+    }}
+    items.append({{
+        "target": actor_key,
+        "success": verified,
+        "verification": {{"verified": verified, "checks": checks}},
     }})
 
+verified = (not failed_changes) and all(check["ok"] for check in all_checks)
 _mcp_emit({{
-    "success": True,
-    "actors": results,
-    "count": len(results),
+    "success": verified,
+    "operation_id": operation_id,
+    "domain": "scene",
+    "targets": [item["target"] for item in items if item.get("target")],
+    "applied_changes": applied_changes,
+    "failed_changes": failed_changes,
+    "post_state": post_state,
+    "verification": {{"verified": verified, "checks": all_checks}},
+    "summary": {{
+        "requested": len(actor_updates),
+        "succeeded": len([item for item in items if item.get("success")]),
+        "failed": len([item for item in items if not item.get("success")]),
+        "verified": len([item for item in items if item.get("success") and item.get("verification", {{}}).get("verified")]),
+    }},
+    "items": items,
+    "actors": [post_state[target] | {{"name": target}} for target in post_state],
+    "count": len(items),
 }})
 """
     return _run_editor_python(

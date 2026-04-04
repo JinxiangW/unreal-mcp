@@ -114,6 +114,77 @@
 }
 ```
 
+## 查询类命令的结果模型
+
+查询类命令也必须返回统一结构，但 `summary` 的语义和写操作不同。
+
+推荐最小字段：
+
+- `requested`
+- `returned`
+- `total`
+- `failed`
+- `verified`
+- `offset`
+
+同时建议补：
+
+- `filters`
+- `items`
+
+其中：
+
+- `requested` 表示请求的 `limit`
+- `returned` 表示本次实际返回条目数
+- `total` 表示服务端可见总数
+- `failed` 对查询类通常固定为 `0`
+- `verified` 对查询类通常等于 `returned`
+- `offset` 表示分页起点
+
+推荐结构：
+
+```json
+{
+  "success": true,
+  "operation_id": "scene:query_scene_lights:...",
+  "domain": "scene",
+  "targets": ["KeyLight_A", "FillLight_B"],
+  "applied_changes": [],
+  "failed_changes": [],
+  "post_state": {
+    "scene_query": {
+      "lights": []
+    }
+  },
+  "verification": {
+    "verified": true,
+    "checks": []
+  },
+  "summary": {
+    "requested": 20,
+    "returned": 2,
+    "total": 2,
+    "failed": 0,
+    "verified": 2,
+    "offset": 0
+  },
+  "filters": {
+    "limit": 20,
+    "offset": 0
+  },
+  "items": [
+    {
+      "target": "KeyLight_A",
+      "success": true,
+      "verification": {
+        "verified": true,
+        "checks": []
+      }
+    }
+  ]
+}
+```
+
 ## 失败回执模型
 
 失败结果不应只返回一行错误字符串。

@@ -7,7 +7,7 @@ import time
 from typing import Any, Dict
 
 from unreal_observability.token_usage import record_tool_usage
-from unreal_editor_mcp.common import send_command, with_unreal_connection
+from unreal_backend_tcp.common import send_command, with_unreal_connection
 
 
 PYTHON_RESULT_MARKER = "__UNREAL_MCP_JSON__:"

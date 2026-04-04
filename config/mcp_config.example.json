@@ -11,18 +11,6 @@
         "UE_EDITOR_EXE": "D:/UnrealEngines/UnrealEngine5_6/Engine/Binaries/Win64/UnrealEditor.exe",
         "UE_EDITOR_CMD": "D:/UnrealEngines/UnrealEngine5_6/Engine/Binaries/Win64/UnrealEditor-Cmd.exe"
       }
-    },
-    "unreal-editor-internal": {
-      "command": "python",
-      "args": ["-m", "unreal_editor_mcp.server_internal"],
-      "cwd": "D:/unreal-mcp",
-      "env": {
-        "UE_HOST": "127.0.0.1",
-        "UE_PORT": "55557",
-        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject",
-        "UE_EDITOR_EXE": "D:/UnrealEngines/UnrealEngine5_6/Engine/Binaries/Win64/UnrealEditor.exe",
-        "UE_EDITOR_CMD": "D:/UnrealEngines/UnrealEngine5_6/Engine/Binaries/Win64/UnrealEditor-Cmd.exe"
-      }
     }
   }
 }

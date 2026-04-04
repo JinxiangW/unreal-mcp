@@ -10,8 +10,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict
 
-from unreal_editor_mcp.common import send_command
-from unreal_editor_mcp.tools import get_current_level
+from unreal_backend_tcp.common import send_command
+from unreal_backend_tcp.tools import get_current_level
 from unreal_harness_runtime.config import (
     get_editor_cmd_path,
     get_editor_exe_path,

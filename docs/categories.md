@@ -1,378 +1,380 @@
-# Harness 分类索引
+﻿# Harness åˆ†ç±»ç´¢å¼•
 
-这份文档不是功能说明，而是给后续 AI / harness 工程师做“最小阅读路由”的索引。
+è¿™ä»½æ–‡æ¡£ä¸æ˜¯åŠŸèƒ½è¯´æ˜Žï¼Œè€Œæ˜¯ç»™åŽç»­ AI / harness å·¥ç¨‹å¸ˆåšâ€œæœ€å°é˜…è¯»è·¯ç”±â€çš„ç´¢å¼•ã€‚
 
-目标：
+ç›®æ ‡ï¼š
 
-- 遇到某类任务时，只看对应文件
-- 遇到某类故障时，先查对应层级
-- 避免每次都把整个仓库重新读一遍
+- é‡åˆ°æŸç±»ä»»åŠ¡æ—¶ï¼Œåªçœ‹å¯¹åº”æ–‡ä»¶
+- é‡åˆ°æŸç±»æ•…éšœæ—¶ï¼Œå…ˆæŸ¥å¯¹åº”å±‚çº§
+- é¿å…æ¯æ¬¡éƒ½æŠŠæ•´ä¸ªä»“åº“é‡æ–°è¯»ä¸€é
 
-## 分类原则
+## åˆ†ç±»åŽŸåˆ™
 
-本仓库按两条轴来理解：
+æœ¬ä»“åº“æŒ‰ä¸¤æ¡è½´æ¥ç†è§£ï¼š
 
-1. 分层：请求是怎么从 MCP 到 UE 执行的
-2. 分域：命令实际在操作什么对象
+1. åˆ†å±‚ï¼šè¯·æ±‚æ˜¯æ€Žä¹ˆä»Ž MCP åˆ° UE æ‰§è¡Œçš„
+2. åˆ†åŸŸï¼šå‘½ä»¤å®žé™…åœ¨æ“ä½œä»€ä¹ˆå¯¹è±¡
 
-建议先按“分域”定位，再按“分层”排障。
+å»ºè®®å…ˆæŒ‰â€œåˆ†åŸŸâ€å®šä½ï¼Œå†æŒ‰â€œåˆ†å±‚â€æŽ’éšœã€‚
 
-## 分层
+## åˆ†å±‚
 
-### 1. Python MCP 层
+### 1. Python MCP å±‚
 
-职责：
+èŒè´£ï¼š
 
-- 暴露 FastMCP server
-- 定义对外工具面
-- 负责 TCP 请求发送与基础错误包装
+- æš´éœ² FastMCP server
+- å®šä¹‰å¯¹å¤–å·¥å…·é¢
+- è´Ÿè´£ TCP è¯·æ±‚å‘é€ä¸ŽåŸºç¡€é”™è¯¯åŒ…è£…
 
-关键文件：
+å…³é”®æ–‡ä»¶ï¼š
 
-- `unreal_editor_mcp/server.py`
-- `unreal_editor_mcp/tools.py`
-- `unreal_editor_mcp/connection.py`
-- `unreal_editor_mcp/common.py`
+- `unreal_orchestrator/server.py`
+- `unreal_backend_tcp/tools.py`
+- `unreal_backend_tcp/connection.py`
+- `unreal_backend_tcp/common.py`
 
-什么时候看这层：
+ä»€ä¹ˆæ—¶å€™çœ‹è¿™å±‚ï¼š
 
-- OpenCode / MCP 无法启动
-- 工具名、参数名、Python 包导入有问题
-- 想确认对外暴露了哪些工作流
+- OpenCode / MCP æ— æ³•å¯åŠ¨
+- å·¥å…·åã€å‚æ•°åã€Python åŒ…å¯¼å…¥æœ‰é—®é¢˜
+- æƒ³ç¡®è®¤å¯¹å¤–æš´éœ²äº†å“ªäº›å·¥ä½œæµ
 
-### 2. 传输层
+### 2. ä¼ è¾“å±‚
 
-职责：
+èŒè´£ï¼š
 
-- UE 插件监听 TCP
-- 收包、发包、连接生命周期
+- UE æ’ä»¶ç›‘å¬ TCP
+- æ”¶åŒ…ã€å‘åŒ…ã€è¿žæŽ¥ç”Ÿå‘½å‘¨æœŸ
 
-关键文件：
+å…³é”®æ–‡ä»¶ï¼š
 
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/MCPServerRunnable.cpp`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/MCPServerRunnable.h`
 
-什么时候看这层：
+ä»€ä¹ˆæ—¶å€™çœ‹è¿™å±‚ï¼š
 
 - `Connection closed`
 - `Client disconnected`
-- UE 端口不监听
-- 收到请求但没有回包
+- UE ç«¯å£ä¸ç›‘å¬
+- æ”¶åˆ°è¯·æ±‚ä½†æ²¡æœ‰å›žåŒ…
 
-### 3. 桥接分发层
+### 3. æ¡¥æŽ¥åˆ†å‘å±‚
 
-职责：
+èŒè´£ï¼š
 
-- 把命令名路由到具体命令处理器
-- 定义“插件真实支持哪些命令”
+- æŠŠå‘½ä»¤åè·¯ç”±åˆ°å…·ä½“å‘½ä»¤å¤„ç†å™¨
+- å®šä¹‰â€œæ’ä»¶çœŸå®žæ”¯æŒå“ªäº›å‘½ä»¤â€
 
-关键文件：
+å…³é”®æ–‡ä»¶ï¼š
 
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/EpicUnrealMCPBridge.cpp`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/EpicUnrealMCPBridge.h`
 
-什么时候看这层：
+ä»€ä¹ˆæ—¶å€™çœ‹è¿™å±‚ï¼š
 
 - `Unknown command`
-- Python 暴露了工具，但 UE 返回不支持
-- 想确认某个命令到底被注册到哪个命令组
+- Python æš´éœ²äº†å·¥å…·ï¼Œä½† UE è¿”å›žä¸æ”¯æŒ
+- æƒ³ç¡®è®¤æŸä¸ªå‘½ä»¤åˆ°åº•è¢«æ³¨å†Œåˆ°å“ªä¸ªå‘½ä»¤ç»„
 
-### 4. 共享写入 / 反射工具层
+### 4. å…±äº«å†™å…¥ / åå°„å·¥å…·å±‚
 
-职责：
+èŒè´£ï¼š
 
-- 通用属性读写
-- enum / struct / color / 组件属性映射的底层支撑
-- JSON <-> UObject/FProperty 转换
+- é€šç”¨å±žæ€§è¯»å†™
+- enum / struct / color / ç»„ä»¶å±žæ€§æ˜ å°„çš„åº•å±‚æ”¯æ’‘
+- JSON <-> UObject/FProperty è½¬æ¢
 
-关键文件：
+å…³é”®æ–‡ä»¶ï¼š
 
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPCommonUtils.cpp`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPCommonUtils.h`
 
-什么时候看这层：
+ä»€ä¹ˆæ—¶å€™çœ‹è¿™å±‚ï¼š
 
 - `Property not found`
 - `Unsupported property type`
-- struct 写不进去
-- enum / 颜色 / 名字大小写写入异常
+- struct å†™ä¸è¿›åŽ»
+- enum / é¢œè‰² / åå­—å¤§å°å†™å†™å…¥å¼‚å¸¸
 
-### 5. 领域命令层
+### 5. é¢†åŸŸå‘½ä»¤å±‚
 
-职责：
+èŒè´£ï¼š
 
-- 面向对象域做真实业务操作
-- 例如场景 Actor、材质图、Niagara、蓝图图
+- é¢å‘å¯¹è±¡åŸŸåšçœŸå®žä¸šåŠ¡æ“ä½œ
+- ä¾‹å¦‚åœºæ™¯ Actorã€æè´¨å›¾ã€Niagaraã€è“å›¾å›¾
 
-关键文件见“分域”章节。
+å…³é”®æ–‡ä»¶è§â€œåˆ†åŸŸâ€ç« èŠ‚ã€‚
 
-## 分域
+## åˆ†åŸŸ
 
-### A. 场景与环境编辑
+### A. åœºæ™¯ä¸ŽçŽ¯å¢ƒç¼–è¾‘
 
-覆盖内容：
+è¦†ç›–å†…å®¹ï¼š
 
 - `spawn_actor`
 - `delete_actor`
 - `get_actors`
 - `set_actor_properties`
 - `batch_set_actors_properties`
-- 关卡与视口相关命令
-- 灯光、后处理、Actor transform、组件属性路由
+- å…³å¡ä¸Žè§†å£ç›¸å…³å‘½ä»¤
+- ç¯å…‰ã€åŽå¤„ç†ã€Actor transformã€ç»„ä»¶å±žæ€§è·¯ç”±
 
-关键文件：
+å…³é”®æ–‡ä»¶ï¼š
 
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPEnvironmentCommands.cpp`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPEnvironmentCommands.h`
-- 关联共享层：
+- å…³è”å…±äº«å±‚ï¼š
   - `EpicUnrealMCPCommonUtils.cpp`
   - `EpicUnrealMCPBridge.cpp`
 
-AI 遇到这些任务时只看：
+AI é‡åˆ°è¿™äº›ä»»åŠ¡æ—¶åªçœ‹ï¼š
 
-- 场景布光
-- 后处理体积编辑
-- 批量 Actor 摆放
-- 视口截图 / 相机控制
-- 关卡创建 / 加载 / 保存
+- åœºæ™¯å¸ƒå…‰
+- åŽå¤„ç†ä½“ç§¯ç¼–è¾‘
+- æ‰¹é‡ Actor æ‘†æ”¾
+- è§†å£æˆªå›¾ / ç›¸æœºæŽ§åˆ¶
+- å…³å¡åˆ›å»º / åŠ è½½ / ä¿å­˜
 
-典型风险：
+å…¸åž‹é£Žé™©ï¼š
 
-- Actor 属性不一定在 Actor 本体，而在组件上
-- 灯光单位和强度不能只写 `Intensity`
-- `SpotLight` 默认 `Stationary`，容易触发重叠告警
-- `PostProcessVolume.Settings` 是 struct，不是普通字段
+- Actor å±žæ€§ä¸ä¸€å®šåœ¨ Actor æœ¬ä½“ï¼Œè€Œåœ¨ç»„ä»¶ä¸Š
+- ç¯å…‰å•ä½å’Œå¼ºåº¦ä¸èƒ½åªå†™ `Intensity`
+- `SpotLight` é»˜è®¤ `Stationary`ï¼Œå®¹æ˜“è§¦å‘é‡å å‘Šè­¦
+- `PostProcessVolume.Settings` æ˜¯ structï¼Œä¸æ˜¯æ™®é€šå­—æ®µ
 
-### B. 资产与通用编辑器操作
+### B. èµ„äº§ä¸Žé€šç”¨ç¼–è¾‘å™¨æ“ä½œ
 
-覆盖内容：
+è¦†ç›–å†…å®¹ï¼š
 
-- 通用资产创建/删除
-- 资产属性读写
-- 批量资产创建/更新
-- 纹理 / FBX 导入
+- é€šç”¨èµ„äº§åˆ›å»º/åˆ é™¤
+- èµ„äº§å±žæ€§è¯»å†™
+- æ‰¹é‡èµ„äº§åˆ›å»º/æ›´æ–°
+- çº¹ç† / FBX å¯¼å…¥
 
-关键文件：
+å…³é”®æ–‡ä»¶ï¼š
 
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPEditorCommands.cpp`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPEditorCommands.h`
 
-AI 遇到这些任务时只看：
+AI é‡åˆ°è¿™äº›ä»»åŠ¡æ—¶åªçœ‹ï¼š
 
-- 创建材质实例之外的通用资产
-- 改资产属性
-- 导入资源文件
+- åˆ›å»ºæè´¨å®žä¾‹ä¹‹å¤–çš„é€šç”¨èµ„äº§
+- æ”¹èµ„äº§å±žæ€§
+- å¯¼å…¥èµ„æºæ–‡ä»¶
 
-### C. 材质与贴图工作流
+### C. æè´¨ä¸Žè´´å›¾å·¥ä½œæµ
 
-覆盖内容：
+è¦†ç›–å†…å®¹ï¼š
 
-- 创建材质 / 材质函数 / 材质实例
-- 构建材质图
-- 读取材质图
-- 设置材质实例参数
-- 导入纹理
+- åˆ›å»ºæè´¨ / æè´¨å‡½æ•° / æè´¨å®žä¾‹
+- æž„å»ºæè´¨å›¾
+- è¯»å–æè´¨å›¾
+- è®¾ç½®æè´¨å®žä¾‹å‚æ•°
+- å¯¼å…¥çº¹ç†
 
-关键文件：
+å…³é”®æ–‡ä»¶ï¼š
 
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMaterialCommands.cpp`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPMaterialCommands.h`
 
-AI 遇到这些任务时只看：
+AI é‡åˆ°è¿™äº›ä»»åŠ¡æ—¶åªçœ‹ï¼š
 
-- 创建 `DefaultLit` 材质
-- 连节点
-- 创建 MI 并设置参数
+- åˆ›å»º `DefaultLit` æè´¨
+- è¿žèŠ‚ç‚¹
+- åˆ›å»º MI å¹¶è®¾ç½®å‚æ•°
 
-### D. Niagara 工作流
+### D. Niagara å·¥ä½œæµ
 
-覆盖内容：
+è¦†ç›–å†…å®¹ï¼š
 
-- 读取 Niagara graph
-- 更新 Niagara graph
-- 读取 emitter
-- 更新 emitter
+- è¯»å– Niagara graph
+- æ›´æ–° Niagara graph
+- è¯»å– emitter
+- æ›´æ–° emitter
 
-关键文件：
+å…³é”®æ–‡ä»¶ï¼š
 
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPNiagaraCommands.cpp`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPNiagaraCommands.h`
 
-AI 遇到这些任务时只看：
+AI é‡åˆ°è¿™äº›ä»»åŠ¡æ—¶åªçœ‹ï¼š
 
-- Niagara system/emitter 检查
-- Niagara 图操作
+- Niagara system/emitter æ£€æŸ¥
+- Niagara å›¾æ“ä½œ
 
-### E. 蓝图高层信息与编辑
+### E. è“å›¾é«˜å±‚ä¿¡æ¯ä¸Žç¼–è¾‘
 
-覆盖内容：
+è¦†ç›–å†…å®¹ï¼š
 
-- 读取 blueprint 内容
-- 分析 graph
-- Editor Utility Widget 相关 info/update
+- è¯»å– blueprint å†…å®¹
+- åˆ†æž graph
+- Editor Utility Widget ç›¸å…³ info/update
 
-关键文件：
+å…³é”®æ–‡ä»¶ï¼š
 
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPBlueprintCommands.cpp`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPBlueprintCommands.h`
 
-AI 遇到这些任务时只看：
+AI é‡åˆ°è¿™äº›ä»»åŠ¡æ—¶åªçœ‹ï¼š
 
-- 读取 blueprint 元信息
-- 做 blueprint 内容分析
-- 非 graph 级的蓝图更新
+- è¯»å– blueprint å…ƒä¿¡æ¯
+- åš blueprint å†…å®¹åˆ†æž
+- éž graph çº§çš„è“å›¾æ›´æ–°
 
-### F. 蓝图图编辑
+### F. è“å›¾å›¾ç¼–è¾‘
 
-覆盖内容：
+è¦†ç›–å†…å®¹ï¼š
 
-- 加节点
-- 连线
-- 创建变量
-- 设置变量属性
-- 创建函数与输入输出
-- 删除节点 / 函数
+- åŠ èŠ‚ç‚¹
+- è¿žçº¿
+- åˆ›å»ºå˜é‡
+- è®¾ç½®å˜é‡å±žæ€§
+- åˆ›å»ºå‡½æ•°ä¸Žè¾“å…¥è¾“å‡º
+- åˆ é™¤èŠ‚ç‚¹ / å‡½æ•°
 
-关键文件：
+å…³é”®æ–‡ä»¶ï¼š
 
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPBlueprintGraphCommands.cpp`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPBlueprintGraphCommands.h`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/BlueprintGraph/**/*.cpp`
 - `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/BlueprintGraph/**/*.h`
 
-AI 遇到这些任务时只看：
+AI é‡åˆ°è¿™äº›ä»»åŠ¡æ—¶åªçœ‹ï¼š
 
-- blueprint graph 结构改动
-- 自定义节点管理
-- 函数 / 变量 / 事件节点操作
+- blueprint graph ç»“æž„æ”¹åŠ¨
+- è‡ªå®šä¹‰èŠ‚ç‚¹ç®¡ç†
+- å‡½æ•° / å˜é‡ / äº‹ä»¶èŠ‚ç‚¹æ“ä½œ
 
-说明：
+è¯´æ˜Žï¼š
 
-- 这是最重的一组文件
-- 如果不是 graph 级编辑，不要先读这组
+- è¿™æ˜¯æœ€é‡çš„ä¸€ç»„æ–‡ä»¶
+- å¦‚æžœä¸æ˜¯ graph çº§ç¼–è¾‘ï¼Œä¸è¦å…ˆè¯»è¿™ç»„
 
-## 按任务路由：AI 最小阅读集合
+## æŒ‰ä»»åŠ¡è·¯ç”±ï¼šAI æœ€å°é˜…è¯»é›†åˆ
 
-### 任务：MCP 连不上 / 本地 server 启不来
+### ä»»åŠ¡ï¼šMCP è¿žä¸ä¸Š / æœ¬åœ° server å¯ä¸æ¥
 
-先读：
+å…ˆè¯»ï¼š
 
-- `unreal_editor_mcp/server.py`
-- `unreal_editor_mcp/connection.py`
+- `unreal_orchestrator/server.py`
+- `unreal_backend_tcp/connection.py`
 - `MCPServerRunnable.cpp`
 
-### 任务：工具有，但 UE 返回 `Unknown command`
+### ä»»åŠ¡ï¼šå·¥å…·æœ‰ï¼Œä½† UE è¿”å›ž `Unknown command`
 
-先读：
+å…ˆè¯»ï¼š
 
-- `unreal_editor_mcp/tools.py`
+- `unreal_backend_tcp/tools.py`
 - `EpicUnrealMCPBridge.cpp`
 
-### 任务：场景灯光 / 后处理 / Actor 编辑失败
+### ä»»åŠ¡ï¼šåœºæ™¯ç¯å…‰ / åŽå¤„ç† / Actor ç¼–è¾‘å¤±è´¥
 
-先读：
+å…ˆè¯»ï¼š
 
 - `EpicUnrealMCPEnvironmentCommands.cpp`
 - `EpicUnrealMCPCommonUtils.cpp`
 - `EpicUnrealMCPBridge.cpp`
 
-### 任务：材质创建 / 连线有问题
+### ä»»åŠ¡ï¼šæè´¨åˆ›å»º / è¿žçº¿æœ‰é—®é¢˜
 
-先读：
+å…ˆè¯»ï¼š
 
 - `EpicUnrealMCPMaterialCommands.cpp`
-- `unreal_editor_mcp/tools.py`
+- `unreal_backend_tcp/tools.py`
 
-### 任务：Niagara 操作有问题
+### ä»»åŠ¡ï¼šNiagara æ“ä½œæœ‰é—®é¢˜
 
-先读：
+å…ˆè¯»ï¼š
 
 - `EpicUnrealMCPNiagaraCommands.cpp`
-- `unreal_editor_mcp/tools.py`
+- `unreal_backend_tcp/tools.py`
 
-### 任务：蓝图信息读取/更新异常
+### ä»»åŠ¡ï¼šè“å›¾ä¿¡æ¯è¯»å–/æ›´æ–°å¼‚å¸¸
 
-先读：
+å…ˆè¯»ï¼š
 
 - `EpicUnrealMCPBlueprintCommands.cpp`
-- `unreal_editor_mcp/tools.py`
+- `unreal_backend_tcp/tools.py`
 
-### 任务：蓝图 graph 操作异常
+### ä»»åŠ¡ï¼šè“å›¾ graph æ“ä½œå¼‚å¸¸
 
-先读：
+å…ˆè¯»ï¼š
 
 - `EpicUnrealMCPBlueprintGraphCommands.cpp`
 - `Commands/BlueprintGraph/**/*.cpp`
 
-## 按故障路由：AI 最小阅读集合
+## æŒ‰æ•…éšœè·¯ç”±ï¼šAI æœ€å°é˜…è¯»é›†åˆ
 
-### 症状：`Unknown command`
+### ç—‡çŠ¶ï¼š`Unknown command`
 
-优先看：
+ä¼˜å…ˆçœ‹ï¼š
 
 - `EpicUnrealMCPBridge.cpp`
 
-常见根因：
+å¸¸è§æ ¹å› ï¼š
 
-- Python 侧已暴露，bridge 未注册
+- Python ä¾§å·²æš´éœ²ï¼Œbridge æœªæ³¨å†Œ
 
-### 症状：`Property not found`
+### ç—‡çŠ¶ï¼š`Property not found`
 
-优先看：
+ä¼˜å…ˆçœ‹ï¼š
 
 - `EpicUnrealMCPEnvironmentCommands.cpp`
 - `EpicUnrealMCPCommonUtils.cpp`
 
-常见根因：
+å¸¸è§æ ¹å› ï¼š
 
-- 属性在组件上，不在 Actor 上
-- 大小写 / 命名风格不一致
-- 需要专用 setter，而不是普通属性写入
+- å±žæ€§åœ¨ç»„ä»¶ä¸Šï¼Œä¸åœ¨ Actor ä¸Š
+- å¤§å°å†™ / å‘½åé£Žæ ¼ä¸ä¸€è‡´
+- éœ€è¦ä¸“ç”¨ setterï¼Œè€Œä¸æ˜¯æ™®é€šå±žæ€§å†™å…¥
 
-### 症状：`Unsupported property type: StructProperty`
+### ç—‡çŠ¶ï¼š`Unsupported property type: StructProperty`
 
-优先看：
+ä¼˜å…ˆçœ‹ï¼š
 
 - `EpicUnrealMCPCommonUtils.cpp`
 
-常见根因：
+å¸¸è§æ ¹å› ï¼š
 
-- 缺少 struct 递归写入
-- 后处理 `Settings` 这类大 struct 未做特判
+- ç¼ºå°‘ struct é€’å½’å†™å…¥
+- åŽå¤„ç† `Settings` è¿™ç±»å¤§ struct æœªåšç‰¹åˆ¤
 
-### 症状：`Connection closed` / 没有回包
+### ç—‡çŠ¶ï¼š`Connection closed` / æ²¡æœ‰å›žåŒ…
 
-优先看：
+ä¼˜å…ˆçœ‹ï¼š
 
 - `MCPServerRunnable.cpp`
 - `EpicUnrealMCPBridge.cpp`
-- 当前运行实例对应的 UE 日志
+- å½“å‰è¿è¡Œå®žä¾‹å¯¹åº”çš„ UE æ—¥å¿—
 
-常见根因：
+å¸¸è§æ ¹å› ï¼š
 
-- 请求执行过程中未正确构造响应
-- 当前日志不是当前运行实例的日志
+- è¯·æ±‚æ‰§è¡Œè¿‡ç¨‹ä¸­æœªæ­£ç¡®æž„é€ å“åº”
+- å½“å‰æ—¥å¿—ä¸æ˜¯å½“å‰è¿è¡Œå®žä¾‹çš„æ—¥å¿—
 
-## 当前已知高风险区
+## å½“å‰å·²çŸ¥é«˜é£Žé™©åŒº
 
-这些场景请优先把 AI 路由到“场景与环境编辑”分类，不要只靠通用属性写入推断：
+è¿™äº›åœºæ™¯è¯·ä¼˜å…ˆæŠŠ AI è·¯ç”±åˆ°â€œåœºæ™¯ä¸ŽçŽ¯å¢ƒç¼–è¾‘â€åˆ†ç±»ï¼Œä¸è¦åªé é€šç”¨å±žæ€§å†™å…¥æŽ¨æ–­ï¼š
 
-- 灯光强度单位
-- `SpotLight` 朝向
+- ç¯å…‰å¼ºåº¦å•ä½
+- `SpotLight` æœå‘
 - `Mobility`
 - `LightColor`
 - `PostProcessVolume.Settings`
-- 批量 Actor transform + properties 混合写入
+- æ‰¹é‡ Actor transform + properties æ··åˆå†™å…¥
 
-## 维护建议
+## ç»´æŠ¤å»ºè®®
 
-后续如果新增命令，至少同步更新两处：
+åŽç»­å¦‚æžœæ–°å¢žå‘½ä»¤ï¼Œè‡³å°‘åŒæ­¥æ›´æ–°ä¸¤å¤„ï¼š
 
-1. `unreal_editor_mcp/tools.py`
+1. `unreal_backend_tcp/tools.py`
 2. `docs/categories.md`
 
-如果是 UE 侧新增命令，还要同步确认：
+å¦‚æžœæ˜¯ UE ä¾§æ–°å¢žå‘½ä»¤ï¼Œè¿˜è¦åŒæ­¥ç¡®è®¤ï¼š
 
 3. `EpicUnrealMCPBridge.cpp`
 
-这份文档的目标不是“完整”，而是保证 AI 在大多数任务里能先读最少的正确文件。
+è¿™ä»½æ–‡æ¡£çš„ç›®æ ‡ä¸æ˜¯â€œå®Œæ•´â€ï¼Œè€Œæ˜¯ä¿è¯ AI åœ¨å¤§å¤šæ•°ä»»åŠ¡é‡Œèƒ½å…ˆè¯»æœ€å°‘çš„æ­£ç¡®æ–‡ä»¶ã€‚
+
+

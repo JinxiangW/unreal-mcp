@@ -1,6 +1,4 @@
-"""
-Common helpers for Unreal Editor MCP.
-"""
+"""Common helpers for the internal Unreal TCP backend."""
 
 import json
 import logging
@@ -15,7 +13,7 @@ from unreal_observability.token_usage import record_tool_usage
 from .connection import get_unreal_connection
 
 
-logger = logging.getLogger("UnrealEditorMCP")
+logger = logging.getLogger("UnrealBackendTCP")
 
 
 def save_json_to_file(
@@ -66,7 +64,7 @@ def send_command(
     response = unreal.send_command(command, params)
     payload = response or {"success": False, "message": "No response from Unreal"}
     record_tool_usage(
-        "unreal_editor_mcp.transport",
+        "unreal_backend_tcp.transport",
         command,
         request_payload=params or {},
         response_payload=payload,

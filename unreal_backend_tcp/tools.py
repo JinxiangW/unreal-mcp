@@ -1,9 +1,4 @@
-"""
-Workflow-oriented tools for Unreal Editor MCP.
-
-This module keeps the tool surface aligned with the TCP plugin backend,
-while grouping commands around editor workflows instead of legacy wrappers.
-"""
+"""Workflow-oriented tools for the internal Unreal TCP backend."""
 
 import os
 

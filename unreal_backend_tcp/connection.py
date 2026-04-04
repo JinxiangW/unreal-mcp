@@ -1,6 +1,4 @@
-"""
-Connection management for Unreal Editor MCP.
-"""
+"""Connection management for the internal Unreal TCP backend."""
 
 import json
 import logging
@@ -12,7 +10,7 @@ from typing import Any, Dict, Optional
 
 from unreal_harness_runtime.config import get_unreal_host, get_unreal_port
 
-logger = logging.getLogger("UnrealEditorMCP")
+logger = logging.getLogger("UnrealBackendTCP")
 
 
 class UnrealConnection:

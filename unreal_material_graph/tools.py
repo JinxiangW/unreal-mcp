@@ -6,7 +6,7 @@ from collections import Counter
 import time
 from typing import Any, Dict, List, Optional
 
-from unreal_editor_mcp.tools import (
+from unreal_backend_tcp.tools import (
     build_material_graph,
     get_material_graph as raw_get_material_graph,
     read_result_handle,
@@ -32,9 +32,9 @@ def get_material_graph_harness_info() -> Dict[str, Any]:
     """Describe the current material graph harness boundary."""
     payload = {
         "domain": "material_graph",
-        "backend": "fallback_unreal_editor_mcp",
+        "backend": "internal_tcp_backend",
         "target_backend": "cpp_primary",
-        "status": "available_via_fallback_backend",
+        "status": "available_via_internal_backend",
         "supports": [
             "graph_read",
             "graph_analysis",

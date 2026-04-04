@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
     "scene": {
         "domain": "scene",
-        "backend": "fallback_unreal_editor_mcp",
+        "backend": "internal_tcp_backend",
         "target_backend": "ue_python",
         "status": "active_fallback",
         "summary": "Scene, actor, light, post process, level and viewport workflows.",
@@ -29,7 +29,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     "asset": {
         "domain": "asset",
-        "backend": "fallback_unreal_editor_mcp",
+        "backend": "internal_tcp_backend",
         "target_backend": "ue_python",
         "status": "active_fallback",
         "summary": "Generic asset CRUD, import, and batch asset workflows.",
@@ -38,7 +38,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     "material": {
         "domain": "material",
-        "backend": "fallback_unreal_editor_mcp",
+        "backend": "internal_tcp_backend",
         "target_backend": "ue_python",
         "status": "active_fallback",
         "summary": "Material assets, material instances, and parameter workflows.",
@@ -53,7 +53,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     "material_graph": {
         "domain": "material_graph",
-        "backend": "fallback_unreal_editor_mcp",
+        "backend": "internal_tcp_backend",
         "target_backend": "cpp_primary",
         "status": "planned_split",
         "summary": "Material graph editing, node creation, wiring, and graph analysis.",
@@ -68,7 +68,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     "niagara": {
         "domain": "niagara",
-        "backend": "fallback_unreal_editor_mcp",
+        "backend": "internal_tcp_backend",
         "target_backend": "hybrid",
         "status": "planned_split",
         "summary": "Niagara graph and emitter workflows.",
@@ -77,7 +77,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     "blueprint_info": {
         "domain": "blueprint_info",
-        "backend": "fallback_unreal_editor_mcp",
+        "backend": "internal_tcp_backend",
         "target_backend": "ue_python",
         "status": "planned_split",
         "summary": "Blueprint inspection, snapshots, and structural analysis.",
@@ -91,7 +91,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     "blueprint_graph": {
         "domain": "blueprint_graph",
-        "backend": "fallback_unreal_editor_mcp",
+        "backend": "internal_tcp_backend",
         "target_backend": "cpp_primary",
         "status": "planned_split",
         "summary": "Blueprint graph editing, node wiring, variables, and functions.",

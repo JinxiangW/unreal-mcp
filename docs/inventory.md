@@ -1,75 +1,75 @@
-# 功能清单总览
+﻿# åŠŸèƒ½æ¸…å•æ€»è§ˆ
 
-这份文档列出当前仓库里的功能全景，而不是只列高层命令或架构方向。
+è¿™ä»½æ–‡æ¡£åˆ—å‡ºå½“å‰ä»“åº“é‡Œçš„åŠŸèƒ½å…¨æ™¯ï¼Œè€Œä¸æ˜¯åªåˆ—é«˜å±‚å‘½ä»¤æˆ–æž¶æž„æ–¹å‘ã€‚
 
-分为三类：
+åˆ†ä¸ºä¸‰ç±»ï¼š
 
-- 当前可用的 legacy/editor MCP 功能
-- 新 harness 已迁移并可用的功能
-- 已规划但尚未真正实现的功能
+- å½“å‰å¯ç”¨çš„ internal/backend MCP åŠŸèƒ½
+- æ–° harness å·²è¿ç§»å¹¶å¯ç”¨çš„åŠŸèƒ½
+- å·²è§„åˆ’ä½†å°šæœªçœŸæ­£å®žçŽ°çš„åŠŸèƒ½
 
-## 术语说明
+## æœ¯è¯­è¯´æ˜Ž
 
-### 真实环境回归
+### çœŸå®žçŽ¯å¢ƒå›žå½’
 
-文档里之前写的“真实回归”，这里统一明确成“真实环境回归”。
+æ–‡æ¡£é‡Œä¹‹å‰å†™çš„â€œçœŸå®žå›žå½’â€ï¼Œè¿™é‡Œç»Ÿä¸€æ˜Žç¡®æˆâ€œçœŸå®žçŽ¯å¢ƒå›žå½’â€ã€‚
 
-含义：
+å«ä¹‰ï¼š
 
-- 不是只做语法检查
-- 不是只做 mock
-- 不是只看代码路径推断
-- 而是在真实 UE 环境、真实项目、真实资产或真实关卡上下文里执行一次功能，再检查结果
+- ä¸æ˜¯åªåšè¯­æ³•æ£€æŸ¥
+- ä¸æ˜¯åªåš mock
+- ä¸æ˜¯åªçœ‹ä»£ç è·¯å¾„æŽ¨æ–­
+- è€Œæ˜¯åœ¨çœŸå®ž UE çŽ¯å¢ƒã€çœŸå®žé¡¹ç›®ã€çœŸå®žèµ„äº§æˆ–çœŸå®žå…³å¡ä¸Šä¸‹æ–‡é‡Œæ‰§è¡Œä¸€æ¬¡åŠŸèƒ½ï¼Œå†æ£€æŸ¥ç»“æžœ
 
-这个说法来自常见工程术语：
+è¿™ä¸ªè¯´æ³•æ¥è‡ªå¸¸è§å·¥ç¨‹æœ¯è¯­ï¼š
 
-- `regression test / 回归测试`
+- `regression test / å›žå½’æµ‹è¯•`
 
-这里加上“真实环境”三个字，是为了和下面几类区分开：
+è¿™é‡ŒåŠ ä¸Šâ€œçœŸå®žçŽ¯å¢ƒâ€ä¸‰ä¸ªå­—ï¼Œæ˜¯ä¸ºäº†å’Œä¸‹é¢å‡ ç±»åŒºåˆ†å¼€ï¼š
 
-- 语法检查
-- 导入检查
-- 单元级检查
-- 纯静态代码检查
+- è¯­æ³•æ£€æŸ¥
+- å¯¼å…¥æ£€æŸ¥
+- å•å…ƒçº§æ£€æŸ¥
+- çº¯é™æ€ä»£ç æ£€æŸ¥
 
-## 状态字段说明
+## çŠ¶æ€å­—æ®µè¯´æ˜Ž
 
-- `状态`
-  - `可用`: 当前可以直接使用
-  - `部分可用`: 已有部分能力或依赖特定前提
-  - `规划中`: 还未真正实现
-- `执行后端`
-  - `legacy tcp`
+- `çŠ¶æ€`
+  - `å¯ç”¨`: å½“å‰å¯ä»¥ç›´æŽ¥ä½¿ç”¨
+  - `éƒ¨åˆ†å¯ç”¨`: å·²æœ‰éƒ¨åˆ†èƒ½åŠ›æˆ–ä¾èµ–ç‰¹å®šå‰æ
+  - `è§„åˆ’ä¸­`: è¿˜æœªçœŸæ­£å®žçŽ°
+- `æ‰§è¡ŒåŽç«¯`
+  - `internal tcp`
   - `live editor python`
   - `commandlet`
   - `mixed`
-- `默认入口`
+- `é»˜è®¤å…¥å£`
   - `orchestrator`
   - `domain harness`
   - `commandlet only`
-  - `legacy fallback`
+  - `internal backend`
   - `internal/debug`
-- `验证状态`
-  - `已做真实环境回归`
-  - `仅做基础验证`
-  - `未验证`
-- `结果校验状态`
-  - `已接入`
-  - `未接入`
-  - `部分接入`
-  - `目标要求`
+- `éªŒè¯çŠ¶æ€`
+  - `å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’`
+  - `ä»…åšåŸºç¡€éªŒè¯`
+  - `æœªéªŒè¯`
+- `ç»“æžœæ ¡éªŒçŠ¶æ€`
+  - `å·²æŽ¥å…¥`
+  - `æœªæŽ¥å…¥`
+  - `éƒ¨åˆ†æŽ¥å…¥`
+  - `ç›®æ ‡è¦æ±‚`
 
-## 1. Legacy / `unreal_editor_mcp` 当前可用功能
+## 1. Internal / `unreal_backend_tcp` å½“å‰å¯ç”¨åŠŸèƒ½
 
-这些是当前底层仍然可直接调用的能力面。
+è¿™äº›æ˜¯å½“å‰åº•å±‚ä»ç„¶å¯ç›´æŽ¥è°ƒç”¨çš„èƒ½åŠ›é¢ã€‚
 
-但它的定位应理解为：
+ä½†å®ƒçš„å®šä½åº”ç†è§£ä¸ºï¼š
 
 - internal
 - fallback
-- 迁移期兼容层
+- è¿ç§»æœŸå…¼å®¹å±‚
 
-而不是后续默认推荐直接使用的主要业务入口。
+è€Œä¸æ˜¯åŽç»­é»˜è®¤æŽ¨èç›´æŽ¥ä½¿ç”¨çš„ä¸»è¦ä¸šåŠ¡å…¥å£ã€‚
 
 ### Asset
 
@@ -130,18 +130,18 @@
 - `read_blueprint_content`
 - `analyze_blueprint_graph`
 
-说明：
+è¯´æ˜Žï¼š
 
-- 当前 raw 工具已做 wrapper 层 token 优化
-- 查询类默认支持 `summary_only / fields / limit`
-- 图类和 Blueprint 内容默认摘要返回
-- 大结果支持 `saved_to` 与 `result_handle`
+- å½“å‰ raw å·¥å…·å·²åš wrapper å±‚ token ä¼˜åŒ–
+- æŸ¥è¯¢ç±»é»˜è®¤æ”¯æŒ `summary_only / fields / limit`
+- å›¾ç±»å’Œ Blueprint å†…å®¹é»˜è®¤æ‘˜è¦è¿”å›ž
+- å¤§ç»“æžœæ”¯æŒ `saved_to` ä¸Ž `result_handle`
 
 ### Blueprint Graph
 
 - `blueprint_graph_command`
 
-支持的图命令：
+æ”¯æŒçš„å›¾å‘½ä»¤ï¼š
 
 - `add_blueprint_node`
 - `connect_nodes`
@@ -156,69 +156,69 @@
 - `delete_function`
 - `rename_function`
 
-## 2. 新 Harness 当前已实现功能
+## 2. æ–° Harness å½“å‰å·²å®žçŽ°åŠŸèƒ½
 
-默认使用规则：
+é»˜è®¤ä½¿ç”¨è§„åˆ™ï¼š
 
-- 如果用户或会话没有特别指定入口，默认按照“默认入口”这一列来调用
-- 目前大多数高风险功能都应优先走 `orchestrator`
+- å¦‚æžœç”¨æˆ·æˆ–ä¼šè¯æ²¡æœ‰ç‰¹åˆ«æŒ‡å®šå…¥å£ï¼Œé»˜è®¤æŒ‰ç…§â€œé»˜è®¤å…¥å£â€è¿™ä¸€åˆ—æ¥è°ƒç”¨
+- ç›®å‰å¤§å¤šæ•°é«˜é£Žé™©åŠŸèƒ½éƒ½åº”ä¼˜å…ˆèµ° `orchestrator`
 
-### 状态矩阵
+### çŠ¶æ€çŸ©é˜µ
 
-| 域 | 功能 | 状态 | 执行后端 | 默认入口 | 验证状态 | 结果校验状态 |
+| åŸŸ | åŠŸèƒ½ | çŠ¶æ€ | æ‰§è¡ŒåŽç«¯ | é»˜è®¤å…¥å£ | éªŒè¯çŠ¶æ€ | ç»“æžœæ ¡éªŒçŠ¶æ€ |
 | --- | --- | --- | --- | --- | --- | --- |
-| orchestrator | `get_harness_domains` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| orchestrator | `get_domain_design` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| orchestrator | `route_harness_task` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| scene | `get_scene_harness_info` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| scene | `get_scene_backend_status` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| scene | `query_scene_actors` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| scene | `query_scene_lights` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| scene | `set_scene_light_intensity` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| scene | `create_spot_light_ring` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| scene | `aim_actor_at` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| scene | `set_post_process_overrides` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| scene | `spawn_actor_with_defaults` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| scene | `inspect_scene_python_enums` | 可用 | live editor python | domain harness | 已做真实环境回归 | 已接入 |
-| asset | `get_asset_harness_info` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| asset | `query_assets_summary` | 可用 | legacy tcp wrapper | orchestrator | 已做真实环境回归 | 已接入 |
-| asset | `ensure_folder` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| asset | `create_asset_with_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| asset | `ensure_asset_with_properties` | 可用 | mixed | orchestrator | 已做真实环境回归 | 已接入 |
-| asset | `duplicate_asset_with_overrides` | 可用 | mixed | orchestrator | 已做真实环境回归 | 已接入 |
-| asset | `move_asset_batch` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| asset | `update_asset_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| asset | `import_texture_asset` | 可用 | commandlet | orchestrator | 已做真实环境回归 | 已接入 |
-| asset | `import_fbx_asset` | 可用 | commandlet | orchestrator | 已做真实环境回归 | 已接入 |
-| material | `get_material_harness_info` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| material | `create_material_asset` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| material | `create_material_instance_asset` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| material | `update_material_instance_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| material | `update_material_instance_parameters_and_verify` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| material | `get_material_instance_parameter_names` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| material | `set_material_instance_scalar_parameter` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| material | `set_material_instance_vector_parameter` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
-| material | `set_material_instance_texture_parameter` | 可用 | live editor python | orchestrator | 仅做基础验证 | 已接入 |
-| material_graph | `get_material_graph_harness_info` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| material_graph | `analyze_material_graph` | 可用 | legacy tcp wrapper | domain harness | 已做真实环境回归 | 已接入 |
-| material_graph | `create_material_graph_recipe` | 可用 | legacy tcp wrapper | domain harness | 已做真实环境回归 | 已接入 |
-| material_graph | `connect_material_nodes` | 可用 | legacy tcp wrapper | domain harness | 已做真实环境回归 | 已接入 |
-| diagnostics | `get_harness_health` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| diagnostics | `get_runtime_policy` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| diagnostics | `get_transport_port_status` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| diagnostics | `get_unreal_python_status` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| diagnostics | `get_editor_process_status` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| diagnostics | `get_commandlet_runtime_status` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| diagnostics | `get_editor_ready_state` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| diagnostics | `wait_for_editor_ready` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| diagnostics | `get_token_usage_summary` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
-| diagnostics | `dev_launch_editor_and_wait_ready` | 可用 | python | internal/debug | 已做真实环境回归 | 已接入 |
+| orchestrator | `get_harness_domains` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| orchestrator | `get_domain_design` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| orchestrator | `route_harness_task` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| scene | `get_scene_harness_info` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| scene | `get_scene_backend_status` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| scene | `query_scene_actors` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| scene | `query_scene_lights` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| scene | `set_scene_light_intensity` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| scene | `create_spot_light_ring` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| scene | `aim_actor_at` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| scene | `set_post_process_overrides` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| scene | `spawn_actor_with_defaults` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| scene | `inspect_scene_python_enums` | å¯ç”¨ | live editor python | domain harness | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| asset | `get_asset_harness_info` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| asset | `query_assets_summary` | å¯ç”¨ | internal tcp wrapper | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| asset | `ensure_folder` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| asset | `create_asset_with_properties` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| asset | `ensure_asset_with_properties` | å¯ç”¨ | mixed | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| asset | `duplicate_asset_with_overrides` | å¯ç”¨ | mixed | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| asset | `move_asset_batch` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| asset | `update_asset_properties` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| asset | `import_texture_asset` | å¯ç”¨ | commandlet | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| asset | `import_fbx_asset` | å¯ç”¨ | commandlet | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material | `get_material_harness_info` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material | `create_material_asset` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material | `create_material_instance_asset` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material | `update_material_instance_properties` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material | `update_material_instance_parameters_and_verify` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material | `get_material_instance_parameter_names` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material | `set_material_instance_scalar_parameter` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material | `set_material_instance_vector_parameter` | å¯ç”¨ | live editor python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material | `set_material_instance_texture_parameter` | å¯ç”¨ | live editor python | orchestrator | ä»…åšåŸºç¡€éªŒè¯ | å·²æŽ¥å…¥ |
+| material_graph | `get_material_graph_harness_info` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material_graph | `analyze_material_graph` | å¯ç”¨ | internal tcp wrapper | domain harness | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material_graph | `create_material_graph_recipe` | å¯ç”¨ | internal tcp wrapper | domain harness | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| material_graph | `connect_material_nodes` | å¯ç”¨ | internal tcp wrapper | domain harness | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| diagnostics | `get_harness_health` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| diagnostics | `get_runtime_policy` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| diagnostics | `get_transport_port_status` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| diagnostics | `get_unreal_python_status` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| diagnostics | `get_editor_process_status` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| diagnostics | `get_commandlet_runtime_status` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| diagnostics | `get_editor_ready_state` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| diagnostics | `wait_for_editor_ready` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| diagnostics | `get_token_usage_summary` | å¯ç”¨ | python | orchestrator | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
+| diagnostics | `dev_launch_editor_and_wait_ready` | å¯ç”¨ | python | internal/debug | å·²åšçœŸå®žçŽ¯å¢ƒå›žå½’ | å·²æŽ¥å…¥ |
 
 ### Orchestrator
 
-目录：`unreal_orchestrator/`
+ç›®å½•ï¼š`unreal_orchestrator/`
 
-已实现：
+å·²å®žçŽ°ï¼š
 
 - `get_harness_domains`
 - `get_domain_design`
@@ -226,11 +226,11 @@
 
 ### Scene
 
-目录：`unreal_scene/`
+ç›®å½•ï¼š`unreal_scene/`
 
-状态：已开始切到 UE Python
+çŠ¶æ€ï¼šå·²å¼€å§‹åˆ‡åˆ° UE Python
 
-已实现：
+å·²å®žçŽ°ï¼š
 
 - `get_scene_harness_info`
 - `get_scene_backend_status`
@@ -243,18 +243,18 @@
 - `spawn_actor_with_defaults`
 - `inspect_scene_python_enums`
 
-备注：
+å¤‡æ³¨ï¼š
 
-- 走 `run_python` 到编辑器内 Python
-- 已有真实环境回归
+- èµ° `run_python` åˆ°ç¼–è¾‘å™¨å†… Python
+- å·²æœ‰çœŸå®žçŽ¯å¢ƒå›žå½’
 
 ### Asset
 
-目录：`unreal_asset/`
+ç›®å½•ï¼š`unreal_asset/`
 
-状态：已切到混合执行模型
+çŠ¶æ€ï¼šå·²åˆ‡åˆ°æ··åˆæ‰§è¡Œæ¨¡åž‹
 
-已实现：
+å·²å®žçŽ°ï¼š
 
 - `get_asset_harness_info`
 - `query_assets_summary`
@@ -264,18 +264,18 @@
 - `import_texture_asset`
 - `import_fbx_asset`
 
-执行模型：
+æ‰§è¡Œæ¨¡åž‹ï¼š
 
-- `create/update` 走 live editor `run_python`
-- `import` 走独立 commandlet
+- `create/update` èµ° live editor `run_python`
+- `import` èµ°ç‹¬ç«‹ commandlet
 
 ### Material
 
-目录：`unreal_material/`
+ç›®å½•ï¼š`unreal_material/`
 
-状态：资产/实例/参数层已接上新链路
+çŠ¶æ€ï¼šèµ„äº§/å®žä¾‹/å‚æ•°å±‚å·²æŽ¥ä¸Šæ–°é“¾è·¯
 
-已实现：
+å·²å®žçŽ°ï¼š
 
 - `get_material_harness_info`
 - `create_material_asset`
@@ -289,11 +289,11 @@
 
 ### Material Graph
 
-目录：`unreal_material_graph/`
+ç›®å½•ï¼š`unreal_material_graph/`
 
-状态：已进入最小可用阶段
+çŠ¶æ€ï¼šå·²è¿›å…¥æœ€å°å¯ç”¨é˜¶æ®µ
 
-当前已实现：
+å½“å‰å·²å®žçŽ°ï¼š
 
 - `get_material_graph_harness_info`
 - `analyze_material_graph`
@@ -302,9 +302,9 @@
 
 ### Diagnostics
 
-目录：`unreal_diagnostics/`
+ç›®å½•ï¼š`unreal_diagnostics/`
 
-当前已实现：
+å½“å‰å·²å®žçŽ°ï¼š
 
 - `get_harness_health`
 - `get_runtime_policy`
@@ -315,9 +315,9 @@
 - `get_unreal_python_status`
 - `get_editor_process_status`
 - `get_commandlet_runtime_status`
-- `dev_launch_editor_and_wait_ready`（internal/debug）
+- `dev_launch_editor_and_wait_ready`ï¼ˆinternal/debugï¼‰
 
-## 3. 已规划但尚未完整实现的功能
+## 3. å·²è§„åˆ’ä½†å°šæœªå®Œæ•´å®žçŽ°çš„åŠŸèƒ½
 
 ### Scene
 
@@ -325,42 +325,43 @@
 
 ### Asset
 
-- 更完整的材质实例参数层返回结构
+- æ›´å®Œæ•´çš„æè´¨å®žä¾‹å‚æ•°å±‚è¿”å›žç»“æž„
 
 ### Material Graph
 
-- 图重构
+- å›¾é‡æž„
 
 ### Orchestrator
 
-- 真正的域级调度
-- 统一错误模型
-- 统一结果包装
+- çœŸæ­£çš„åŸŸçº§è°ƒåº¦
+- ç»Ÿä¸€é”™è¯¯æ¨¡åž‹
+- ç»Ÿä¸€ç»“æžœåŒ…è£…
 
 ### Diagnostics
 
-- 更细的错误分类与持久化诊断
+- æ›´ç»†çš„é”™è¯¯åˆ†ç±»ä¸ŽæŒä¹…åŒ–è¯Šæ–­
 
-## 4. 现阶段最重要的边界
+## 4. çŽ°é˜¶æ®µæœ€é‡è¦çš„è¾¹ç•Œ
 
-### 已适合使用的新链路
+### å·²é€‚åˆä½¿ç”¨çš„æ–°é“¾è·¯
 
-- `scene` 的高层命令与 compact 查询
-- `asset` 的 create/update/import
-- `asset` 的 ensure/query 工作流
-- `material` 的资产/实例/参数层
+- `scene` çš„é«˜å±‚å‘½ä»¤ä¸Ž compact æŸ¥è¯¢
+- `asset` çš„ create/update/import
+- `asset` çš„ ensure/query å·¥ä½œæµ
+- `material` çš„èµ„äº§/å®žä¾‹/å‚æ•°å±‚
 
-### 仍依赖旧能力面或尚未拆分完成
+### ä»ä¾èµ–æ—§èƒ½åŠ›é¢æˆ–å°šæœªæ‹†åˆ†å®Œæˆ
 
 - `material graph`
 - `niagara`
 - `blueprint info`
 - `blueprint graph`
 
-## 5. 建议阅读顺序
+## 5. å»ºè®®é˜…è¯»é¡ºåº
 
-如果只想看“现在到底能用什么”：
+å¦‚æžœåªæƒ³çœ‹â€œçŽ°åœ¨åˆ°åº•èƒ½ç”¨ä»€ä¹ˆâ€ï¼š
 
-1. 先看本文件 `inventory.md`
-2. 再看 `commands.md`
-3. 再看 `categories.md`
+1. å…ˆçœ‹æœ¬æ–‡ä»¶ `inventory.md`
+2. å†çœ‹ `commands.md`
+3. å†çœ‹ `categories.md`
+

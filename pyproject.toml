@@ -15,7 +15,7 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
-    "unreal_editor_mcp*",
+    "unreal_backend_tcp*",
     "unreal_orchestrator*",
     "unreal_scene*",
     "unreal_asset*",

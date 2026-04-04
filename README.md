@@ -4,16 +4,16 @@
 
 ## 包含内容
 
-- `unreal_editor_mcp/`
-  - 独立 Python MCP server
-  - TCP 连接 Unreal 插件
-  - 当前主要作为 internal / fallback 层保留
+- `unreal_backend_tcp/`
+  - 内部 TCP backend
+  - 负责连接 Unreal 插件
+  - 为 orchestrator 和各域 harness 提供底层命令入口
 - `unreal_orchestrator/`
   - 新的总控 harness 骨架
   - 负责问题域路由与能力目录
 - `unreal_scene/`, `unreal_asset/`, `unreal_material/`, `unreal_material_graph/`
-  - 新子域 harness 的第一阶段骨架
-  - 当前通过 `unreal_editor_mcp` 或 wrapper backend 做 fallback 执行
+  - 新子域 harness
+  - 当前通过内部 TCP backend 或 UE Python / commandlet 执行
 - `RenderingMCP/`
   - Unreal 测试工程
   - `Plugins/UnrealMCP` 插件源码
@@ -30,12 +30,6 @@ pip install -r requirements.txt
 
 ```bash
 python -m unreal_orchestrator.server
-```
-
-## 启动 raw / internal MCP
-
-```bash
-python -m unreal_editor_mcp.server_internal
 ```
 
 ## 启动 domain harness
@@ -72,9 +66,9 @@ python -m unreal_material_graph.server
 - `unreal_material_graph`
   - 已进入最小可用阶段
   - 当前负责材质图读取、分析和 recipe 构建包装
-- `unreal_editor_mcp`
-  - internal / debug / fallback
-  - 保留完整 raw 工具面
+- `unreal_backend_tcp`
+  - internal backend
+  - 负责 raw TCP transport、结果 handle 和剩余底层能力封装
 
 ## 当前暴露的主要工作流
 
@@ -111,7 +105,7 @@ python -m unreal_material_graph.server
 
 - `unreal_orchestrator` 已作为默认入口，默认工具集已压缩
 - `unreal_scene` / `unreal_asset` / `unreal_material` 已可作为独立 domain harness 启动
-- `unreal_editor_mcp` 现在主要作为 internal / fallback 层保留
+- `unreal_backend_tcp` 现在作为唯一内部 TCP backend 保留
 - 查询、图类、批量、属性类工具已接入摘要返回策略
 - 大结果已支持 `saved_to` / `result_handle`，并支持超阈值自动 offload
 

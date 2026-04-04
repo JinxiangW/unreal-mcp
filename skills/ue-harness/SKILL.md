@@ -1,6 +1,6 @@
----
+﻿---
 name: ue-harness
-description: 使用 `unreal-mcp` 时的最小工作指南，涵盖域选择、执行后端、静默工作流和交付要求。
+description: ä½¿ç”¨ `unreal-mcp` æ—¶çš„æœ€å°å·¥ä½œæŒ‡å—ï¼Œæ¶µç›–åŸŸé€‰æ‹©ã€æ‰§è¡ŒåŽç«¯ã€é™é»˜å·¥ä½œæµå’Œäº¤ä»˜è¦æ±‚ã€‚
 license: MIT
 compatibility: opencode
 metadata:
@@ -9,51 +9,51 @@ metadata:
 ---
 
 ## Purpose
-当任务发生在 `D:\unreal-mcp`，并且涉及 Unreal harness 的实现、扩展、测试或排障时，优先使用这份 skill。
+å½“ä»»åŠ¡å‘ç”Ÿåœ¨ `D:\unreal-mcp`ï¼Œå¹¶ä¸”æ¶‰åŠ Unreal harness çš„å®žçŽ°ã€æ‰©å±•ã€æµ‹è¯•æˆ–æŽ’éšœæ—¶ï¼Œä¼˜å…ˆä½¿ç”¨è¿™ä»½ skillã€‚
 
-这份 skill 只保留最小必要规则，不重复展开所有长文档。
+è¿™ä»½ skill åªä¿ç•™æœ€å°å¿…è¦è§„åˆ™ï¼Œä¸é‡å¤å±•å¼€æ‰€æœ‰é•¿æ–‡æ¡£ã€‚
 
-## 先看什么
-按顺序：
+## å…ˆçœ‹ä»€ä¹ˆ
+æŒ‰é¡ºåºï¼š
 
 1. `docs/inventory.md`
 2. `docs/categories.md`
-3. 当前任务相关的域文件
+3. å½“å‰ä»»åŠ¡ç›¸å…³çš„åŸŸæ–‡ä»¶
 
-如果要改行为或架构，再看：
+å¦‚æžœè¦æ”¹è¡Œä¸ºæˆ–æž¶æž„ï¼Œå†çœ‹ï¼š
 
 4. `docs/proposal.md`
 5. `docs/commands.md`
 
-如果要测试或交付，再看：
+å¦‚æžœè¦æµ‹è¯•æˆ–äº¤ä»˜ï¼Œå†çœ‹ï¼š
 
 6. `docs/test-plan.md`
 7. `docs/verification.md`
 8. `docs/workflow.md`
 9. `docs/parallel.md`
 
-## 默认执行顺序
-如果用户没有特别指定入口，默认按这个顺序执行，不要让用户每次手动决定：
+## é»˜è®¤æ‰§è¡Œé¡ºåº
+å¦‚æžœç”¨æˆ·æ²¡æœ‰ç‰¹åˆ«æŒ‡å®šå…¥å£ï¼Œé»˜è®¤æŒ‰è¿™ä¸ªé¡ºåºæ‰§è¡Œï¼Œä¸è¦è®©ç”¨æˆ·æ¯æ¬¡æ‰‹åŠ¨å†³å®šï¼š
 
-1. 先判断任务域：`scene / asset / material / material_graph / diagnostics`
-2. 优先走 `unreal_orchestrator`
-3. 如果是高风险 live editor 操作，先做：
+1. å…ˆåˆ¤æ–­ä»»åŠ¡åŸŸï¼š`scene / asset / material / material_graph / diagnostics`
+2. ä¼˜å…ˆèµ° `unreal_orchestrator`
+3. å¦‚æžœæ˜¯é«˜é£Žé™© live editor æ“ä½œï¼Œå…ˆåšï¼š
    - `get_editor_ready_state`
-   - 必要时 `wait_for_editor_ready`
-4. 能用 orchestrator 的 guarded 命令，就不要直接打 raw 工具
-5. 只有在 orchestrator 还没覆盖该能力时，才直接进入对应域 harness
-6. `unreal_editor_mcp` 只作为最后的 internal/fallback 层，不作为默认入口
+   - å¿…è¦æ—¶ `wait_for_editor_ready`
+4. èƒ½ç”¨ orchestrator çš„ guarded å‘½ä»¤ï¼Œå°±ä¸è¦ç›´æŽ¥æ‰“ raw å·¥å…·
+5. åªæœ‰åœ¨ orchestrator è¿˜æ²¡è¦†ç›–è¯¥èƒ½åŠ›æ—¶ï¼Œæ‰ç›´æŽ¥è¿›å…¥å¯¹åº”åŸŸ harness
+6. `unreal_backend_tcp` åªä½œä¸ºæœ€åŽçš„ internal/fallback å±‚ï¼Œä¸ä½œä¸ºé»˜è®¤å…¥å£
 
-简单说：
+ç®€å•è¯´ï¼š
 
-- 默认入口：`unreal_orchestrator`
-- 默认预检：`get_editor_ready_state`
-- 默认等待：`wait_for_editor_ready`
-- 默认禁止：直接优先使用 legacy raw 工具
-- 默认禁止：普通使用场景下隐式自动启动编辑器
+- é»˜è®¤å…¥å£ï¼š`unreal_orchestrator`
+- é»˜è®¤é¢„æ£€ï¼š`get_editor_ready_state`
+- é»˜è®¤ç­‰å¾…ï¼š`wait_for_editor_ready`
+- é»˜è®¤ç¦æ­¢ï¼šç›´æŽ¥ä¼˜å…ˆä½¿ç”¨ legacy raw å·¥å…·
+- é»˜è®¤ç¦æ­¢ï¼šæ™®é€šä½¿ç”¨åœºæ™¯ä¸‹éšå¼è‡ªåŠ¨å¯åŠ¨ç¼–è¾‘å™¨
 
-## 域选择
-先按问题域选目录，不要一上来全仓库乱改。
+## åŸŸé€‰æ‹©
+å…ˆæŒ‰é—®é¢˜åŸŸé€‰ç›®å½•ï¼Œä¸è¦ä¸€ä¸Šæ¥å…¨ä»“åº“ä¹±æ”¹ã€‚
 
 - `scene`: `unreal_scene/`
 - `asset`: `unreal_asset/`
@@ -62,25 +62,25 @@ metadata:
 - `orchestrator`: `unreal_orchestrator/`
 - `diagnostics`: `unreal_diagnostics/`
 
-## 当前后端边界
-- `unreal_editor_mcp`: internal / fallback only，不应继续视为默认业务入口
-- `scene`: 优先 `live editor python`
+## å½“å‰åŽç«¯è¾¹ç•Œ
+- `unreal_backend_tcp`: internal / fallback onlyï¼Œä¸åº”ç»§ç»­è§†ä¸ºé»˜è®¤ä¸šåŠ¡å…¥å£
+- `scene`: ä¼˜å…ˆ `live editor python`
 - `asset create/update`: `live editor python`
 - `asset import`: `commandlet`
-- `material asset/instance/parameter`: 基于新 `asset` / live editor python
-- `material_graph`: 仍在拆分，暂时不要混入 `material`
+- `material asset/instance/parameter`: åŸºäºŽæ–° `asset` / live editor python
+- `material_graph`: ä»åœ¨æ‹†åˆ†ï¼Œæš‚æ—¶ä¸è¦æ··å…¥ `material`
 
-## 当前总控行为
-- `unreal_orchestrator` 对部分高风险 live editor 命令已自动做 ready preflight
-- 如果任务要走高风险编辑，优先通过 orchestrator，而不是直接盲打底层 raw 工具
+## å½“å‰æ€»æŽ§è¡Œä¸º
+- `unreal_orchestrator` å¯¹éƒ¨åˆ†é«˜é£Žé™© live editor å‘½ä»¤å·²è‡ªåŠ¨åš ready preflight
+- å¦‚æžœä»»åŠ¡è¦èµ°é«˜é£Žé™©ç¼–è¾‘ï¼Œä¼˜å…ˆé€šè¿‡ orchestratorï¼Œè€Œä¸æ˜¯ç›´æŽ¥ç›²æ‰“åº•å±‚ raw å·¥å…·
 
-## 重试规则
-- 只读：最多 3 次
-- 幂等写：最多 2 次
-- 非幂等写：默认不要自动整条重试
-- commandlet：最多补重试 1 次
+## é‡è¯•è§„åˆ™
+- åªè¯»ï¼šæœ€å¤š 3 æ¬¡
+- å¹‚ç­‰å†™ï¼šæœ€å¤š 2 æ¬¡
+- éžå¹‚ç­‰å†™ï¼šé»˜è®¤ä¸è¦è‡ªåŠ¨æ•´æ¡é‡è¯•
+- commandletï¼šæœ€å¤šè¡¥é‡è¯• 1 æ¬¡
 
-失败时不要只返回一句报错，至少要保留：
+å¤±è´¥æ—¶ä¸è¦åªè¿”å›žä¸€å¥æŠ¥é”™ï¼Œè‡³å°‘è¦ä¿ç•™ï¼š
 
 - `operation`
 - `attempt`
@@ -89,13 +89,13 @@ metadata:
 - `error_message`
 - `recommended_action`
 
-## 工作规则
-### 1. 先选对执行模型
-- 需要当前关卡/Actor/Viewport：用 live editor
-- 导入、大批量无 UI 操作：优先 commandlet
+## å·¥ä½œè§„åˆ™
+### 1. å…ˆé€‰å¯¹æ‰§è¡Œæ¨¡åž‹
+- éœ€è¦å½“å‰å…³å¡/Actor/Viewportï¼šç”¨ live editor
+- å¯¼å…¥ã€å¤§æ‰¹é‡æ—  UI æ“ä½œï¼šä¼˜å…ˆ commandlet
 
-### 2. 不随便改共享核心
-同时只能有一个会话改这些文件：
+### 2. ä¸éšä¾¿æ”¹å…±äº«æ ¸å¿ƒ
+åŒæ—¶åªèƒ½æœ‰ä¸€ä¸ªä¼šè¯æ”¹è¿™äº›æ–‡ä»¶ï¼š
 
 - `unreal_harness_runtime/python_exec.py`
 - `unreal_harness_runtime/commandlet_exec.py`
@@ -103,55 +103,56 @@ metadata:
 - `unreal_orchestrator/catalog.py`
 - `pyproject.toml`
 
-### 3. 高层命令优先
-如果任务已经是高频、重复、易错工作流，优先做高层命令，不要继续堆裸属性写入。
+### 3. é«˜å±‚å‘½ä»¤ä¼˜å…ˆ
+å¦‚æžœä»»åŠ¡å·²ç»æ˜¯é«˜é¢‘ã€é‡å¤ã€æ˜“é”™å·¥ä½œæµï¼Œä¼˜å…ˆåšé«˜å±‚å‘½ä»¤ï¼Œä¸è¦ç»§ç»­å †è£¸å±žæ€§å†™å…¥ã€‚
 
-### 4. 不要把 `material` 和 `material_graph` 混在一起
-- `material`: 资产、实例、参数
-- `material_graph`: 节点、连线、图重构
+### 4. ä¸è¦æŠŠ `material` å’Œ `material_graph` æ··åœ¨ä¸€èµ·
+- `material`: èµ„äº§ã€å®žä¾‹ã€å‚æ•°
+- `material_graph`: èŠ‚ç‚¹ã€è¿žçº¿ã€å›¾é‡æž„
 
-## 测试与交付
-每个新功能至少做：
+## æµ‹è¯•ä¸Žäº¤ä»˜
+æ¯ä¸ªæ–°åŠŸèƒ½è‡³å°‘åšï¼š
 
-1. 一条成功路径
-2. 一条错误路径
-3. 一次重复执行
-4. 一次失败后恢复检查
+1. ä¸€æ¡æˆåŠŸè·¯å¾„
+2. ä¸€æ¡é”™è¯¯è·¯å¾„
+3. ä¸€æ¬¡é‡å¤æ‰§è¡Œ
+4. ä¸€æ¬¡å¤±è´¥åŽæ¢å¤æ£€æŸ¥
 
-尽量补这些结果字段：
+å°½é‡è¡¥è¿™äº›ç»“æžœå­—æ®µï¼š
 
 - `post_state`
 - `verification.checks`
-- batch 的 `summary + items`
+- batch çš„ `summary + items`
 
-## 静默工作流
-静默启动 / 自动拉起编辑器只用于：
+## é™é»˜å·¥ä½œæµ
+é™é»˜å¯åŠ¨ / è‡ªåŠ¨æ‹‰èµ·ç¼–è¾‘å™¨åªç”¨äºŽï¼š
 
-- MCP 功能开发
-- MCP 回归测试
-- 自动化验证
+- MCP åŠŸèƒ½å¼€å‘
+- MCP å›žå½’æµ‹è¯•
+- è‡ªåŠ¨åŒ–éªŒè¯
 
-如果只是普通使用时出错，不要默认自动启动或重启编辑器。
-这时应优先：
+å¦‚æžœåªæ˜¯æ™®é€šä½¿ç”¨æ—¶å‡ºé”™ï¼Œä¸è¦é»˜è®¤è‡ªåŠ¨å¯åŠ¨æˆ–é‡å¯ç¼–è¾‘å™¨ã€‚
+è¿™æ—¶åº”ä¼˜å…ˆï¼š
 
-- 返回失败结果
-- 返回当前 ready 状态
-- 返回 `recommended_action`
+- è¿”å›žå¤±è´¥ç»“æžœ
+- è¿”å›žå½“å‰ ready çŠ¶æ€
+- è¿”å›ž `recommended_action`
 
-只有在 MCP 开发/回归测试里，才允许显式调用 dev-only 工具：
+åªæœ‰åœ¨ MCP å¼€å‘/å›žå½’æµ‹è¯•é‡Œï¼Œæ‰å…è®¸æ˜¾å¼è°ƒç”¨ dev-only å·¥å…·ï¼š
 
 - `dev_launch_editor_and_wait_ready`
 
-如果需要自动循环测试：
+å¦‚æžœéœ€è¦è‡ªåŠ¨å¾ªçŽ¯æµ‹è¯•ï¼š
 
-1. 先看 `docs/workflow.md`
-2. 需要活编辑器时静默启动 `UnrealEditor.exe`
-3. 需要隔离导入时用 `UnrealEditor-Cmd.exe` commandlet
-4. 启动后先做 smoke test，再做功能测试
+1. å…ˆçœ‹ `docs/workflow.md`
+2. éœ€è¦æ´»ç¼–è¾‘å™¨æ—¶é™é»˜å¯åŠ¨ `UnrealEditor.exe`
+3. éœ€è¦éš”ç¦»å¯¼å…¥æ—¶ç”¨ `UnrealEditor-Cmd.exe` commandlet
+4. å¯åŠ¨åŽå…ˆåš smoke testï¼Œå†åšåŠŸèƒ½æµ‹è¯•
 
-## 完成前自检
-- 是否只改了对应域的文件
-- 是否说明是否需要重启编辑器/重编插件
-- 是否记录已知限制
-- 是否完成至少一条真实环境回归
-- 是否说明当前结果校验状态
+## å®Œæˆå‰è‡ªæ£€
+- æ˜¯å¦åªæ”¹äº†å¯¹åº”åŸŸçš„æ–‡ä»¶
+- æ˜¯å¦è¯´æ˜Žæ˜¯å¦éœ€è¦é‡å¯ç¼–è¾‘å™¨/é‡ç¼–æ’ä»¶
+- æ˜¯å¦è®°å½•å·²çŸ¥é™åˆ¶
+- æ˜¯å¦å®Œæˆè‡³å°‘ä¸€æ¡çœŸå®žçŽ¯å¢ƒå›žå½’
+- æ˜¯å¦è¯´æ˜Žå½“å‰ç»“æžœæ ¡éªŒçŠ¶æ€
+

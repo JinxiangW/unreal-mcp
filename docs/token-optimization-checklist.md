@@ -1,56 +1,57 @@
-# Token 优化 Checklist
+﻿# Token ä¼˜åŒ– Checklist
 
-状态：`[ ]` 未开始，`[-]` 进行中，`[x]` 已完成，`[!]` 阻塞。
+çŠ¶æ€ï¼š`[ ]` æœªå¼€å§‹ï¼Œ`[-]` è¿›è¡Œä¸­ï¼Œ`[x]` å·²å®Œæˆï¼Œ`[!]` é˜»å¡žã€‚
 
-## 基线
+## åŸºçº¿
 
-- [x] 记录 `schema / input / output / total` token 估算与 `latency`。
-- [x] 输出高成本工具 Top 10。
-- [x] 区分冷启动和热会话成本。
+- [x] è®°å½• `schema / input / output / total` token ä¼°ç®—ä¸Ž `latency`ã€‚
+- [x] è¾“å‡ºé«˜æˆæœ¬å·¥å…· Top 10ã€‚
+- [x] åŒºåˆ†å†·å¯åŠ¨å’Œçƒ­ä¼šè¯æˆæœ¬ã€‚
 
-## 工具集
+## å·¥å…·é›†
 
-- [x] 常规模式只暴露 `unreal_orchestrator`。
-- [x] `unreal_editor_mcp` 改成 internal / debug 入口。
-- [x] dev-only 工具不进入默认 schema。
-- [x] 按域动态加载 toolset。
+- [x] å¸¸è§„æ¨¡å¼åªæš´éœ² `unreal_orchestrator`ã€‚
+- [x] `unreal_backend_tcp` æ”¹æˆ internal / debug å…¥å£ã€‚
+- [x] dev-only å·¥å…·ä¸è¿›å…¥é»˜è®¤ schemaã€‚
+- [x] æŒ‰åŸŸåŠ¨æ€åŠ è½½ toolsetã€‚
 
-## 返回体
+## è¿”å›žä½“
 
-- [x] `diagnostics` 默认走 compact 返回。
-- [x] guarded 调用默认不展开完整 `preflight`。
-- [x] 查询类工具统一支持 `summary_only`、`fields`、`limit`。
-- [x] 批量工具默认只回 `summary + failed_items`。
+- [x] `diagnostics` é»˜è®¤èµ° compact è¿”å›žã€‚
+- [x] guarded è°ƒç”¨é»˜è®¤ä¸å±•å¼€å®Œæ•´ `preflight`ã€‚
+- [x] æŸ¥è¯¢ç±»å·¥å…·ç»Ÿä¸€æ”¯æŒ `summary_only`ã€`fields`ã€`limit`ã€‚
+- [x] æ‰¹é‡å·¥å…·é»˜è®¤åªå›ž `summary + failed_items`ã€‚
 
-## 大对象
+## å¤§å¯¹è±¡
 
-- [x] `material graph / niagara / blueprint` 默认只回摘要。
-- [x] 超阈值结果统一走 `result_handle` 或 `saved_to`。
-- [x] HLSL、完整图、完整蓝图内容默认不内联。
+- [x] `material graph / niagara / blueprint` é»˜è®¤åªå›žæ‘˜è¦ã€‚
+- [x] è¶…é˜ˆå€¼ç»“æžœç»Ÿä¸€èµ° `result_handle` æˆ– `saved_to`ã€‚
+- [x] HLSLã€å®Œæ•´å›¾ã€å®Œæ•´è“å›¾å†…å®¹é»˜è®¤ä¸å†…è”ã€‚
 
-## 高层命令
+## é«˜å±‚å‘½ä»¤
 
-- [x] 用高层命令替代“查 -> 拼 -> 调 -> 回读”多轮链路。
-- [x] 常见查询改成服务端筛选，不让模型自己筛全量结果。
-- [x] 写操作优先提供“更新并验证”接口。
+- [x] ç”¨é«˜å±‚å‘½ä»¤æ›¿ä»£â€œæŸ¥ -> æ‹¼ -> è°ƒ -> å›žè¯»â€å¤šè½®é“¾è·¯ã€‚
+- [x] å¸¸è§æŸ¥è¯¢æ”¹æˆæœåŠ¡ç«¯ç­›é€‰ï¼Œä¸è®©æ¨¡åž‹è‡ªå·±ç­›å…¨é‡ç»“æžœã€‚
+- [x] å†™æ“ä½œä¼˜å…ˆæä¾›â€œæ›´æ–°å¹¶éªŒè¯â€æŽ¥å£ã€‚
 
-## 配置
+## é…ç½®
 
-- [x] 用 `UE_PROJECT_PATH` 统一当前工作项目。
-- [x] 用 `UE_EDITOR_EXE` / `UE_EDITOR_CMD` 统一编辑器路径。
-- [x] 配置读取统一走共享 runtime config。
+- [x] ç”¨ `UE_PROJECT_PATH` ç»Ÿä¸€å½“å‰å·¥ä½œé¡¹ç›®ã€‚
+- [x] ç”¨ `UE_EDITOR_EXE` / `UE_EDITOR_CMD` ç»Ÿä¸€ç¼–è¾‘å™¨è·¯å¾„ã€‚
+- [x] é…ç½®è¯»å–ç»Ÿä¸€èµ°å…±äº« runtime configã€‚
 
-## 验收
+## éªŒæ”¶
 
-- [x] 冷启动 schema token 下降 `50%+`。
-- [x] 常见查询 token 下降 `60%+`。
-- [x] 图类默认调用 token 下降 `80%+`。
-- [x] 平均工具调用次数下降 `30%+`。
-- [x] 成功率下降不超过 `3%`。
+- [x] å†·å¯åŠ¨ schema token ä¸‹é™ `50%+`ã€‚
+- [x] å¸¸è§æŸ¥è¯¢ token ä¸‹é™ `60%+`ã€‚
+- [x] å›¾ç±»é»˜è®¤è°ƒç”¨ token ä¸‹é™ `80%+`ã€‚
+- [x] å¹³å‡å·¥å…·è°ƒç”¨æ¬¡æ•°ä¸‹é™ `30%+`ã€‚
+- [x] æˆåŠŸçŽ‡ä¸‹é™ä¸è¶…è¿‡ `3%`ã€‚
 
-## MyToon 回归
+## MyToon å›žå½’
 
-- [x] 切到 `D:\UnrealProjects\MyToon\MyToon.uproject`。
-- [x] 完成静默启动 smoke test。
-- [x] 完成 `ready state / current level` 回归。
-- [x] 引擎异常退出后可自动重启并继续测试。
+- [x] åˆ‡åˆ° `D:\UnrealProjects\MyToon\MyToon.uproject`ã€‚
+- [x] å®Œæˆé™é»˜å¯åŠ¨ smoke testã€‚
+- [x] å®Œæˆ `ready state / current level` å›žå½’ã€‚
+- [x] å¼•æ“Žå¼‚å¸¸é€€å‡ºåŽå¯è‡ªåŠ¨é‡å¯å¹¶ç»§ç»­æµ‹è¯•ã€‚
+

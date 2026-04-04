@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Optional
 
-from unreal_editor_mcp.tools import get_assets as raw_get_assets
+from unreal_backend_tcp.tools import get_assets as raw_get_assets
 from unreal_harness_runtime.python_exec import (
     json_literal,
     python_literal,

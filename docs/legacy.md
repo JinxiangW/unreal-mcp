@@ -1,108 +1,48 @@
-# Legacy 层定位与退役清单
+# Legacy 退役说明
 
-## 当前定位
+`unreal_editor_mcp` 已从当前代码结构中移除。
 
-`unreal_editor_mcp` 不再应被视为主要使用层。
+## 已完成内容
 
-现在它的定位是：
+- TCP transport 已迁入 `unreal_backend_tcp`
+- raw wrapper 已迁入 `unreal_backend_tcp`
+- `scene / asset / material_graph / diagnostics / runtime` 已改为依赖新 backend
+- `unreal_editor_mcp` 包和 raw/internal server 入口已删除
 
-- internal
-- fallback
-- compatibility layer
+## 当前结构
 
-也就是说：
+现在仓库里的分层是：
 
-- 对外主入口应逐步收口到 `unreal_orchestrator` 和各域高层命令
-- `unreal_editor_mcp` 主要保留为底层执行基础设施和迁移过渡层
+- `unreal_orchestrator`
+  - 默认对外入口
+- `unreal_scene / unreal_asset / unreal_material / unreal_material_graph / unreal_diagnostics`
+  - 按域组织的 harness
+- `unreal_backend_tcp`
+  - 纯内部 TCP backend
+  - 负责连接 Unreal 插件并封装剩余底层 raw 能力
 
-## 为什么现在还保留
+## 仍然保留的底层能力
 
-### 1. 传输和连接基础设施仍在这里
+下面这些能力仍然存在，但不再通过 legacy 包名暴露：
 
-- TCP 连接
-- 通用 `send_command`
-- 现有插件命令面
+- `get_current_level`
+- `get_assets`
+- `get_material_graph`
+- `build_material_graph`
+- Niagara 读写接口
+- Blueprint info / content / graph 接口
+- `read_result_handle / release_result_handle`
 
-### 2. `run_python` 仍通过现有插件命令面进入 UE
+## 迁移后的使用规则
 
-### 3. 还有几个大域尚未迁移完成
+- 对外默认入口：`unreal_orchestrator`
+- 对内底层 backend：`unreal_backend_tcp`
+- 不再保留 `unreal_editor_mcp.server` 或 `unreal_editor_mcp.server_internal`
 
-- `material_graph`
-- `niagara`
-- `blueprint_info`
-- `blueprint_graph`
+## 说明
 
-## 哪些功能仍依赖 legacy 层
+这份文档保留的目的是记录：
 
-### 直接依赖
-
-- `unreal_harness_runtime/python_exec.py`
-- `unreal_editor_mcp.common.send_command`
-- `unreal_editor_mcp.connection`
-
-### 间接依赖
-
-- `unreal_scene` 的 live editor python 执行
-- `unreal_asset` 的 live editor create/update
-- `unreal_material` 的 live editor 参数更新
-- `unreal_diagnostics` 的 ready/health 探测
-
-### 仍主要停留在 legacy 能力面
-
-- `material_graph`
-- `niagara`
-- `blueprint_info`
-- `blueprint_graph`
-
-## 当前不应该怎么用
-
-不建议把 `unreal_editor_mcp` 当成默认业务入口去直接猜 raw 字段和 raw 命令。
-
-尤其不建议：
-
-- 对灯光继续优先走裸 `set_actor_properties`
-- 对复杂图编辑继续走扁平属性猜测
-- 在多会话里直接拿大量 raw 工具并发轰同一个编辑器实例
-
-## 当前推荐怎么用
-
-- 场景相关：优先 `unreal_orchestrator` / `unreal_scene`
-- 资产相关：优先 `unreal_orchestrator` / `unreal_asset`
-- 材质资产/参数：优先 `unreal_orchestrator` / `unreal_material`
-- 导入：优先 commandlet 路径
-
-## 退役顺序
-
-### Phase 1
-
-- 停止把新业务能力直接加到 legacy raw 接口上
-- 新功能优先进入新域 harness
-
-### Phase 2
-
-- 完成 `material_graph`
-- 完成 `diagnostics`
-- 补齐 orchestrator 的统一结果包装
-
-### Phase 3
-
-- 把 `niagara`
-- `blueprint_info`
-- `blueprint_graph`
-逐步迁到新域边界下
-
-### Phase 4
-
-- 将 `unreal_editor_mcp` 明确降级为纯内部后端
-- 对外文档不再把它列为默认入口
-
-## 退役完成的判定标准
-
-只有当下面条件大部分满足后，才适合进一步收缩 legacy 层：
-
-- `scene` 不再依赖 raw 属性桥接作为主要路径
-- `asset` 已完全走新链路
-- `material asset/instance/parameter` 已完全走新链路
-- `material_graph` 已建立独立能力面
-- `diagnostics` 可稳定判断 ready / busy / commandlet 状态
-- orchestrator 已成为高风险命令默认入口
+- legacy 已经移除
+- 哪些能力被平移到了新的内部 backend
+- 后续不应再引入新的 legacy 包名依赖

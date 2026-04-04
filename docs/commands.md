@@ -21,6 +21,11 @@
   - 价值：把批量摆灯、朝向、单位、可移动性收成一个配方
   - 返回：已补齐 `operation_id / post_state / verification / summary / items`
 
+- `apply_scene_actor_batch`
+  - 输入：`actor_specs`
+  - 价值：把批量 spawn、朝向、灯光强度、后处理覆盖收成一个可复用的场景配方
+  - 适合：批量布灯、批量场景搭建、批量 actor 初始化
+
 - `query_scene_actors`
   - 输入：`actor_class`、`name_filter`、`limit`
   - 价值：把常见场景查询收成 compact 命令，减少 raw `get_actors`

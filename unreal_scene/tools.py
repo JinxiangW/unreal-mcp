@@ -279,6 +279,7 @@ def get_scene_harness_info() -> Dict[str, Any]:
         "high_level_commands": [
             "set_scene_light_intensity",
             "create_spot_light_ring",
+            "apply_scene_actor_batch",
             "query_scene_actors",
             "query_scene_lights",
             "aim_actor_at",
@@ -1014,6 +1015,203 @@ else:
     return _run_editor_python(
         _wrap_scene_python(body, _SCENE_POST_PROCESS_PYTHON_HELPERS)
     )
+
+
+def apply_scene_actor_batch(actor_specs: list[Dict[str, Any]]) -> Dict[str, Any]:
+    """Apply a reusable batch of actor spawn/update recipes."""
+    operation_id = _new_operation_id("apply_scene_actor_batch")
+    if not isinstance(actor_specs, list) or not actor_specs:
+        return _scene_input_error(
+            operation_id, "actor_specs must be a non-empty array of actor recipes"
+        )
+
+    targets: list[str] = []
+    applied_changes: list[Dict[str, Any]] = []
+    failed_changes: list[Dict[str, Any]] = []
+    post_state: Dict[str, Any] = {}
+    all_checks: list[Dict[str, Any]] = []
+    items: list[Dict[str, Any]] = []
+
+    def _merge_post_state(target_state: Dict[str, Any], update_state: Dict[str, Any]) -> None:
+        for key, value in update_state.items():
+            if (
+                key in target_state
+                and isinstance(target_state[key], dict)
+                and isinstance(value, dict)
+            ):
+                target_state[key].update(value)
+            else:
+                target_state[key] = value
+
+    def _record_step(
+        item_post_state: Dict[str, Any],
+        item_steps: list[Dict[str, Any]],
+        item_checks: list[Dict[str, Any]],
+        step_name: str,
+        result: Dict[str, Any],
+    ) -> bool:
+        step_success = bool(result.get("success", False))
+        item_steps.append(
+            {
+                "operation": step_name,
+                "success": step_success,
+                "error": result.get("error"),
+            }
+        )
+        applied_changes.extend(result.get("applied_changes", []))
+        failed_changes.extend(result.get("failed_changes", []))
+        _merge_post_state(item_post_state, result.get("post_state", {}))
+        _merge_post_state(post_state, result.get("post_state", {}))
+        checks = result.get("verification", {}).get("checks", [])
+        item_checks.extend(checks)
+        all_checks.extend(checks)
+        return step_success
+
+    for index, spec in enumerate(actor_specs):
+        if not isinstance(spec, dict):
+            failed_changes.append(
+                {
+                    "target": f"actor_specs[{index}]",
+                    "field": "actor_specs",
+                    "error": "Each actor recipe must be an object",
+                }
+            )
+            items.append(
+                {
+                    "target": f"actor_specs[{index}]",
+                    "success": False,
+                    "verification": {"verified": False, "checks": []},
+                    "steps": [],
+                }
+            )
+            continue
+
+        requested_name = spec.get("name") or spec.get("actor_name") or f"actor_specs[{index}]"
+        item_post_state: Dict[str, Any] = {}
+        item_steps: list[Dict[str, Any]] = []
+        item_checks: list[Dict[str, Any]] = []
+        item_success = True
+        actor_target = requested_name
+
+        actor_class = spec.get("actor_class")
+        if actor_class is not None:
+            spawn_result = spawn_actor_with_defaults(
+                actor_class=str(actor_class),
+                name=spec.get("name"),
+                location=spec.get("location"),
+                rotation=spec.get("rotation"),
+                scale=spec.get("scale"),
+                actor_properties=spec.get("actor_properties"),
+                root_component_properties=spec.get("root_component_properties"),
+                replace_existing=bool(spec.get("replace_existing", False)),
+            )
+            item_success = _record_step(
+                item_post_state,
+                item_steps,
+                item_checks,
+                "spawn_actor_with_defaults",
+                spawn_result,
+            ) and item_success
+            actor_target = (
+                (spawn_result.get("targets") or [requested_name])[0] or requested_name
+            )
+        elif not spec.get("actor_name") and not spec.get("name"):
+            failed_changes.append(
+                {
+                    "target": requested_name,
+                    "field": "actor_class",
+                    "error": "actor_class is required when no existing actor name is provided",
+                }
+            )
+            items.append(
+                {
+                    "target": requested_name,
+                    "success": False,
+                    "verification": {"verified": False, "checks": []},
+                    "steps": item_steps,
+                }
+            )
+            continue
+
+        if "intensity" in spec:
+            intensity_result = set_scene_light_intensity(
+                actor_target,
+                float(spec["intensity"]),
+                unit=str(spec.get("unit", "Unitless")),
+                mobility=spec.get("mobility"),
+            )
+            item_success = _record_step(
+                item_post_state,
+                item_steps,
+                item_checks,
+                "set_scene_light_intensity",
+                intensity_result,
+            ) and item_success
+
+        if spec.get("aim_target") is not None:
+            aim_result = aim_actor_at(
+                actor_target,
+                spec["aim_target"],
+                preserve_roll=bool(spec.get("preserve_roll", True)),
+                roll=spec.get("roll"),
+            )
+            item_success = _record_step(
+                item_post_state,
+                item_steps,
+                item_checks,
+                "aim_actor_at",
+                aim_result,
+            ) and item_success
+
+        if spec.get("post_process_overrides") is not None:
+            overrides_result = set_post_process_overrides(
+                actor_target,
+                spec["post_process_overrides"],
+            )
+            item_success = _record_step(
+                item_post_state,
+                item_steps,
+                item_checks,
+                "set_post_process_overrides",
+                overrides_result,
+            ) and item_success
+
+        item_verified = item_success and all(check.get("ok", False) for check in item_checks)
+        if actor_target not in targets:
+            targets.append(actor_target)
+        items.append(
+            {
+                "target": actor_target,
+                "success": item_success,
+                "verification": {"verified": item_verified, "checks": item_checks},
+                "steps": item_steps,
+                "post_state": item_post_state,
+            }
+        )
+
+    verified = not failed_changes and all(check.get("ok", False) for check in all_checks)
+    succeeded_items = [item for item in items if item.get("success")]
+    verified_items = [
+        item for item in items if item.get("verification", {}).get("verified", False)
+    ]
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "scene",
+        "targets": targets,
+        "applied_changes": applied_changes,
+        "failed_changes": failed_changes,
+        "post_state": post_state,
+        "verification": {"verified": verified, "checks": all_checks},
+        "summary": {
+            "requested": len(actor_specs),
+            "returned": len(items),
+            "succeeded": len(succeeded_items),
+            "failed": len(items) - len(succeeded_items),
+            "verified": len(verified_items),
+        },
+        "items": items,
+    }
 
 
 def spawn_actor_with_defaults(

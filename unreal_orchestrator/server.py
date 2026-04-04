@@ -53,6 +53,7 @@ from unreal_material_graph.tools import (
     get_material_graph_harness_info,
 )
 from unreal_scene.tools import (
+    apply_scene_actor_batch as scene_apply_scene_actor_batch,
     aim_actor_at as scene_aim_actor_at,
     create_spot_light_ring as scene_create_spot_light_ring,
     get_scene_backend_status,
@@ -293,6 +294,23 @@ def create_spot_light_ring(
         mobility,
         name_prefix,
         replace_existing,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def apply_scene_actor_batch(
+    actor_specs: list[Dict[str, Any]],
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded batch actor recipe command for scene setup workflows."""
+    return _guard_live_editor_call(
+        "scene.apply_scene_actor_batch",
+        scene_apply_scene_actor_batch,
+        actor_specs,
         wait_for_ready=wait_for_ready,
         ready_timeout_seconds=ready_timeout_seconds,
         ready_poll_seconds=ready_poll_seconds,
@@ -865,6 +883,7 @@ for tool in [get_harness_domains, get_domain_design, route_harness_task]:
 DEFAULT_TOOLS = [
     get_scene_harness_info,
     get_scene_backend_status,
+    apply_scene_actor_batch,
     query_scene_actors,
     query_scene_lights,
     ensure_folder,

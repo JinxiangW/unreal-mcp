@@ -8,6 +8,7 @@ from typing import Any, AsyncIterator, Dict
 from fastmcp import FastMCP
 
 from .tools import (
+    apply_scene_actor_batch,
     aim_actor_at,
     create_spot_light_ring,
     get_scene_backend_status,
@@ -29,6 +30,7 @@ mcp = FastMCP("UnrealSceneHarness", lifespan=server_lifespan)
 
 for tool in [
     get_scene_harness_info,
+    apply_scene_actor_batch,
     get_scene_backend_status,
     query_scene_actors,
     query_scene_lights,

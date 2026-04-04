@@ -159,6 +159,20 @@ def _mcp_coerce_like(current_value, value):
 """
 
 _SCENE_POST_PROCESS_HELPERS = """
+def _mcp_find_override_flag(settings, field):
+    candidates = [
+        f"override_{field}",
+        f"b_override_{field}",
+        "bOverride" + "".join(part.capitalize() for part in field.split("_")),
+    ]
+    for candidate in candidates:
+        try:
+            settings.get_editor_property(candidate)
+            return candidate
+        except Exception:
+            pass
+    return None
+
 def _mcp_get_post_process_binding(actor):
     for prop_name in ("settings", "post_process_settings"):
         try:
@@ -881,7 +895,9 @@ else:
         "verification": {{"verified": verified, "checks": checks}},
     }})
 """
-    return _run_editor_python(_wrap_scene_python(body))
+    return _run_editor_python(
+        _wrap_scene_python(body, _SCENE_POST_PROCESS_PYTHON_HELPERS)
+    )
 
 
 def set_post_process_overrides(
@@ -933,14 +949,18 @@ else:
         applied_changes = []
         failed_changes = []
         expected_values = {{}}
+        expected_override_flags = {{}}
         for field, raw_value in overrides.items():
-            override_flag = f"b_override_{{field}}"
             try:
+                override_flag = _mcp_find_override_flag(settings, field)
+                if override_flag is None:
+                    raise Exception(f"No override flag property found for '{{field}}'")
                 current_value = settings.get_editor_property(field)
                 coerced_value = _mcp_coerce_like(current_value, raw_value)
                 settings.set_editor_property(override_flag, True)
                 settings.set_editor_property(field, coerced_value)
                 expected_values[field] = _mcp_to_simple(coerced_value)
+                expected_override_flags[field] = override_flag
                 applied_changes.append({{"target": actor_name, "field": field, "value": expected_values[field]}})
             except Exception as exc:
                 failed_changes.append({{"target": actor_name, "field": field, "error": str(exc)}})
@@ -956,11 +976,14 @@ else:
         override_state = {{}}
         checks = []
         for field in overrides:
-            override_flag = f"b_override_{{field}}"
             try:
+                override_flag = expected_override_flags.get(field) or _mcp_find_override_flag(readback_settings, field)
+                if override_flag is None:
+                    raise Exception(f"No override flag property found for '{{field}}'")
                 actual_override = readback_settings.get_editor_property(override_flag)
                 actual_value = readback_settings.get_editor_property(field)
                 override_state[field] = {{
+                    "override_flag": override_flag,
                     "override_enabled": _mcp_to_simple(actual_override),
                     "value": _mcp_to_simple(actual_value),
                 }}
@@ -988,7 +1011,9 @@ else:
             "verification": {{"verified": verified, "checks": checks}},
         }})
 """
-    return _run_editor_python(_wrap_scene_python(body))
+    return _run_editor_python(
+        _wrap_scene_python(body, _SCENE_POST_PROCESS_PYTHON_HELPERS)
+    )
 
 
 def spawn_actor_with_defaults(

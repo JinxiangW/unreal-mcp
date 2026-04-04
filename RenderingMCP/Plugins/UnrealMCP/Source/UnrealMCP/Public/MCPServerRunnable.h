@@ -27,10 +27,11 @@ protected:
 	void HandleClientConnection(TSharedPtr<FSocket> ClientSocket);
 	bool TryParseBufferedRequest(const TArray<uint8>& RequestBytes, TSharedPtr<FJsonObject>& OutJsonObject, FString& OutRequestText) const;
 	bool SendResponse(TSharedPtr<FSocket> Client, const FString& Response) const;
+	bool ReceiveExact(TSharedPtr<FSocket> Client, uint8* Buffer, int32 BytesToRead) const;
 
 private:
 	UEpicUnrealMCPBridge* Bridge;
 	TSharedPtr<FSocket> ListenerSocket;
 	TSharedPtr<FSocket> ClientSocket;
 	bool bRunning;
-}; 
+};

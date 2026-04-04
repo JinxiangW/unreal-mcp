@@ -14,8 +14,24 @@
 namespace
 {
     constexpr int32 SocketBufferSize = 65536;
-    constexpr int32 ReceiveBufferSize = 8192;
+    constexpr int32 HeaderSizeBytes = 4;
     constexpr int32 MaxRequestSizeBytes = 4 * 1024 * 1024;
+
+    uint32 DecodeMessageLength(const uint8* HeaderBytes)
+    {
+        return (static_cast<uint32>(HeaderBytes[0]) << 24) |
+               (static_cast<uint32>(HeaderBytes[1]) << 16) |
+               (static_cast<uint32>(HeaderBytes[2]) << 8) |
+               static_cast<uint32>(HeaderBytes[3]);
+    }
+
+    void EncodeMessageLength(uint32 MessageLength, uint8* HeaderBytes)
+    {
+        HeaderBytes[0] = static_cast<uint8>((MessageLength >> 24) & 0xFF);
+        HeaderBytes[1] = static_cast<uint8>((MessageLength >> 16) & 0xFF);
+        HeaderBytes[2] = static_cast<uint8>((MessageLength >> 8) & 0xFF);
+        HeaderBytes[3] = static_cast<uint8>(MessageLength & 0xFF);
+    }
 
     FString MakeErrorResponse(const FString& ErrorMessage)
     {
@@ -51,7 +67,7 @@ bool FMCPServerRunnable::Init()
 uint32 FMCPServerRunnable::Run()
 {
     UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Server thread starting..."));
-    
+
     while (bRunning)
     {
         bool bPending = false;
@@ -61,8 +77,7 @@ uint32 FMCPServerRunnable::Run()
             if (ClientSocket.IsValid())
             {
                 UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Client connection accepted"));
-                
-                // Set socket options to improve connection stability
+
                 ClientSocket->SetNoDelay(true);
                 int32 ActualSocketBufferSize = SocketBufferSize;
                 ClientSocket->SetSendBufferSize(SocketBufferSize, ActualSocketBufferSize);
@@ -75,11 +90,10 @@ uint32 FMCPServerRunnable::Run()
                 UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Failed to accept client connection"));
             }
         }
-        
-        // Small sleep to prevent tight loop
+
         FPlatformProcess::Sleep(0.1f);
     }
-    
+
     UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Server thread stopping"));
     return 0;
 }
@@ -103,77 +117,57 @@ void FMCPServerRunnable::HandleClientConnection(TSharedPtr<FSocket> InClientSock
 
     InClientSocket->SetNonBlocking(false);
 
-    TArray<uint8> RequestBytes;
-    RequestBytes.Reserve(ReceiveBufferSize);
-
-    uint8 Buffer[ReceiveBufferSize];
     while (bRunning && InClientSocket.IsValid())
     {
-        int32 BytesRead = 0;
-        if (InClientSocket->Recv(Buffer, ReceiveBufferSize, BytesRead))
+        uint8 HeaderBytes[HeaderSizeBytes];
+        if (!ReceiveExact(InClientSocket, HeaderBytes, HeaderSizeBytes))
         {
-            if (BytesRead == 0)
-            {
-                UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Client disconnected before request completed"));
-                break;
-            }
-
-            RequestBytes.Append(Buffer, BytesRead);
-
-            if (RequestBytes.Num() > MaxRequestSizeBytes)
-            {
-                UE_LOG(LogTemp, Error, TEXT("MCPServerRunnable: Request exceeded %d bytes"), MaxRequestSizeBytes);
-                SendResponse(InClientSocket, MakeErrorResponse(TEXT("Request too large")));
-                break;
-            }
-
-            TSharedPtr<FJsonObject> JsonObject;
-            FString RequestText;
-            if (!TryParseBufferedRequest(RequestBytes, JsonObject, RequestText))
-            {
-                continue;
-            }
-
-            FString LogRequest = RequestText.Len() > 200 ? RequestText.Left(200) + TEXT("...") : RequestText;
-            UE_LOG(LogTemp, Verbose, TEXT("MCPServerRunnable: Parsed complete request (%d chars): %s"),
-                   RequestText.Len(), *LogRequest);
-
-            FString CommandType;
-            if (!JsonObject->TryGetStringField(TEXT("type"), CommandType))
-            {
-                UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Missing 'type' field in command"));
-                SendResponse(InClientSocket, MakeErrorResponse(TEXT("Missing required field: type")));
-                break;
-            }
-
-            const TSharedPtr<FJsonObject>* ParamsObject = nullptr;
-            TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-            if (JsonObject->TryGetObjectField(TEXT("params"), ParamsObject) && ParamsObject && ParamsObject->IsValid())
-            {
-                Params = *ParamsObject;
-            }
-
-            UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Executing command: %s"), *CommandType);
-            const FString Response = Bridge->ExecuteCommand(CommandType, Params);
-            SendResponse(InClientSocket, Response);
             break;
         }
 
-        const int32 LastError = (int32)ISocketSubsystem::Get()->GetLastErrorCode();
-        if (LastError == SE_EWOULDBLOCK)
+        const uint32 RequestSizeBytes = DecodeMessageLength(HeaderBytes);
+        if (RequestSizeBytes == 0 || RequestSizeBytes > MaxRequestSizeBytes)
         {
-            FPlatformProcess::Sleep(0.01f);
-            continue;
+            UE_LOG(LogTemp, Error, TEXT("MCPServerRunnable: Invalid request size %u bytes"), RequestSizeBytes);
+            SendResponse(InClientSocket, MakeErrorResponse(TEXT("Invalid request size")));
+            break;
         }
 
-        if (LastError == SE_EINTR)
+        TArray<uint8> RequestBytes;
+        RequestBytes.SetNumUninitialized(static_cast<int32>(RequestSizeBytes));
+        if (!ReceiveExact(InClientSocket, RequestBytes.GetData(), static_cast<int32>(RequestSizeBytes)))
         {
-            UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Socket read interrupted, retrying"));
-            continue;
+            UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Client disconnected before request payload completed"));
+            break;
         }
 
-        UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Client disconnected or socket error. Last error code: %d"),
-               LastError);
+        TSharedPtr<FJsonObject> JsonObject;
+        FString RequestText;
+        if (!TryParseBufferedRequest(RequestBytes, JsonObject, RequestText))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Invalid JSON request payload"));
+            SendResponse(InClientSocket, MakeErrorResponse(TEXT("Invalid JSON request payload")));
+            break;
+        }
+
+        FString CommandType;
+        if (!JsonObject->TryGetStringField(TEXT("type"), CommandType))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Missing 'type' field in command"));
+            SendResponse(InClientSocket, MakeErrorResponse(TEXT("Missing required field: type")));
+            break;
+        }
+
+        const TSharedPtr<FJsonObject>* ParamsObject = nullptr;
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        if (JsonObject->TryGetObjectField(TEXT("params"), ParamsObject) && ParamsObject && ParamsObject->IsValid())
+        {
+            Params = *ParamsObject;
+        }
+
+        UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Executing command: %s"), *CommandType);
+        const FString Response = Bridge->ExecuteCommand(CommandType, Params);
+        SendResponse(InClientSocket, Response);
         break;
     }
 }
@@ -211,17 +205,33 @@ bool FMCPServerRunnable::SendResponse(TSharedPtr<FSocket> Client, const FString&
 
     FTCHARToUTF8 UTF8Response(*Response);
     const uint8* DataToSend = reinterpret_cast<const uint8*>(UTF8Response.Get());
-    int32 TotalDataSize = UTF8Response.Length();
-    int32 TotalBytesSent = 0;
+    const int32 PayloadSize = UTF8Response.Length();
+    uint8 HeaderBytes[HeaderSizeBytes];
+    EncodeMessageLength(static_cast<uint32>(PayloadSize), HeaderBytes);
 
-    while (TotalBytesSent < TotalDataSize)
+    int32 HeaderBytesSent = 0;
+    while (HeaderBytesSent < HeaderSizeBytes)
     {
         int32 BytesSent = 0;
-        if (!Client->Send(DataToSend + TotalBytesSent, TotalDataSize - TotalBytesSent, BytesSent))
+        if (!Client->Send(HeaderBytes + HeaderBytesSent, HeaderSizeBytes - HeaderBytesSent, BytesSent))
         {
             const int32 LastError = (int32)ISocketSubsystem::Get()->GetLastErrorCode();
-            UE_LOG(LogTemp, Error, TEXT("MCPServerRunnable: Failed to send response after %d/%d bytes - Error code: %d"),
-                   TotalBytesSent, TotalDataSize, LastError);
+            UE_LOG(LogTemp, Error, TEXT("MCPServerRunnable: Failed to send response header after %d/%d bytes - Error code: %d"),
+                   HeaderBytesSent, HeaderSizeBytes, LastError);
+            return false;
+        }
+        HeaderBytesSent += BytesSent;
+    }
+
+    int32 TotalBytesSent = 0;
+    while (TotalBytesSent < PayloadSize)
+    {
+        int32 BytesSent = 0;
+        if (!Client->Send(DataToSend + TotalBytesSent, PayloadSize - TotalBytesSent, BytesSent))
+        {
+            const int32 LastError = (int32)ISocketSubsystem::Get()->GetLastErrorCode();
+            UE_LOG(LogTemp, Error, TEXT("MCPServerRunnable: Failed to send response payload after %d/%d bytes - Error code: %d"),
+                   TotalBytesSent, PayloadSize, LastError);
             return false;
         }
 
@@ -231,4 +241,39 @@ bool FMCPServerRunnable::SendResponse(TSharedPtr<FSocket> Client, const FString&
     UE_LOG(LogTemp, Verbose, TEXT("MCPServerRunnable: Response sent successfully (%d bytes)"),
            TotalBytesSent);
     return true;
-} 
+}
+
+bool FMCPServerRunnable::ReceiveExact(TSharedPtr<FSocket> Client, uint8* Buffer, int32 BytesToRead) const
+{
+    if (!Client.IsValid() || Buffer == nullptr || BytesToRead <= 0)
+    {
+        return false;
+    }
+
+    int32 TotalBytesRead = 0;
+    while (TotalBytesRead < BytesToRead)
+    {
+        int32 BytesRead = 0;
+        if (!Client->Recv(Buffer + TotalBytesRead, BytesToRead - TotalBytesRead, BytesRead))
+        {
+            const int32 LastError = (int32)ISocketSubsystem::Get()->GetLastErrorCode();
+            if (LastError == SE_EINTR)
+            {
+                continue;
+            }
+
+            UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Socket receive failed after %d/%d bytes - Error code: %d"),
+                   TotalBytesRead, BytesToRead, LastError);
+            return false;
+        }
+
+        if (BytesRead <= 0)
+        {
+            return false;
+        }
+
+        TotalBytesRead += BytesRead;
+    }
+
+    return true;
+}

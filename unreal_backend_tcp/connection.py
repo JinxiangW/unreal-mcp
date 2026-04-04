@@ -21,6 +21,7 @@ class UnrealConnection:
     DEFAULT_RECV_TIMEOUT = 30
     LARGE_OP_RECV_TIMEOUT = 300
     BUFFER_SIZE = 8192
+    HEADER_SIZE = 4
 
     LARGE_OPERATION_COMMANDS = {
         "get_material_graph",
@@ -111,58 +112,42 @@ class UnrealConnection:
             return self.LARGE_OP_RECV_TIMEOUT
         return self.DEFAULT_RECV_TIMEOUT
 
+    def _recv_exact(self, num_bytes: int, timeout: int) -> bytes:
+        if not self.socket:
+            raise ConnectionError("Socket not connected")
+
+        chunks = []
+        remaining = num_bytes
+        start_time = time.time()
+        while remaining > 0:
+            elapsed = time.time() - start_time
+            if elapsed > timeout:
+                raise TimeoutError(f"Timeout receiving {num_bytes} bytes")
+
+            self.socket.settimeout(max(timeout - elapsed, 1))
+            chunk = self.socket.recv(min(self.BUFFER_SIZE, remaining))
+            if not chunk:
+                raise ConnectionError(
+                    f"Connection closed while receiving {num_bytes} bytes"
+                )
+            chunks.append(chunk)
+            remaining -= len(chunk)
+
+        return b"".join(chunks)
+
     def _receive_response(self, command_type: str) -> bytes:
         if not self.socket:
             raise ConnectionError("Socket not connected")
 
         timeout = self._get_timeout_for_command(command_type)
-        self.socket.settimeout(timeout)
-        chunks = []
-        start_time = time.time()
-
         try:
-            while True:
-                elapsed = time.time() - start_time
-                if elapsed > timeout:
-                    raise socket.timeout(f"Overall timeout after {elapsed:.1f}s")
-
-                try:
-                    chunk = self.socket.recv(self.BUFFER_SIZE)
-                except socket.timeout:
-                    if chunks:
-                        data = b"".join(chunks)
-                        try:
-                            json.loads(data.decode("utf-8"))
-                            return data
-                        except (json.JSONDecodeError, UnicodeDecodeError):
-                            pass
-                    raise
-
-                if not chunk:
-                    if not chunks:
-                        raise ConnectionError(
-                            "Connection closed before receiving any data"
-                        )
-                    break
-
-                chunks.append(chunk)
-                data = b"".join(chunks)
-                try:
-                    json.loads(data.decode("utf-8"))
-                    return data
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    continue
+            header = self._recv_exact(self.HEADER_SIZE, timeout)
+            payload_size = struct.unpack("!I", header)[0]
+            if payload_size == 0:
+                raise ConnectionError("Received empty response payload")
+            return self._recv_exact(payload_size, timeout)
         except socket.timeout as exc:
-            if chunks:
-                data = b"".join(chunks)
-                try:
-                    json.loads(data.decode("utf-8"))
-                    return data
-                except Exception:
-                    pass
             raise TimeoutError("Timeout waiting for response") from exc
-
-        raise ConnectionError("Connection closed without response")
 
     def _send_command_once(
         self, command: str, params: Optional[Dict[str, Any]], attempt: int
@@ -178,8 +163,10 @@ class UnrealConnection:
                     raise ConnectionError("Socket not connected")
 
                 command_json = json.dumps({"type": command, "params": params or {}})
+                command_bytes = command_json.encode("utf-8")
+                header = struct.pack("!I", len(command_bytes))
                 self.socket.settimeout(10)
-                self.socket.sendall(command_json.encode("utf-8"))
+                self.socket.sendall(header + command_bytes)
                 response_data = self._receive_response(command)
                 response = json.loads(response_data.decode("utf-8"))
 

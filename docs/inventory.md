@@ -223,6 +223,11 @@
 - `create_material_graph_recipe`
 - `connect_material_nodes`
 
+å½“å‰è¡¥å¼ºç‚¹ï¼š
+
+- `TextureSample` / `TextureSampleParameter2D` æ”¯æŒ `sampler_type`
+- è¿žçº¿æ”¯æŒ texture channel è¾“å‡ºï¼ˆ`RGB/R/G/B/A`ï¼‰
+
 ### Diagnostics
 
 ç›®å½•ï¼š`unreal_diagnostics/`

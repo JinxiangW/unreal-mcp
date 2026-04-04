@@ -100,6 +100,88 @@ FEpicUnrealMCPMaterialCommands::FEpicUnrealMCPMaterialCommands()
 {
 }
 
+namespace
+{
+    EMaterialSamplerType ResolveTextureSamplerType(const FString& RequestedSamplerType, UTexture* Texture)
+    {
+        const FString Normalized = RequestedSamplerType.TrimStartAndEnd().ToLower();
+
+        if (Normalized == TEXT("color"))
+        {
+            return SAMPLERTYPE_Color;
+        }
+        if (Normalized == TEXT("linearcolor") || Normalized == TEXT("linear_color"))
+        {
+            return SAMPLERTYPE_LinearColor;
+        }
+        if (Normalized == TEXT("normal") || Normalized == TEXT("normalmap") || Normalized == TEXT("normal_map"))
+        {
+            return SAMPLERTYPE_Normal;
+        }
+        if (Normalized == TEXT("masks") || Normalized == TEXT("mask"))
+        {
+            return SAMPLERTYPE_Masks;
+        }
+        if (Normalized == TEXT("grayscale") || Normalized == TEXT("greyscale"))
+        {
+            return SAMPLERTYPE_Grayscale;
+        }
+        if (Normalized == TEXT("alpha"))
+        {
+            return SAMPLERTYPE_Alpha;
+        }
+        if (Normalized == TEXT("data"))
+        {
+            return SAMPLERTYPE_Data;
+        }
+
+        if (Texture)
+        {
+            if (Texture->CompressionSettings == TC_Normalmap)
+            {
+                return SAMPLERTYPE_Normal;
+            }
+
+            return Texture->SRGB ? SAMPLERTYPE_Color : SAMPLERTYPE_LinearColor;
+        }
+
+        return SAMPLERTYPE_Color;
+    }
+
+    FString SamplerTypeToString(EMaterialSamplerType SamplerType)
+    {
+        switch (SamplerType)
+        {
+        case SAMPLERTYPE_Color:
+            return TEXT("Color");
+        case SAMPLERTYPE_LinearColor:
+            return TEXT("LinearColor");
+        case SAMPLERTYPE_Normal:
+            return TEXT("Normal");
+        case SAMPLERTYPE_Masks:
+            return TEXT("Masks");
+        case SAMPLERTYPE_Grayscale:
+            return TEXT("Grayscale");
+        case SAMPLERTYPE_Alpha:
+            return TEXT("Alpha");
+        case SAMPLERTYPE_Data:
+            return TEXT("Data");
+        default:
+            return TEXT("Unknown");
+        }
+    }
+
+    int32 ParseExplicitOutputIndex(const FString& OutputName)
+    {
+        if (OutputName.StartsWith(TEXT("Output_")))
+        {
+            return FCString::Atoi(*OutputName.RightChop(7));
+        }
+
+        return INDEX_NONE;
+    }
+}
+
 TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params)
 {
     // Material creation
@@ -783,6 +865,53 @@ FExpressionInput* FEpicUnrealMCPMaterialCommands::GetExpressionInputByName(UMate
     return nullptr;
 }
 
+int32 FEpicUnrealMCPMaterialCommands::GetExpressionOutputIndexByName(UMaterialExpression* Expression, const FString& OutputName)
+{
+    if (!Expression)
+    {
+        return 0;
+    }
+
+    if (OutputName.IsEmpty())
+    {
+        return 0;
+    }
+
+    const int32 ExplicitIndex = ParseExplicitOutputIndex(OutputName);
+    if (ExplicitIndex != INDEX_NONE)
+    {
+        return ExplicitIndex;
+    }
+
+    const FString LowerOutputName = OutputName.ToLower();
+    if (LowerOutputName == TEXT("output") || LowerOutputName == TEXT("rgb") || LowerOutputName == TEXT("rgba"))
+    {
+        return 0;
+    }
+
+    if (Cast<UMaterialExpressionTextureSample>(Expression) || Cast<UMaterialExpressionTextureSampleParameter2D>(Expression))
+    {
+        if (LowerOutputName == TEXT("r") || LowerOutputName == TEXT("red"))
+        {
+            return 1;
+        }
+        if (LowerOutputName == TEXT("g") || LowerOutputName == TEXT("green"))
+        {
+            return 2;
+        }
+        if (LowerOutputName == TEXT("b") || LowerOutputName == TEXT("blue"))
+        {
+            return 3;
+        }
+        if (LowerOutputName == TEXT("a") || LowerOutputName == TEXT("alpha"))
+        {
+            return 4;
+        }
+    }
+
+    return 0;
+}
+
 FExpressionInput* FEpicUnrealMCPMaterialCommands::GetMaterialPropertyInput(UMaterial* Material, const FString& PropertyName)
 {
     if (!Material || PropertyName.IsEmpty()) return nullptr;
@@ -1016,12 +1145,22 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
                 NodeObj->SetStringField(TEXT("texture_path"), TexObj->Texture->GetPathName());
             }
         }
+        else if (UMaterialExpressionTextureSampleParameter2D* TexParam = Cast<UMaterialExpressionTextureSampleParameter2D>(Expr))
+        {
+            if (TexParam->Texture)
+            {
+                NodeObj->SetStringField(TEXT("texture_path"), TexParam->Texture->GetPathName());
+            }
+            NodeObj->SetStringField(TEXT("sampler_type"), SamplerTypeToString(TexParam->SamplerType));
+            NodeObj->SetStringField(TEXT("parameter_name"), TexParam->ParameterName.ToString());
+        }
         else if (UMaterialExpressionTextureSample* TexSample = Cast<UMaterialExpressionTextureSample>(Expr))
         {
             if (TexSample->Texture)
             {
                 NodeObj->SetStringField(TEXT("texture_path"), TexSample->Texture->GetPathName());
             }
+            NodeObj->SetStringField(TEXT("sampler_type"), SamplerTypeToString(TexSample->SamplerType));
         }
         else if (UMaterialExpressionCustom* CustomExpr = Cast<UMaterialExpressionCustom>(Expr))
         {
@@ -1398,15 +1537,63 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
             {
                 UMaterialExpressionTextureSample* TexExpr = NewObject<UMaterialExpressionTextureSample>(Material);
                 FString TexturePath;
+                UTexture* Texture = nullptr;
                 if (NodeObj->TryGetStringField(TEXT("texture"), TexturePath))
                 {
-                    UTexture* Texture = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexturePath));
+                    Texture = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexturePath));
                     if (Texture)
                     {
                         TexExpr->Texture = Texture;
                     }
                 }
+                FString SamplerTypeName;
+                if (NodeObj->TryGetStringField(TEXT("sampler_type"), SamplerTypeName))
+                {
+                    TexExpr->SamplerType = ResolveTextureSamplerType(SamplerTypeName, Texture);
+                }
+                else
+                {
+                    TexExpr->SamplerType = ResolveTextureSamplerType(TEXT(""), Texture);
+                }
                 NewExpression = TexExpr;
+            }
+            else if (ExpressionType == TEXT("TextureSampleParameter2D") || ExpressionType == TEXT("TextureParameter"))
+            {
+                UMaterialExpressionTextureSampleParameter2D* TexParam = NewObject<UMaterialExpressionTextureSampleParameter2D>(Material);
+                FString TexturePath;
+                UTexture* Texture = nullptr;
+                if (NodeObj->TryGetStringField(TEXT("texture"), TexturePath))
+                {
+                    Texture = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexturePath));
+                    if (Texture)
+                    {
+                        TexParam->Texture = Texture;
+                    }
+                }
+
+                FString ParamName;
+                if (NodeObj->TryGetStringField(TEXT("parameter_name"), ParamName))
+                {
+                    TexParam->ParameterName = FName(*ParamName);
+                }
+
+                FString Group;
+                if (NodeObj->TryGetStringField(TEXT("group"), Group))
+                {
+                    TexParam->Group = FName(*Group);
+                }
+
+                FString SamplerTypeName;
+                if (NodeObj->TryGetStringField(TEXT("sampler_type"), SamplerTypeName))
+                {
+                    TexParam->SamplerType = ResolveTextureSamplerType(SamplerTypeName, Texture);
+                }
+                else
+                {
+                    TexParam->SamplerType = ResolveTextureSamplerType(TEXT(""), Texture);
+                }
+
+                NewExpression = TexParam;
             }
             else if (ExpressionType == TEXT("ScalarParameter"))
             {
@@ -1625,7 +1812,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
                     if (PropertyInput)
                     {
                         PropertyInput->Expression = *SourceExpr;
-                        PropertyInput->OutputIndex = 0;
+                        PropertyInput->OutputIndex = GetExpressionOutputIndexByName(*SourceExpr, SourceOutput);
                         ConnectionCount++;
                     }
                 }
@@ -1642,7 +1829,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
                     if (InputPtr)
                     {
                         InputPtr->Expression = *SourceExpr;
-                        InputPtr->OutputIndex = (SourceOutput == TEXT("Output")) ? 0 : 0;
+                        InputPtr->OutputIndex = GetExpressionOutputIndexByName(*SourceExpr, SourceOutput);
                         ConnectionCount++;
                     }
                 }

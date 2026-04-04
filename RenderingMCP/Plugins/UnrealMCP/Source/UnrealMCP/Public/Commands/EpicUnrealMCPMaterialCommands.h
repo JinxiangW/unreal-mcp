@@ -77,7 +77,10 @@ private:
     
     /** Get expression input by name */
     FExpressionInput* GetExpressionInputByName(UMaterialExpression* Expression, const FString& InputName);
-    
+
+    /** Resolve a source output label to a concrete output index for a node */
+    int32 GetExpressionOutputIndexByName(UMaterialExpression* Expression, const FString& OutputName);
+     
     /** Get material property input (BaseColor, Normal, etc.) */
     FExpressionInput* GetMaterialPropertyInput(UMaterial* Material, const FString& PropertyName);
 };

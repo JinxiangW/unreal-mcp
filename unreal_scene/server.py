@@ -11,6 +11,7 @@ from .tools import (
     apply_scene_actor_batch,
     aim_actor_at,
     create_spot_light_ring,
+    delete_scene_actors_batch,
     get_scene_backend_status,
     get_scene_harness_info,
     query_scene_actors,
@@ -31,6 +32,7 @@ mcp = FastMCP("UnrealSceneHarness", lifespan=server_lifespan)
 for tool in [
     get_scene_harness_info,
     apply_scene_actor_batch,
+    delete_scene_actors_batch,
     get_scene_backend_status,
     query_scene_actors,
     query_scene_lights,

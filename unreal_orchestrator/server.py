@@ -56,6 +56,7 @@ from unreal_scene.tools import (
     apply_scene_actor_batch as scene_apply_scene_actor_batch,
     aim_actor_at as scene_aim_actor_at,
     create_spot_light_ring as scene_create_spot_light_ring,
+    delete_scene_actors_batch as scene_delete_scene_actors_batch,
     get_scene_backend_status,
     get_scene_harness_info,
     query_scene_actors as scene_query_scene_actors,
@@ -311,6 +312,23 @@ def apply_scene_actor_batch(
         "scene.apply_scene_actor_batch",
         scene_apply_scene_actor_batch,
         actor_specs,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def delete_scene_actors_batch(
+    delete_specs: list[Dict[str, Any]],
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded batch actor deletion command for scene cleanup workflows."""
+    return _guard_live_editor_call(
+        "scene.delete_scene_actors_batch",
+        scene_delete_scene_actors_batch,
+        delete_specs,
         wait_for_ready=wait_for_ready,
         ready_timeout_seconds=ready_timeout_seconds,
         ready_poll_seconds=ready_poll_seconds,
@@ -884,6 +902,7 @@ DEFAULT_TOOLS = [
     get_scene_harness_info,
     get_scene_backend_status,
     apply_scene_actor_batch,
+    delete_scene_actors_batch,
     query_scene_actors,
     query_scene_lights,
     ensure_folder,

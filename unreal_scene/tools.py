@@ -280,6 +280,7 @@ def get_scene_harness_info() -> Dict[str, Any]:
             "set_scene_light_intensity",
             "create_spot_light_ring",
             "apply_scene_actor_batch",
+            "delete_scene_actors_batch",
             "query_scene_actors",
             "query_scene_lights",
             "aim_actor_at",
@@ -1212,6 +1213,206 @@ def apply_scene_actor_batch(actor_specs: list[Dict[str, Any]]) -> Dict[str, Any]
         },
         "items": items,
     }
+
+
+def delete_scene_actors_batch(delete_specs: list[Dict[str, Any]]) -> Dict[str, Any]:
+    """Delete scene actors by batch filter specs with optional exclusions and keep-counts."""
+    operation_id = _new_operation_id("delete_scene_actors_batch")
+    if not isinstance(delete_specs, list) or not delete_specs:
+        return _scene_input_error(
+            operation_id, "delete_specs must be a non-empty array of delete rules"
+        )
+
+    normalized_specs: list[Dict[str, Any]] = []
+    for index, spec in enumerate(delete_specs):
+        if not isinstance(spec, dict):
+            return _scene_input_error(
+                operation_id,
+                f"delete_specs[{index}] must be an object",
+            )
+
+        actor_names = spec.get("actor_names")
+        if actor_names is not None and (
+            not isinstance(actor_names, list)
+            or not all(isinstance(item, str) and item.strip() for item in actor_names)
+        ):
+            return _scene_input_error(
+                operation_id,
+                f"delete_specs[{index}].actor_names must be an array of non-empty strings",
+            )
+
+        exclude_names = spec.get("exclude_names")
+        if exclude_names is not None and (
+            not isinstance(exclude_names, list)
+            or not all(isinstance(item, str) and item.strip() for item in exclude_names)
+        ):
+            return _scene_input_error(
+                operation_id,
+                f"delete_specs[{index}].exclude_names must be an array of non-empty strings",
+            )
+
+        keep_count_raw = spec.get("keep_count", 0)
+        try:
+            keep_count = int(keep_count_raw)
+        except (TypeError, ValueError):
+            return _scene_input_error(
+                operation_id,
+                f"delete_specs[{index}].keep_count must be an integer",
+            )
+        if keep_count < 0:
+            return _scene_input_error(
+                operation_id,
+                f"delete_specs[{index}].keep_count must be >= 0",
+            )
+
+        normalized_specs.append(
+            {
+                "actor_class": spec.get("actor_class"),
+                "name_filter": spec.get("name_filter"),
+                "actor_names": actor_names or [],
+                "exclude_names": exclude_names or [],
+                "keep_count": keep_count,
+                "rule_name": spec.get("rule_name") or f"delete_specs[{index}]",
+            }
+        )
+
+    body = f"""
+operation_id = {_json_literal(operation_id)}
+delete_specs = json.loads({_json_literal(json.dumps(normalized_specs, ensure_ascii=False))})
+
+actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+all_actors = list(unreal.EditorLevelLibrary.get_all_level_actors())
+deleted_targets = set()
+applied_changes = []
+failed_changes = []
+post_state = {{}}
+checks = []
+items = []
+
+for spec in delete_specs:
+    actor_class = spec.get("actor_class")
+    name_filter = spec.get("name_filter")
+    actor_names = set(spec.get("actor_names") or [])
+    exclude_names = set(spec.get("exclude_names") or [])
+    keep_count = int(spec.get("keep_count", 0))
+    rule_name = spec.get("rule_name") or "delete_rule"
+
+    candidates = []
+    for actor in all_actors:
+        actor_name = actor.get_name()
+        actor_label = None
+        try:
+            actor_label = actor.get_actor_label()
+        except Exception:
+            actor_label = None
+
+        actor_key = actor_label or actor_name
+        if actor_key in deleted_targets or actor_name in deleted_targets:
+            continue
+        if actor_key in exclude_names or actor_name in exclude_names:
+            continue
+
+        actor_class_name = actor.get_class().get_name() if hasattr(actor, "get_class") else type(actor).__name__
+        if actor_class and actor_class_name != actor_class:
+            continue
+        if actor_names and actor_key not in actor_names and actor_name not in actor_names:
+            continue
+        if name_filter:
+            haystack = f"{{actor_key}} {{actor_name}}".lower()
+            if name_filter.lower() not in haystack:
+                continue
+
+        candidates.append({{
+            "actor": actor,
+            "target": actor_key,
+            "actor_name": actor_name,
+            "actor_label": actor_label,
+            "class": actor_class_name,
+            "path": actor.get_path_name(),
+            "location": _mcp_to_simple(actor.get_actor_location()),
+        }})
+
+    candidates.sort(key=lambda item: (item["target"] or item["actor_name"]))
+    retained = candidates[:keep_count]
+    to_delete = candidates[keep_count:]
+    retained_targets = [item["target"] for item in retained]
+
+    rule_item = {{
+        "target": rule_name,
+        "success": True,
+        "verification": {{"verified": True, "checks": []}},
+        "summary": {{
+            "matched": len(candidates),
+            "retained": len(retained),
+            "deleted": 0,
+        }},
+        "retained_targets": retained_targets,
+        "deleted_targets": [],
+    }}
+
+    for item in to_delete:
+        actor = item["actor"]
+        target = item["target"]
+        try:
+            deleted = actor_subsystem.destroy_actor(actor)
+        except Exception as exc:
+            deleted = False
+            failed_changes.append({{"target": target, "field": "delete", "error": str(exc)}})
+
+        if not deleted:
+            if not any(change.get("target") == target and change.get("field") == "delete" for change in failed_changes):
+                failed_changes.append({{"target": target, "field": "delete", "error": "destroy_actor returned false"}})
+            rule_item["success"] = False
+            rule_item["verification"]["verified"] = False
+            continue
+
+        deleted_targets.add(target)
+        deleted_targets.add(item["actor_name"])
+        applied_changes.append({{"target": target, "field": "deleted", "value": True}})
+        post_state[target] = {{
+            "deleted": True,
+            "actor_name": item["actor_name"],
+            "actor_label": item["actor_label"],
+            "class": item["class"],
+            "path": item["path"],
+            "location": item["location"],
+        }}
+        actual_actor = _mcp_find_actor(target) or _mcp_find_actor(item["actor_name"])
+        check = _mcp_check(target, "deleted", True, actual_actor is None)
+        checks.append(check)
+        rule_item["verification"]["checks"].append(check)
+        rule_item["deleted_targets"].append(target)
+        rule_item["summary"]["deleted"] += 1
+        if not check["ok"]:
+            rule_item["success"] = False
+            rule_item["verification"]["verified"] = False
+
+    if any(not check["ok"] for check in rule_item["verification"]["checks"]):
+        rule_item["success"] = False
+        rule_item["verification"]["verified"] = False
+    items.append(rule_item)
+
+verified = (not failed_changes) and all(check["ok"] for check in checks)
+_mcp_emit({{
+    "success": verified,
+    "operation_id": operation_id,
+    "domain": "scene",
+    "targets": list(post_state.keys()),
+    "applied_changes": applied_changes,
+    "failed_changes": failed_changes,
+    "post_state": post_state,
+    "verification": {{"verified": verified, "checks": checks}},
+    "summary": {{
+        "requested": len(delete_specs),
+        "matched": sum(item["summary"]["matched"] for item in items),
+        "deleted": sum(item["summary"]["deleted"] for item in items),
+        "retained": sum(item["summary"]["retained"] for item in items),
+        "failed": len(failed_changes),
+    }},
+    "items": items,
+}})
+"""
+    return _run_editor_python(_wrap_scene_python(body))
 
 
 def spawn_actor_with_defaults(

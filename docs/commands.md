@@ -26,6 +26,11 @@
   - 价值：把批量 spawn、朝向、灯光强度、后处理覆盖收成一个可复用的场景配方
   - 适合：批量布灯、批量场景搭建、批量 actor 初始化
 
+- `delete_scene_actors_batch`
+  - 输入：`delete_specs`
+  - 价值：按类、名字、筛选条件批量删除 actor，并支持 `exclude_names / keep_count`
+  - 适合：清灯、清批量测试 actor、保留一个主 PPV 并清理多余副本
+
 - `query_scene_actors`
   - 输入：`actor_class`、`name_filter`、`limit`
   - 价值：把常见场景查询收成 compact 命令，减少 raw `get_actors`

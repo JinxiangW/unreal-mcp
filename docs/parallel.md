@@ -50,6 +50,8 @@
 
 ### 会话 A：Material Graph
 
+当前状态：已完成第一阶段。
+
 范围：
 
 - `unreal_material_graph/`
@@ -71,7 +73,16 @@
 - 能创建至少一个常见节点
 - 能做至少一条有效连线
 
+当前落地：
+
+- `analyze_material_graph`
+- `create_material_graph_recipe`
+- `connect_material_nodes`
+- 已在 `MyToon` 中完成真实环境回归
+
 ### 会话 B：Scene 高层命令
+
+当前状态：已完成。
 
 范围：
 
@@ -99,6 +110,8 @@
 
 ### 会话 C：Asset 收尾
 
+当前状态：已完成第一阶段。
+
 范围：
 
 - `unreal_asset/`
@@ -123,7 +136,16 @@
 
 - 新命令都能在不改 C++ 的前提下跑通
 
+当前落地：
+
+- `duplicate_asset_with_overrides`
+- `ensure_folder`
+- `move_asset_batch`
+- 已在 `MyToon` 中完成真实环境回归
+
 ### 会话 D：Orchestrator
+
+当前状态：已完成第一阶段。
 
 范围：
 
@@ -149,7 +171,15 @@
 - 能对同一任务给出稳定域判断
 - 能聚合域级元信息
 
+当前落地：
+
+- 默认入口已切到 `unreal_orchestrator`
+- 已补统一 preflight、compact 返回和按域最小工具集
+- raw server 改为 internal / debug 入口
+
 ### 会话 E：Diagnostics
+
+当前状态：已完成第一阶段。
 
 范围：
 
@@ -174,7 +204,16 @@
   - commandlet 执行失败
   - 域工具本身失败
 
+当前落地：
+
+- `get_transport_port_status`
+- `get_unreal_python_status`
+- `get_editor_process_status`
+- `get_commandlet_runtime_status`
+
 ### 会话 F：文档
+
+当前状态：已完成本轮同步。
 
 范围：
 

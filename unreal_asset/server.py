@@ -9,10 +9,13 @@ from fastmcp import FastMCP
 
 from .tools import (
     create_asset_with_properties,
+    duplicate_asset_with_overrides,
     ensure_asset_with_properties,
+    ensure_folder,
     get_asset_harness_info,
     import_fbx_asset,
     import_texture_asset,
+    move_asset_batch,
     query_assets_summary,
     update_asset_properties,
 )
@@ -28,7 +31,10 @@ mcp = FastMCP("UnrealAssetHarness", lifespan=server_lifespan)
 for tool in [
     get_asset_harness_info,
     query_assets_summary,
+    ensure_folder,
     ensure_asset_with_properties,
+    duplicate_asset_with_overrides,
+    move_asset_batch,
     create_asset_with_properties,
     update_asset_properties,
     import_texture_asset,

@@ -11,9 +11,9 @@
 - `unreal_orchestrator/`
   - 新的总控 harness 骨架
   - 负责问题域路由与能力目录
-- `unreal_scene/`, `unreal_asset/`, `unreal_material/`
+- `unreal_scene/`, `unreal_asset/`, `unreal_material/`, `unreal_material_graph/`
   - 新子域 harness 的第一阶段骨架
-  - 当前通过 `unreal_editor_mcp` 做 fallback 执行
+  - 当前通过 `unreal_editor_mcp` 或 wrapper backend 做 fallback 执行
 - `RenderingMCP/`
   - Unreal 测试工程
   - `Plugins/UnrealMCP` 插件源码
@@ -44,6 +44,7 @@ python -m unreal_editor_mcp.server_internal
 python -m unreal_scene.server
 python -m unreal_asset.server
 python -m unreal_material.server
+python -m unreal_material_graph.server
 ```
 
 默认连接到：
@@ -68,6 +69,9 @@ python -m unreal_material.server
 - `unreal_scene` / `unreal_asset` / `unreal_material`
   - domain harness
   - 适合按域加载，进一步减少默认 schema
+- `unreal_material_graph`
+  - 已进入最小可用阶段
+  - 当前负责材质图读取、分析和 recipe 构建包装
 - `unreal_editor_mcp`
   - internal / debug / fallback
   - 保留完整 raw 工具面
@@ -83,6 +87,8 @@ python -m unreal_material.server
 - Blueprint 信息读取与高级图命令透传
 - 高层摘要查询：`query_scene_actors`、`query_scene_lights`、`query_assets_summary`
 - 高层写入工作流：`ensure_asset_with_properties`、`update_material_instance_parameters_and_verify`
+- 资产收尾命令：`ensure_folder`、`duplicate_asset_with_overrides`、`move_asset_batch`
+- 材质图域命令：`analyze_material_graph`、`create_material_graph_recipe`、`connect_material_nodes`
 
 ## Harness 索引
 

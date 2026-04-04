@@ -54,6 +54,7 @@
   - `仅做基础验证`
   - `未验证`
 - `结果校验状态`
+  - `已接入`
   - `未接入`
   - `部分接入`
   - `目标要求`
@@ -166,42 +167,52 @@
 
 | 域 | 功能 | 状态 | 执行后端 | 默认入口 | 验证状态 | 结果校验状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| orchestrator | `get_harness_domains` | 可用 | python | orchestrator | 仅做基础验证 | 未接入 |
-| orchestrator | `get_domain_design` | 可用 | python | orchestrator | 仅做基础验证 | 未接入 |
-| orchestrator | `route_harness_task` | 可用 | python | orchestrator | 仅做基础验证 | 未接入 |
-| scene | `get_scene_harness_info` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 未接入 |
-| scene | `get_scene_backend_status` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 未接入 |
-| scene | `query_scene_actors` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| scene | `query_scene_lights` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| scene | `set_scene_light_intensity` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| scene | `create_spot_light_ring` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| scene | `aim_actor_at` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| scene | `set_post_process_overrides` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| scene | `spawn_actor_with_defaults` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| scene | `inspect_scene_python_enums` | 可用 | live editor python | domain harness | 已做真实环境回归 | 未接入 |
-| asset | `get_asset_harness_info` | 可用 | python | orchestrator | 仅做基础验证 | 未接入 |
-| asset | `query_assets_summary` | 可用 | legacy tcp wrapper | orchestrator | 已做真实环境回归 | 部分接入 |
-| asset | `create_asset_with_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| asset | `ensure_asset_with_properties` | 可用 | mixed | orchestrator | 已做真实环境回归 | 部分接入 |
-| asset | `update_asset_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| asset | `import_texture_asset` | 可用 | commandlet | orchestrator | 已做真实环境回归 | 部分接入 |
-| asset | `import_fbx_asset` | 可用 | commandlet | orchestrator | 已做真实环境回归 | 部分接入 |
-| material | `get_material_harness_info` | 可用 | python | orchestrator | 仅做基础验证 | 未接入 |
-| material | `create_material_asset` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| material | `create_material_instance_asset` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| material | `update_material_instance_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| material | `update_material_instance_parameters_and_verify` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| material | `get_material_instance_parameter_names` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| material | `set_material_instance_scalar_parameter` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| material | `set_material_instance_vector_parameter` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 部分接入 |
-| material | `set_material_instance_texture_parameter` | 可用 | live editor python | orchestrator | 仅做基础验证 | 部分接入 |
-| material_graph | `get_material_graph_harness_info` | 部分可用 | python | orchestrator | 仅做基础验证 | 未接入 |
-| diagnostics | `get_harness_health` | 可用 | python | orchestrator | 仅做基础验证 | 未接入 |
-| diagnostics | `get_runtime_policy` | 可用 | python | orchestrator | 已做真实环境回归 | 未接入 |
-| diagnostics | `get_editor_ready_state` | 可用 | python | orchestrator | 已做真实环境回归 | 未接入 |
-| diagnostics | `wait_for_editor_ready` | 可用 | python | orchestrator | 已做真实环境回归 | 未接入 |
-| diagnostics | `get_token_usage_summary` | 可用 | python | orchestrator | 已做真实环境回归 | 未接入 |
-| diagnostics | `dev_launch_editor_and_wait_ready` | 可用 | python | internal/debug | 已做真实环境回归 | 未接入 |
+| orchestrator | `get_harness_domains` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| orchestrator | `get_domain_design` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| orchestrator | `route_harness_task` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| scene | `get_scene_harness_info` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| scene | `get_scene_backend_status` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| scene | `query_scene_actors` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| scene | `query_scene_lights` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| scene | `set_scene_light_intensity` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| scene | `create_spot_light_ring` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| scene | `aim_actor_at` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| scene | `set_post_process_overrides` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| scene | `spawn_actor_with_defaults` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| scene | `inspect_scene_python_enums` | 可用 | live editor python | domain harness | 已做真实环境回归 | 已接入 |
+| asset | `get_asset_harness_info` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| asset | `query_assets_summary` | 可用 | legacy tcp wrapper | orchestrator | 已做真实环境回归 | 已接入 |
+| asset | `ensure_folder` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| asset | `create_asset_with_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| asset | `ensure_asset_with_properties` | 可用 | mixed | orchestrator | 已做真实环境回归 | 已接入 |
+| asset | `duplicate_asset_with_overrides` | 可用 | mixed | orchestrator | 已做真实环境回归 | 已接入 |
+| asset | `move_asset_batch` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| asset | `update_asset_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| asset | `import_texture_asset` | 可用 | commandlet | orchestrator | 已做真实环境回归 | 已接入 |
+| asset | `import_fbx_asset` | 可用 | commandlet | orchestrator | 已做真实环境回归 | 已接入 |
+| material | `get_material_harness_info` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| material | `create_material_asset` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| material | `create_material_instance_asset` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| material | `update_material_instance_properties` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| material | `update_material_instance_parameters_and_verify` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| material | `get_material_instance_parameter_names` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| material | `set_material_instance_scalar_parameter` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| material | `set_material_instance_vector_parameter` | 可用 | live editor python | orchestrator | 已做真实环境回归 | 已接入 |
+| material | `set_material_instance_texture_parameter` | 可用 | live editor python | orchestrator | 仅做基础验证 | 已接入 |
+| material_graph | `get_material_graph_harness_info` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| material_graph | `analyze_material_graph` | 可用 | legacy tcp wrapper | domain harness | 已做真实环境回归 | 已接入 |
+| material_graph | `create_material_graph_recipe` | 可用 | legacy tcp wrapper | domain harness | 已做真实环境回归 | 已接入 |
+| material_graph | `connect_material_nodes` | 可用 | legacy tcp wrapper | domain harness | 已做真实环境回归 | 已接入 |
+| diagnostics | `get_harness_health` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| diagnostics | `get_runtime_policy` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| diagnostics | `get_transport_port_status` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| diagnostics | `get_unreal_python_status` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| diagnostics | `get_editor_process_status` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| diagnostics | `get_commandlet_runtime_status` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| diagnostics | `get_editor_ready_state` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| diagnostics | `wait_for_editor_ready` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| diagnostics | `get_token_usage_summary` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
+| diagnostics | `dev_launch_editor_and_wait_ready` | 可用 | python | internal/debug | 已做真实环境回归 | 已接入 |
 
 ### Orchestrator
 
@@ -280,11 +291,14 @@
 
 目录：`unreal_material_graph/`
 
-状态：仅边界定义，尚未真正实现
+状态：已进入最小可用阶段
 
-当前只有：
+当前已实现：
 
 - `get_material_graph_harness_info`
+- `analyze_material_graph`
+- `create_material_graph_recipe`
+- `connect_material_nodes`
 
 ### Diagnostics
 
@@ -297,6 +311,10 @@
 - `get_editor_ready_state`
 - `wait_for_editor_ready`
 - `get_token_usage_summary`
+- `get_transport_port_status`
+- `get_unreal_python_status`
+- `get_editor_process_status`
+- `get_commandlet_runtime_status`
 - `dev_launch_editor_and_wait_ready`（internal/debug）
 
 ## 3. 已规划但尚未完整实现的功能
@@ -307,20 +325,10 @@
 
 ### Asset
 
-- `duplicate_asset_with_overrides`
-- `ensure_folder`
-- `move_asset_batch`
-
-### Material
-
 - 更完整的材质实例参数层返回结构
 
 ### Material Graph
 
-- 图读取
-- 图分析
-- 节点创建
-- 连线
 - 图重构
 
 ### Orchestrator
@@ -331,10 +339,7 @@
 
 ### Diagnostics
 
-- 端口检查
-- Python 初始化检查
-- commandlet 执行检查
-- 编辑器实例状态检查
+- 更细的错误分类与持久化诊断
 
 ## 4. 现阶段最重要的边界
 

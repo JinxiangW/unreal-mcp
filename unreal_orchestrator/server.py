@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict
 
@@ -12,19 +13,26 @@ from fastmcp import FastMCP
 from .catalog import get_domain, list_domains, route_text
 from unreal_asset.tools import (
     create_asset_with_properties as asset_create_asset_with_properties,
+    duplicate_asset_with_overrides as asset_duplicate_asset_with_overrides,
     ensure_asset_with_properties as asset_ensure_asset_with_properties,
+    ensure_folder as asset_ensure_folder,
     get_asset_harness_info,
     import_fbx_asset,
     import_texture_asset,
+    move_asset_batch as asset_move_asset_batch,
     query_assets_summary as asset_query_assets_summary,
     update_asset_properties as asset_update_asset_properties,
 )
 from unreal_diagnostics.tools import (
     dev_launch_editor_and_wait_ready,
+    get_commandlet_runtime_status,
     get_editor_ready_state,
+    get_editor_process_status,
     get_harness_health,
+    get_transport_port_status,
     get_runtime_policy,
     get_token_usage_summary,
+    get_unreal_python_status,
     wait_for_editor_ready,
 )
 from unreal_material.tools import (
@@ -38,7 +46,12 @@ from unreal_material.tools import (
     update_material_instance_parameters_and_verify as material_update_material_instance_parameters_and_verify,
     update_material_instance_properties as material_update_material_instance_properties,
 )
-from unreal_material_graph.tools import get_material_graph_harness_info
+from unreal_material_graph.tools import (
+    analyze_material_graph as material_graph_analyze_material_graph,
+    connect_material_nodes as material_graph_connect_material_nodes,
+    create_material_graph_recipe as material_graph_create_material_graph_recipe,
+    get_material_graph_harness_info,
+)
 from unreal_scene.tools import (
     aim_actor_at as scene_aim_actor_at,
     create_spot_light_ring as scene_create_spot_light_ring,
@@ -68,6 +81,10 @@ ENABLE_DEV_TOOLS = os.environ.get("UNREAL_MCP_ENABLE_DEV_TOOLS", "0") == "1"
 ENABLE_EXTENDED_TOOLS = os.environ.get("UNREAL_MCP_ENABLE_EXTENDED_TOOLS", "0") == "1"
 
 
+def _new_orchestrator_operation_id(action: str) -> str:
+    return f"orchestrator:{action}:{int(time.time() * 1000)}"
+
+
 def _compact_preflight(preflight: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "ready": bool(preflight.get("ready", False)),
@@ -93,11 +110,25 @@ def _result_success(result: Any) -> bool:
 def _summarize_result(result: Any) -> Any:
     if not isinstance(result, dict):
         return result
+    preferred_keys = (
+        "operation_id",
+        "domain",
+        "targets",
+        "summary",
+        "items",
+        "applied_changes",
+        "failed_changes",
+        "post_state",
+        "verification",
+    )
     if "status" in result and isinstance(result.get("result"), dict):
         inner = result["result"]
         summary: Dict[str, Any] = {
             "success": bool(inner.get("success", result.get("status") == "success"))
         }
+        for key in preferred_keys:
+            if key in inner:
+                summary[key] = inner[key]
         for key in (
             "count",
             "returned_count",
@@ -116,6 +147,7 @@ def _summarize_result(result: Any) -> Any:
         return summary
     summary: Dict[str, Any] = {"success": bool(result.get("success", False))}
     for key in (
+        "domain",
         "asset_path",
         "asset_name",
         "asset_class",
@@ -124,6 +156,11 @@ def _summarize_result(result: Any) -> Any:
         "operation_id",
         "targets",
         "summary",
+        "items",
+        "applied_changes",
+        "failed_changes",
+        "post_state",
+        "verification",
         "failed_properties",
         "modified_properties",
         "error",
@@ -403,6 +440,63 @@ def query_assets_summary(
     )
 
 
+def ensure_folder(
+    path: str,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded folder ensure workflow for asset paths."""
+    return _guard_live_editor_call(
+        "asset.ensure_folder",
+        asset_ensure_folder,
+        path,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def duplicate_asset_with_overrides(
+    source_asset_path: str,
+    destination_path: str,
+    new_name: str,
+    properties: Dict[str, Any] | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded asset duplication with optional property overrides."""
+    return _guard_live_editor_call(
+        "asset.duplicate_asset_with_overrides",
+        asset_duplicate_asset_with_overrides,
+        source_asset_path,
+        destination_path,
+        new_name,
+        properties,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def move_asset_batch(
+    items: list[Dict[str, str]],
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded batch asset move workflow."""
+    return _guard_live_editor_call(
+        "asset.move_asset_batch",
+        asset_move_asset_batch,
+        items,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
 def create_asset_with_properties(
     asset_type: str,
     name: str,
@@ -607,23 +701,133 @@ def update_material_instance_parameters_and_verify(
     )
 
 
+def analyze_material_graph(
+    asset_path: str,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded material graph analysis summary."""
+    return _guard_live_editor_call(
+        "material_graph.analyze_material_graph",
+        material_graph_analyze_material_graph,
+        asset_path,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def create_material_graph_recipe(
+    material_name: str,
+    nodes: list[Dict[str, Any]],
+    connections: list[Dict[str, Any]] | None = None,
+    properties: Dict[str, Any] | None = None,
+    compile: bool = True,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded material graph recipe builder."""
+    return _guard_live_editor_call(
+        "material_graph.create_material_graph_recipe",
+        material_graph_create_material_graph_recipe,
+        material_name,
+        nodes,
+        connections,
+        properties,
+        compile,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def connect_material_nodes(
+    material_name: str,
+    connections: list[Dict[str, Any]],
+    nodes: list[Dict[str, Any]] | None = None,
+    compile: bool = True,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded material graph connection workflow."""
+    return _guard_live_editor_call(
+        "material_graph.connect_material_nodes",
+        material_graph_connect_material_nodes,
+        material_name,
+        connections,
+        nodes,
+        compile,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
 def get_harness_domains() -> Dict[str, Any]:
     """List orchestrator domains and planned backends."""
-    return {"success": True, "domains": list_domains(), "count": len(list_domains())}
+    domains = list_domains()
+    return {
+        "success": True,
+        "operation_id": _new_orchestrator_operation_id("get_harness_domains"),
+        "domain": "orchestrator",
+        "targets": ["domains"],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {"domains": domains},
+        "verification": {"verified": True, "checks": []},
+        "domains": domains,
+        "count": len(domains),
+    }
 
 
 def get_domain_design(domain: str) -> Dict[str, Any]:
     """Read the design metadata for a specific harness domain."""
     try:
-        return {"success": True, "domain": get_domain(domain)}
+        domain_payload = get_domain(domain)
+        return {
+            "success": True,
+            "operation_id": _new_orchestrator_operation_id("get_domain_design"),
+            "domain": "orchestrator",
+            "targets": [domain],
+            "applied_changes": [],
+            "failed_changes": [],
+            "post_state": {domain: domain_payload},
+            "verification": {"verified": True, "checks": []},
+            "design": domain_payload,
+        }
     except ValueError as exc:
-        return {"success": False, "error": str(exc)}
+        return {
+            "success": False,
+            "operation_id": _new_orchestrator_operation_id("get_domain_design"),
+            "domain": "orchestrator",
+            "targets": [domain],
+            "applied_changes": [],
+            "failed_changes": [
+                {"target": domain, "field": "domain", "error": str(exc)}
+            ],
+            "post_state": {},
+            "verification": {"verified": False, "checks": []},
+            "error": str(exc),
+        }
 
 
 def route_harness_task(task: str) -> Dict[str, Any]:
     """Route a freeform task description to the most likely harness domain."""
     result = route_text(task)
-    return {"success": True, **result}
+    return {
+        "success": True,
+        "operation_id": _new_orchestrator_operation_id("route_harness_task"),
+        "domain": "orchestrator",
+        "targets": [task],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {"route": result},
+        "verification": {"verified": True, "checks": []},
+        **result,
+    }
 
 
 @asynccontextmanager
@@ -645,7 +849,10 @@ DEFAULT_TOOLS = [
     get_scene_backend_status,
     query_scene_actors,
     query_scene_lights,
+    ensure_folder,
     ensure_asset_with_properties,
+    duplicate_asset_with_overrides,
+    move_asset_batch,
     query_assets_summary,
     set_scene_light_intensity,
     create_spot_light_ring,
@@ -655,10 +862,17 @@ DEFAULT_TOOLS = [
     get_asset_harness_info,
     get_material_harness_info,
     update_material_instance_parameters_and_verify,
+    analyze_material_graph,
+    create_material_graph_recipe,
+    connect_material_nodes,
     get_material_graph_harness_info,
     get_harness_health,
     get_runtime_policy,
     get_token_usage_summary,
+    get_transport_port_status,
+    get_unreal_python_status,
+    get_editor_process_status,
+    get_commandlet_runtime_status,
     get_editor_ready_state,
     wait_for_editor_ready,
 ]

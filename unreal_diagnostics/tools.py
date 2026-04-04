@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import subprocess
 import time
 from collections import defaultdict
@@ -12,8 +13,11 @@ from typing import Any, Dict
 from unreal_editor_mcp.common import send_command
 from unreal_editor_mcp.tools import get_current_level
 from unreal_harness_runtime.config import (
+    get_editor_cmd_path,
     get_editor_exe_path,
     get_project_path,
+    get_unreal_host,
+    get_unreal_port,
     get_runtime_paths,
 )
 from unreal_harness_runtime.python_exec import run_editor_python, wrap_editor_python
@@ -22,6 +26,50 @@ from unreal_orchestrator.catalog import list_domains
 
 
 TOKEN_USAGE_LOG = Path(__file__).resolve().parents[1] / "logs" / "token_usage.jsonl"
+
+
+def _new_diag_operation_id(action: str) -> str:
+    return f"diagnostics:{action}:{int(time.time() * 1000)}"
+
+
+def _diag_check(target: str, field: str, expected: Any, actual: Any) -> Dict[str, Any]:
+    return {
+        "target": target,
+        "field": field,
+        "expected": expected,
+        "actual": actual,
+        "ok": expected == actual,
+    }
+
+
+def _diag_wrap(
+    action: str,
+    *,
+    targets: list[str],
+    post_state: Dict[str, Any],
+    checks: list[Dict[str, Any]],
+    success: bool,
+    failed_changes: list[Dict[str, Any]] | None = None,
+    extras: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    payload = {
+        "success": success,
+        "operation_id": _new_diag_operation_id(action),
+        "domain": "diagnostics",
+        "targets": targets,
+        "applied_changes": [],
+        "failed_changes": failed_changes or [],
+        "post_state": post_state,
+        "verification": {
+            "verified": all(check.get("ok", False) for check in checks)
+            if checks
+            else success,
+            "checks": checks,
+        },
+    }
+    if extras:
+        payload.update(extras)
+    return payload
 
 
 def _ready_level_summary(level_info: Dict[str, Any]) -> Dict[str, Any] | None:
@@ -80,22 +128,222 @@ def _build_ready_state(
 
 def get_harness_health() -> Dict[str, Any]:
     """Return a compact health snapshot for the new harness skeleton."""
-    return {
-        "success": True,
-        "domains": list_domains(),
-        "current_level": get_current_level(),
+    current_level = get_current_level()
+    success = current_level.get("status") == "success" or bool(
+        current_level.get("success")
+    )
+    return _diag_wrap(
+        "get_harness_health",
+        targets=["harness"],
+        post_state={
+            "harness": {"domains": list_domains(), "current_level": current_level}
+        },
+        checks=[
+            _diag_check("harness", "domains_present", True, len(list_domains()) > 0)
+        ],
+        success=success,
+        extras={"domains": list_domains(), "current_level": current_level},
+    )
+
+
+def get_transport_port_status(timeout_seconds: float = 1.0) -> Dict[str, Any]:
+    """Check whether the Unreal MCP TCP port is accepting connections."""
+    host = get_unreal_host()
+    port = get_unreal_port()
+    started_at = time.perf_counter()
+    try:
+        with socket.create_connection((host, port), timeout=timeout_seconds):
+            latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            return _diag_wrap(
+                "get_transport_port_status",
+                targets=[f"{host}:{port}"],
+                post_state={
+                    f"{host}:{port}": {"reachable": True, "latency_ms": latency_ms}
+                },
+                checks=[_diag_check(f"{host}:{port}", "reachable", True, True)],
+                success=True,
+                extras={
+                    "host": host,
+                    "port": port,
+                    "reachable": True,
+                    "latency_ms": latency_ms,
+                },
+            )
+    except OSError as exc:
+        latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        return _diag_wrap(
+            "get_transport_port_status",
+            targets=[f"{host}:{port}"],
+            post_state={
+                f"{host}:{port}": {"reachable": False, "latency_ms": latency_ms}
+            },
+            checks=[_diag_check(f"{host}:{port}", "reachable", True, False)],
+            success=False,
+            failed_changes=[
+                {"target": f"{host}:{port}", "field": "reachable", "error": str(exc)}
+            ],
+            extras={
+                "host": host,
+                "port": port,
+                "reachable": False,
+                "latency_ms": latency_ms,
+                "error": str(exc),
+            },
+        )
+
+
+def get_unreal_python_status() -> Dict[str, Any]:
+    """Check whether Unreal Python can execute in the current editor session."""
+    result = run_editor_python(
+        wrap_editor_python(
+            """
+_mcp_emit({
+    "success": True,
+    "python_ready": True,
+    "editor_world": unreal.EditorLevelLibrary.get_editor_world().get_name() if unreal.EditorLevelLibrary.get_editor_world() else None,
+})
+"""
+        )
+    )
+    success = bool(result.get("success") and result.get("python_ready"))
+    return _diag_wrap(
+        "get_unreal_python_status",
+        targets=[result.get("editor_world") or "editor_python"],
+        post_state={"editor_python": result},
+        checks=[
+            _diag_check(
+                "editor_python", "python_ready", True, result.get("python_ready", False)
+            )
+        ],
+        success=success,
+        failed_changes=[]
+        if success
+        else [
+            {
+                "target": "editor_python",
+                "field": "python_ready",
+                "error": result.get("error", "python not ready"),
+            }
+        ],
+        extras=result,
+    )
+
+
+def get_editor_process_status() -> Dict[str, Any]:
+    """Return a compact snapshot of running UnrealEditor processes."""
+    command = (
+        "Get-Process UnrealEditor -ErrorAction SilentlyContinue | "
+        "Select-Object Id,ProcessName,MainWindowTitle,Responding | ConvertTo-Json -Compress"
+    )
+    completed = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", command],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    stdout = (completed.stdout or "").strip()
+    if not stdout:
+        return _diag_wrap(
+            "get_editor_process_status",
+            targets=[],
+            post_state={"editor_processes": {"running": False, "processes": []}},
+            checks=[_diag_check("editor_processes", "running", False, False)],
+            success=True,
+            extras={"running": False, "processes": []},
+        )
+    try:
+        parsed = json.loads(stdout)
+    except json.JSONDecodeError:
+        return _diag_wrap(
+            "get_editor_process_status",
+            targets=[],
+            post_state={"editor_processes": {"running": False}},
+            checks=[_diag_check("editor_processes", "parse", True, False)],
+            success=False,
+            failed_changes=[
+                {
+                    "target": "editor_processes",
+                    "field": "parse",
+                    "error": "Failed to parse process list",
+                }
+            ],
+            extras={
+                "running": False,
+                "error": "Failed to parse process list",
+                "stdout": stdout,
+            },
+        )
+    processes = parsed if isinstance(parsed, list) else [parsed]
+    running = len(processes) > 0
+    return _diag_wrap(
+        "get_editor_process_status",
+        targets=[
+            item.get("MainWindowTitle") or item.get("ProcessName") or "UnrealEditor"
+            for item in processes
+        ],
+        post_state={"editor_processes": {"running": running, "processes": processes}},
+        checks=[_diag_check("editor_processes", "running", True, running)],
+        success=running,
+        failed_changes=[]
+        if running
+        else [
+            {
+                "target": "editor_processes",
+                "field": "running",
+                "error": "No UnrealEditor process found",
+            }
+        ],
+        extras={"running": running, "processes": processes},
+    )
+
+
+def get_commandlet_runtime_status() -> Dict[str, Any]:
+    """Check whether commandlet prerequisites are present on disk."""
+    runtime_paths = get_runtime_paths()
+    checks = {
+        "editor_cmd_exists": get_editor_cmd_path().exists(),
+        "project_exists": get_project_path().exists(),
+        "commandlet_script_exists": Path(runtime_paths["commandlet_script"]).exists(),
     }
+    verification_checks = [
+        _diag_check("commandlet_runtime", field, True, value)
+        for field, value in checks.items()
+    ]
+    success = all(checks.values())
+    return _diag_wrap(
+        "get_commandlet_runtime_status",
+        targets=[runtime_paths["project_path"]],
+        post_state={
+            "commandlet_runtime": {"runtime_paths": runtime_paths, "checks": checks}
+        },
+        checks=verification_checks,
+        success=success,
+        failed_changes=[]
+        if success
+        else [
+            {
+                "target": "commandlet_runtime",
+                "field": field,
+                "error": "missing prerequisite",
+            }
+            for field, value in checks.items()
+            if not value
+        ],
+        extras={"runtime_paths": runtime_paths, "checks": checks},
+    )
 
 
 def get_token_usage_summary(top_n: int = 10) -> Dict[str, Any]:
     """Summarize recorded token usage by component and operation."""
     if not TOKEN_USAGE_LOG.exists():
-        return {
-            "success": True,
-            "log_exists": False,
-            "entries": 0,
-            "top_operations": [],
-        }
+        return _diag_wrap(
+            "get_token_usage_summary",
+            targets=["token_usage_log"],
+            post_state={"token_usage_log": {"log_exists": False, "entries": 0}},
+            checks=[_diag_check("token_usage_log", "log_exists", False, False)],
+            success=True,
+            extras={"log_exists": False, "entries": 0, "top_operations": []},
+        )
 
     groups: Dict[tuple[str, str], Dict[str, float]] = defaultdict(
         lambda: {
@@ -175,8 +423,7 @@ def get_token_usage_summary(top_n: int = 10) -> Dict[str, Any]:
             }
         )
 
-    return {
-        "success": True,
+    payload = {
         "log_exists": True,
         "log_path": str(TOKEN_USAGE_LOG),
         "entries": entries,
@@ -213,12 +460,19 @@ def get_token_usage_summary(top_n: int = 10) -> Dict[str, Any]:
         "operation_count": len(groups),
         "top_operations": top_operations,
     }
+    return _diag_wrap(
+        "get_token_usage_summary",
+        targets=[str(TOKEN_USAGE_LOG)],
+        post_state={"token_usage_log": payload},
+        checks=[_diag_check("token_usage_log", "log_exists", True, True)],
+        success=True,
+        extras=payload,
+    )
 
 
 def get_runtime_policy() -> Dict[str, Any]:
     """Describe the runtime policy boundary between normal usage and MCP development."""
-    return {
-        "success": True,
+    payload = {
         "default_mode": "usage",
         "auto_launch_default": False,
         "auto_launch_scope": "mcp_development_only",
@@ -233,6 +487,18 @@ def get_runtime_policy() -> Dict[str, Any]:
         ],
         "runtime_paths": get_runtime_paths(),
     }
+    return _diag_wrap(
+        "get_runtime_policy",
+        targets=["runtime_policy"],
+        post_state={"runtime_policy": payload},
+        checks=[
+            _diag_check(
+                "runtime_policy", "default_mode", "usage", payload["default_mode"]
+            )
+        ],
+        success=True,
+        extras=payload,
+    )
 
 
 def get_editor_ready_state(debug: bool = False) -> Dict[str, Any]:
@@ -260,7 +526,7 @@ _mcp_emit({
     level_info = get_current_level() if transport_ok else tcp_probe
 
     ready = bool(transport_ok and python_ready)
-    return _build_ready_state(
+    payload = _build_ready_state(
         success=True,
         ready=ready,
         transport_ok=transport_ok,
@@ -270,6 +536,32 @@ _mcp_emit({
         python_probe=python_probe,
         recommended_action="safe_to_continue" if ready else "wait_and_retry",
         debug=debug,
+    )
+    return _diag_wrap(
+        "get_editor_ready_state",
+        targets=[
+            payload.get("current_level_summary", {}).get("level_path") or "editor"
+        ],
+        post_state={"editor_ready": payload},
+        checks=[
+            _diag_check(
+                "editor_ready", "transport_ok", True, payload.get("transport_ok")
+            ),
+            _diag_check(
+                "editor_ready", "python_ready", True, payload.get("python_ready")
+            ),
+        ],
+        success=ready,
+        failed_changes=[]
+        if ready
+        else [
+            {
+                "target": "editor_ready",
+                "field": "ready",
+                "error": payload.get("recommended_action"),
+            }
+        ],
+        extras=payload,
     )
 
 
@@ -294,10 +586,33 @@ def wait_for_editor_ready(
         if debug:
             last_state["attempts"] = attempts
         if last_state.get("ready"):
-            return last_state
+            return _diag_wrap(
+                "wait_for_editor_ready",
+                targets=[
+                    last_state.get("current_level_summary", {}).get("level_path")
+                    or "editor"
+                ],
+                post_state={"editor_ready": last_state},
+                checks=[
+                    _diag_check(
+                        "editor_ready",
+                        "transport_ok",
+                        True,
+                        last_state.get("transport_ok"),
+                    ),
+                    _diag_check(
+                        "editor_ready",
+                        "python_ready",
+                        True,
+                        last_state.get("python_ready"),
+                    ),
+                ],
+                success=True,
+                extras=last_state,
+            )
         time.sleep(max(1, poll_seconds))
 
-    return _build_ready_state(
+    payload = _build_ready_state(
         success=False,
         ready=False,
         transport_ok=bool(last_state.get("transport_ok", False)),
@@ -320,6 +635,26 @@ def wait_for_editor_ready(
         attempts=attempts,
         error=f"Timed out waiting for editor readiness after {attempts} attempts",
     )
+    return _diag_wrap(
+        "wait_for_editor_ready",
+        targets=[
+            payload.get("current_level_summary", {}).get("level_path") or "editor"
+        ],
+        post_state={"editor_ready": payload},
+        checks=[
+            _diag_check(
+                "editor_ready", "transport_ok", True, payload.get("transport_ok")
+            ),
+            _diag_check(
+                "editor_ready", "python_ready", True, payload.get("python_ready")
+            ),
+        ],
+        success=False,
+        failed_changes=[
+            {"target": "editor_ready", "field": "ready", "error": payload.get("error")}
+        ],
+        extras=payload,
+    )
 
 
 def dev_launch_editor_and_wait_ready(
@@ -335,13 +670,19 @@ def dev_launch_editor_and_wait_ready(
     """
     pre_state = get_editor_ready_state()
     if pre_state.get("ready"):
-        return {
-            "success": True,
-            "launched": False,
-            "mode": "dev",
-            "message": "Editor already ready",
-            "state": pre_state,
-        }
+        return _diag_wrap(
+            "dev_launch_editor_and_wait_ready",
+            targets=[str(get_project_path())],
+            post_state={"editor_launch": pre_state},
+            checks=[_diag_check("editor_launch", "ready", True, True)],
+            success=True,
+            extras={
+                "launched": False,
+                "mode": "dev",
+                "message": "Editor already ready",
+                "state": pre_state,
+            },
+        )
 
     resolved_editor_exe = editor_exe or str(get_editor_exe_path())
     resolved_project_path = project_path or str(get_project_path())
@@ -361,10 +702,27 @@ def dev_launch_editor_and_wait_ready(
         usage_mode="dev",
         debug=True,
     )
-    return {
-        "success": bool(final_state.get("ready")),
-        "launched": True,
-        "mode": "dev",
-        "command": command,
-        "state": final_state,
-    }
+    return _diag_wrap(
+        "dev_launch_editor_and_wait_ready",
+        targets=[resolved_project_path],
+        post_state={"editor_launch": final_state},
+        checks=[_diag_check("editor_launch", "ready", True, final_state.get("ready"))],
+        success=bool(final_state.get("ready")),
+        failed_changes=[]
+        if final_state.get("ready")
+        else [
+            {
+                "target": resolved_project_path,
+                "field": "ready",
+                "error": final_state.get(
+                    "error", "editor launch did not reach ready state"
+                ),
+            }
+        ],
+        extras={
+            "launched": True,
+            "mode": "dev",
+            "command": command,
+            "state": final_state,
+        },
+    )

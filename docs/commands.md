@@ -61,6 +61,8 @@
 - `ensure_folder`
 - `move_asset_batch`
 
+当前状态：以上三项已实现。
+
 ## Material
 
 ### 已实现
@@ -78,7 +80,7 @@
 
 ## Material Graph
 
-### 第一批建议
+### 已实现
 
 - `create_material_graph_recipe`
 - `connect_material_nodes`
@@ -87,6 +89,7 @@
 说明：
 
 - 这是独立图编辑域
+- 当前已进入最小可用阶段
 - 后续会和 `unreal-material` 分开维护
 
 ## Diagnostics

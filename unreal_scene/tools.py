@@ -237,8 +237,7 @@ except Exception as exc:
 
 def get_scene_harness_info() -> Dict[str, Any]:
     """Describe the current scene harness backend and scope."""
-    return {
-        "success": True,
+    payload = {
         "domain": "scene",
         "backend": "ue_python_via_run_python",
         "target_backend": "ue_python",
@@ -259,6 +258,17 @@ def get_scene_harness_info() -> Dict[str, Any]:
             "spawn_actor_with_defaults",
         ],
     }
+    return {
+        "success": True,
+        "operation_id": _new_operation_id("get_scene_harness_info"),
+        "domain": "scene",
+        "targets": ["scene_harness"],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {"scene_harness": payload},
+        "verification": {"verified": True, "checks": []},
+        **payload,
+    }
 
 
 def query_scene_actors(
@@ -267,6 +277,7 @@ def query_scene_actors(
     limit: int = 20,
 ) -> Dict[str, Any]:
     """Return a compact actor list for common lookups."""
+    operation_id = _new_operation_id("query_scene_actors")
     actor_class_expr = _python_literal(actor_class) if actor_class else "None"
     name_filter_expr = _python_literal(name_filter) if name_filter else "None"
     body = f"""
@@ -291,11 +302,61 @@ for actor in unreal.EditorLevelLibrary.get_all_level_actors():
 results.sort(key=lambda item: item["name"])
 _mcp_emit({{"success": True, "actors": results[:limit], "count": len(results), "limit": limit}})
 """
-    return _run_editor_python(_wrap_scene_python(body))
+    result = _run_editor_python(_wrap_scene_python(body))
+    if not result.get("success"):
+        return {
+            "success": False,
+            "operation_id": operation_id,
+            "domain": "scene",
+            "targets": [],
+            "applied_changes": [],
+            "failed_changes": [
+                {
+                    "target": None,
+                    "field": "query",
+                    "error": result.get("error", "query_scene_actors failed"),
+                }
+            ],
+            "post_state": {},
+            "verification": {"verified": False, "checks": []},
+            "error": result.get("error", "query_scene_actors failed"),
+        }
+    actors = result.get("actors", [])
+    return {
+        "success": True,
+        "operation_id": operation_id,
+        "domain": "scene",
+        "targets": [item.get("name") for item in actors if item.get("name")],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {
+            "scene_query": {
+                "count": result.get("count", len(actors)),
+                "limit": result.get("limit", limit),
+                "actors": actors,
+            }
+        },
+        "verification": {"verified": True, "checks": []},
+        "summary": {
+            "returned": len(actors),
+            "total": result.get("count", len(actors)),
+            "limit": result.get("limit", limit),
+        },
+        "items": [
+            {
+                "target": item.get("name"),
+                "success": True,
+                "verification": {"verified": True, "checks": []},
+            }
+            for item in actors
+        ],
+        "actors": actors,
+    }
 
 
 def query_scene_lights(limit: int = 20) -> Dict[str, Any]:
     """Return a compact list of light actors and their key intensity fields."""
+    operation_id = _new_operation_id("query_scene_lights")
     body = f"""
 limit = {int(limit)}
 light_type_names = {{"PointLight", "SpotLight", "DirectionalLight", "SkyLight", "RectLight"}}
@@ -336,7 +397,56 @@ for actor in unreal.EditorLevelLibrary.get_all_level_actors():
 results.sort(key=lambda item: item["name"])
 _mcp_emit({{"success": True, "lights": results[:limit], "count": len(results), "limit": limit}})
 """
-    return _run_editor_python(_wrap_scene_python(body))
+    result = _run_editor_python(_wrap_scene_python(body))
+    if not result.get("success"):
+        return {
+            "success": False,
+            "operation_id": operation_id,
+            "domain": "scene",
+            "targets": [],
+            "applied_changes": [],
+            "failed_changes": [
+                {
+                    "target": None,
+                    "field": "query",
+                    "error": result.get("error", "query_scene_lights failed"),
+                }
+            ],
+            "post_state": {},
+            "verification": {"verified": False, "checks": []},
+            "error": result.get("error", "query_scene_lights failed"),
+        }
+    lights = result.get("lights", [])
+    return {
+        "success": True,
+        "operation_id": operation_id,
+        "domain": "scene",
+        "targets": [item.get("name") for item in lights if item.get("name")],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {
+            "scene_query": {
+                "count": result.get("count", len(lights)),
+                "limit": result.get("limit", limit),
+                "lights": lights,
+            }
+        },
+        "verification": {"verified": True, "checks": []},
+        "summary": {
+            "returned": len(lights),
+            "total": result.get("count", len(lights)),
+            "limit": result.get("limit", limit),
+        },
+        "items": [
+            {
+                "target": item.get("name"),
+                "success": True,
+                "verification": {"verified": True, "checks": []},
+            }
+            for item in lights
+        ],
+        "lights": lights,
+    }
 
 
 def _new_operation_id(command_name: str) -> str:
@@ -908,15 +1018,26 @@ else:
 
 def get_scene_backend_status() -> Dict[str, Any]:
     """Return a compact scene backend status snapshot."""
-    return {
-        "success": True,
+    payload = {
         "backend": "ue_python_via_run_python",
         "current_level": get_current_level(),
+    }
+    return {
+        "success": True,
+        "operation_id": _new_operation_id("get_scene_backend_status"),
+        "domain": "scene",
+        "targets": ["scene_backend"],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {"scene_backend": payload},
+        "verification": {"verified": True, "checks": []},
+        **payload,
     }
 
 
 def inspect_scene_python_enums() -> Dict[str, Any]:
     """Inspect Unreal Python enum members used by the scene harness."""
+    operation_id = _new_operation_id("inspect_scene_python_enums")
     body = """
 _mcp_emit({
     "success": True,
@@ -924,4 +1045,33 @@ _mcp_emit({
     "component_mobility": [item for item in dir(unreal.ComponentMobility) if not item.startswith("__")],
 })
 """
-    return _run_editor_python(_wrap_scene_python(body))
+    result = _run_editor_python(_wrap_scene_python(body))
+    if not result.get("success"):
+        return {
+            "success": False,
+            "operation_id": operation_id,
+            "domain": "scene",
+            "targets": ["scene_python_enums"],
+            "applied_changes": [],
+            "failed_changes": [
+                {
+                    "target": "scene_python_enums",
+                    "field": "enum_query",
+                    "error": result.get("error", "enum query failed"),
+                }
+            ],
+            "post_state": {},
+            "verification": {"verified": False, "checks": []},
+            "error": result.get("error", "enum query failed"),
+        }
+    return {
+        "success": True,
+        "operation_id": operation_id,
+        "domain": "scene",
+        "targets": ["scene_python_enums"],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {"scene_python_enums": result},
+        "verification": {"verified": True, "checks": []},
+        **result,
+    }

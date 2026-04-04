@@ -1,4 +1,4 @@
-# Docs Index
+﻿# Docs Index
 
 - `architecture.html`: 当前架构图
 - `inventory.md`: 功能总览、默认入口、域边界

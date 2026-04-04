@@ -59,102 +59,25 @@
   - `éƒ¨åˆ†æŽ¥å…¥`
   - `ç›®æ ‡è¦æ±‚`
 
-## 1. Internal / `unreal_backend_tcp` å½“å‰å¯ç”¨åŠŸèƒ½
+## 1. Internal / `unreal_backend_tcp` ??????
 
-è¿™äº›æ˜¯å½“å‰åº•å±‚ä»ç„¶å¯ç›´æŽ¥è°ƒç”¨çš„èƒ½åŠ›é¢ã€‚
+?????????? harness ????????????
 
-ä½†å®ƒçš„å®šä½åº”ç†è§£ä¸ºï¼š
-
-- internal
-- fallback
-- è¿ç§»æœŸå…¼å®¹å±‚
-
-è€Œä¸æ˜¯åŽç»­é»˜è®¤æŽ¨èç›´æŽ¥ä½¿ç”¨çš„ä¸»è¦ä¸šåŠ¡å…¥å£ã€‚
-
-### Asset
+### ?????????
 
 - `get_assets`
-- `get_asset_properties`
-- `create_asset`
-- `set_asset_properties`
-- `delete_asset`
-- `batch_create_assets`
-- `batch_set_assets_properties`
+- `get_current_level`
+- `build_material_graph`
+- `get_material_graph`
 - `read_result_handle`
 - `release_result_handle`
 
-### Level / Viewport
+???
 
-- `get_current_level`
-- `create_level`
-- `load_level`
-- `save_current_level`
-- `get_viewport_camera`
-- `set_viewport_camera`
-- `get_viewport_screenshot`
-
-### Actor / Scene
-
-- `get_actors`
-- `get_actor_properties`
-- `spawn_actor`
-- `set_actor_properties`
-- `delete_actor`
-- `batch_spawn_actors`
-- `batch_delete_actors`
-- `batch_set_actors_properties`
-
-### Import
-
-- `import_texture`
-- `import_fbx`
-
-### Material / Material Graph
-
-- `build_material_graph`
-- `get_material_graph`
-
-### Niagara
-
-- `get_niagara_graph`
-- `update_niagara_graph`
-- `get_niagara_emitter`
-- `update_niagara_emitter`
-- `get_niagara_compiled_code`
-- `get_niagara_particle_attributes`
-
-### Blueprint Info / Content
-
-- `get_blueprint_info`
-- `update_blueprint`
-- `read_blueprint_content`
-- `analyze_blueprint_graph`
-
-è¯´æ˜Žï¼š
-
-- å½“å‰ raw å·¥å…·å·²åš wrapper å±‚ token ä¼˜åŒ–
-- æŸ¥è¯¢ç±»é»˜è®¤æ”¯æŒ `summary_only / fields / limit`
-- å›¾ç±»å’Œ Blueprint å†…å®¹é»˜è®¤æ‘˜è¦è¿”å›ž
-- å¤§ç»“æžœæ”¯æŒ `saved_to` ä¸Ž `result_handle`
-
-### Blueprint Graph
-
-- `blueprint_graph_command`
-
-æ”¯æŒçš„å›¾å‘½ä»¤ï¼š
-
-- `add_blueprint_node`
-- `connect_nodes`
-- `create_variable`
-- `set_blueprint_variable_properties`
-- `add_event_node`
-- `delete_node`
-- `set_node_property`
-- `create_function`
-- `add_function_input`
-- `add_function_output`
-- `delete_function`
-- `rename_function`
+- ??????????? raw wrapper ??
+- ?????? scene / asset / material_graph / diagnostics ?????????
+- ?? Niagara / Blueprint / raw actor / raw asset ?????? TCP command ????????????? Python wrapper
+- ?????? `saved_to` ? `result_handle`
 
 ## 2. æ–° Harness å½“å‰å·²å®žçŽ°åŠŸèƒ½
 

@@ -1,4 +1,4 @@
-# unreal-mcp
+﻿# unreal-mcp
 
 从 `TAAgent` 抽离出来的独立 Unreal Editor MCP。
 
@@ -53,7 +53,7 @@ python -m unreal_material_graph.server
 - 默认业务入口：`unreal_orchestrator`
 - 内部 backend：`unreal_backend_tcp`
 - scene / asset / material 优先走高层 harness
-- material graph 当前仍保留内部 raw backend 支撑，但不再通过 legacy 包名暴露
+- material graph 当前仍保留内部 backend 支撑
 
 ## 文档
 

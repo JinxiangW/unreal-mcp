@@ -1,75 +1,140 @@
 ---
 name: ue-harness
-description: 使用 `unreal-mcp` 时的最小工作指南，覆盖域选择、默认入口、后端边界和测试顺序。
-metadata:
-  short-description: Unreal harness workflow for the unreal-mcp workspace
-  repo: unreal-mcp
+description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP tool behavior, orchestrator or domain backends, diagnostics, or the `RenderingMCP/Plugins/UnrealMCP` plugin. Covers domain selection, default MCP entrypoints, backend boundaries, and the required execution and validation order for material and material-graph tasks.
 ---
+
+# UE Harness
 
 ## Purpose
 
-当任务发生在 `D:\unreal-mcp`，并且涉及 Unreal harness 的实现、扩展、测试或排障时，优先使用这份 skill。
+Use this skill for Unreal-side work in this repo.
 
-## 先看什么
+Default scope:
 
-按顺序：
+- `unreal_orchestrator`
+- `unreal_scene`
+- `unreal_asset`
+- `unreal_material`
+- `unreal_material_graph`
+- `unreal_diagnostics`
+- `RenderingMCP/Plugins/UnrealMCP`
+
+## Read First
+
+Read in this order:
 
 1. `docs/inventory.md`
 2. `docs/categories.md`
-3. 当前任务相关的域文件
+3. The domain files for the current task
 
-如果要改行为或架构，再看：
+Read these only when needed:
 
-4. 5. `docs/commands.md`
+4. `docs/commands.md`
+5. `docs/test-plan.md`
+6. `docs/verification.md`
+7. `docs/workflow.md`
 
-如果要测试或交付，再看：
+## Default Entry
 
-6. `docs/test-plan.md`
-7. `docs/verification.md`
-8. `docs/workflow.md`
-
-## 默认入口
-
-1. 先判定任务域：`scene / asset / material / material_graph / diagnostics`
-2. 默认入口优先 `unreal_orchestrator`
-3. 高风险 live-editor 命令先做：
+1. Classify the task domain first: `scene / asset / material / material_graph / diagnostics`
+2. Prefer `unreal_orchestrator` as the default MCP entry
+3. Before high-risk live-editor operations, check:
    - `get_editor_ready_state`
-   - 必要时 `wait_for_editor_ready`
-4. 只有 orchestrator 尚未覆盖时，才直接进入对应 domain harness
-5. `unreal_backend_tcp` 仅作为内部 backend / fallback，不作为默认业务入口
+   - `wait_for_editor_ready` when needed
+4. Enter a domain harness directly only when orchestrator does not already cover the task
+5. Treat `unreal_backend_tcp` as internal backend or fallback, not as the default business entrypoint
 
-## 域边界
+## Backend Boundaries
 
-- `unreal_scene/`
-- `unreal_asset/`
-- `unreal_material/`
-- `unreal_material_graph/`
-- `unreal_orchestrator/`
-- `unreal_diagnostics/`
-
-## 当前后端边界
-
-- `unreal_backend_tcp`
-  - internal / fallback only
-  - 负责 TCP transport、raw command、result handle
 - `scene`
-  - 优先 live editor python
+  - prefer live-editor Python
 - `asset create/update`
-  - 优先 live editor python
+  - prefer live-editor Python
 - `asset import`
-  - 优先 commandlet
+  - prefer commandlet
 - `material_graph`
-  - 当前仍通过内部 backend 支撑
+  - currently still depends on the internal backend and UE plugin C++ commands
+- `unreal_backend_tcp`
+  - owns TCP transport, raw command dispatch, and large-result handles
 
-## 工作规则
+## General Rules
 
-- 优先高层命令，不继续堆裸属性写入
-- 不混淆 `material` 和 `material_graph`
-- `python_exec.py`、`commandlet_exec.py`、`unreal_orchestrator/server.py`、`unreal_orchestrator/catalog.py`、`pyproject.toml` 属于共享核心文件，修改前先确认必要性
+- Prefer high-level tools over ad hoc property writes
+- Do not mix `material` responsibilities with `material_graph` responsibilities
+- Treat `python_exec.py`, `commandlet_exec.py`, `unreal_orchestrator/server.py`, `unreal_orchestrator/catalog.py`, and `pyproject.toml` as shared core files; change them only when necessary
 
-## 交付前自检
+## Material Execution
 
-- 是否只改了对应域的文件
-- 是否说明是否需要重启编辑器或重编插件
-- 是否记录已知限制
-- 是否至少完成一条真实环境回归或说明未完成原因
+Use these rules whenever the task touches `material` or `material_graph`.
+
+### Function Strategy
+
+- Check for an existing project-local `MaterialFunction` before creating a new one
+- Then check engine-provided material functions or a standard UE node pattern
+- Create a new function only after confirming there is no reusable implementation
+- Split by semantic boundary or source subgraph, not by tiny arithmetic steps
+- Do not create micro-functions for `OneMinus`, `Multiply`, `Lerp`, or simple pass-through wiring
+- Prefer native UE material nodes inside a function
+- Use `Custom` only when the source already uses a custom function or UE node coverage is clearly insufficient
+- Keep `Custom` inline
+- Do not write `.ush`
+- Do not use `include`
+- Do not define local helper functions inside the `Custom` snippet
+
+### Build Order
+
+1. Verify editor readiness
+2. Verify source package and runtime evidence completeness
+3. Import or bind textures
+4. Create or refresh material functions
+5. Validate each high-risk function individually
+6. Create or rebuild the parent material
+7. Connect one high-risk branch at a time
+8. Re-read and validate after each high-risk branch
+9. Do visual inspection only after structural validation passes
+
+### Required Validation
+
+- Build functions before the parent material, and build material instances last
+- If a `MaterialFunction` is deleted and recreated, rebuild the parent material or at least rebuild the affected `MaterialFunctionCall`
+- Do not keep appending nodes onto a dirty half-finished parent material; rebuild high-risk branches cleanly
+- Add an explicit switch parameter for runtime-dependent branches
+  - example: `UseDissolve`
+  - default values should keep the material visible and debuggable in UE preview
+- Write UE parameter `group` values and verify them on readback
+- For functions with internal texture sampling or runtime-space dependencies, require a minimal closed loop:
+  - function readback is correct
+  - parent material compiles
+  - structure readback matches expectation
+- After graph edits, do not trust `success: true` alone
+  - re-read the graph
+  - inspect key `property_connections`
+  - inspect logs for `Missing Material Function`, shader asserts, or compile fallback
+- If visual parity depends on external runtime state, do not claim alignment until that runtime state is present in the source package
+
+### Stop Conditions
+
+Stop and fix tooling or export before continuing if any of the following occur:
+
+- readback is missing expected nodes, functions, or property connections
+- the material only compiles by disabling the branch under reconstruction
+- `Missing Material Function` appears
+- a shader assert appears
+- the editor crashes
+- a verification report regresses compared with the last successful checkpoint
+
+### Alignment Claims
+
+Do not claim "aligned with source" without a machine-readable verification artifact that checks:
+
+- source evidence completeness
+- UE graph structure completeness
+- key material property alignment
+- parameter group alignment
+
+## Delivery Check
+
+- Confirm the touched files stay within the intended domain
+- State whether the editor or plugin must be restarted or rebuilt
+- Record known limitations
+- Complete at least one real regression, or state clearly why it was not completed

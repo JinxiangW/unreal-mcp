@@ -947,9 +947,45 @@ FExpressionInput* FEpicUnrealMCPMaterialCommands::GetExpressionInputByName(UMate
         if (LowerInputName == TEXT("base")) return &Power->Base;
         if (LowerInputName == TEXT("exponent")) return &Power->Exponent;
     }
+    else if (UMaterialExpressionMax* MaxExpr = Cast<UMaterialExpressionMax>(Expression))
+    {
+        if (LowerInputName == TEXT("a")) return &MaxExpr->A;
+        if (LowerInputName == TEXT("b")) return &MaxExpr->B;
+    }
+    else if (UMaterialExpressionMin* MinExpr = Cast<UMaterialExpressionMin>(Expression))
+    {
+        if (LowerInputName == TEXT("a")) return &MinExpr->A;
+        if (LowerInputName == TEXT("b")) return &MinExpr->B;
+    }
+    else if (UMaterialExpressionStep* StepExpr = Cast<UMaterialExpressionStep>(Expression))
+    {
+        if (LowerInputName == TEXT("x")) return &StepExpr->X;
+        if (LowerInputName == TEXT("y")) return &StepExpr->Y;
+    }
+    else if (UMaterialExpressionSmoothStep* SmoothStepExpr = Cast<UMaterialExpressionSmoothStep>(Expression))
+    {
+        if (LowerInputName == TEXT("min") || LowerInputName == TEXT("edge1")) return &SmoothStepExpr->Min;
+        if (LowerInputName == TEXT("max") || LowerInputName == TEXT("edge2")) return &SmoothStepExpr->Max;
+        if (LowerInputName == TEXT("value") || LowerInputName == TEXT("in")) return &SmoothStepExpr->Value;
+    }
+    else if (UMaterialExpressionIf* IfExpr = Cast<UMaterialExpressionIf>(Expression))
+    {
+        if (LowerInputName == TEXT("a")) return &IfExpr->A;
+        if (LowerInputName == TEXT("b")) return &IfExpr->B;
+        if (LowerInputName == TEXT("agreaterthanb") || LowerInputName == TEXT("greater") || LowerInputName == TEXT("true")) return &IfExpr->AGreaterThanB;
+        if (LowerInputName == TEXT("aequalsb") || LowerInputName == TEXT("equals")) return &IfExpr->AEqualsB;
+        if (LowerInputName == TEXT("alessthanb") || LowerInputName == TEXT("less") || LowerInputName == TEXT("false")) return &IfExpr->ALessThanB;
+    }
     else if (UMaterialExpressionTextureSample* TexSample = Cast<UMaterialExpressionTextureSample>(Expression))
     {
         if (LowerInputName == TEXT("coordinates")) return &TexSample->Coordinates;
+    }
+    else if (UMaterialExpressionFunctionInput* FunctionInput = Cast<UMaterialExpressionFunctionInput>(Expression))
+    {
+        if (LowerInputName == TEXT("preview"))
+        {
+            return &FunctionInput->Preview;
+        }
     }
     else if (UMaterialExpressionFunctionOutput* FunctionOutput = Cast<UMaterialExpressionFunctionOutput>(Expression))
     {
@@ -960,6 +996,12 @@ FExpressionInput* FEpicUnrealMCPMaterialCommands::GetExpressionInputByName(UMate
         for (int32 FuncInputIdx = 0; FuncInputIdx < FunctionCall->FunctionInputs.Num(); ++FuncInputIdx)
         {
             FFunctionExpressionInput& FuncInput = FunctionCall->FunctionInputs[FuncInputIdx];
+            const FString IndexedName = FString::Printf(TEXT("input_%d"), FuncInputIdx);
+            if (IndexedName == LowerInputName)
+            {
+                return &FuncInput.Input;
+            }
+
             const FString FuncInputName = FuncInput.ExpressionInput
                 ? FuncInput.ExpressionInput->InputName.ToString().ToLower()
                 : Expression->GetInputName(FuncInputIdx).ToString().ToLower();
@@ -1217,6 +1259,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
         {
             NodeObj->SetStringField(TEXT("parameter_name"), ScalarParam->ParameterName.ToString());
             NodeObj->SetNumberField(TEXT("default_value"), ScalarParam->DefaultValue);
+            if (!ScalarParam->Group.IsNone())
+            {
+                NodeObj->SetStringField(TEXT("group"), ScalarParam->Group.ToString());
+            }
         }
         else if (UMaterialExpressionVectorParameter* VectorParam = Cast<UMaterialExpressionVectorParameter>(Expr))
         {
@@ -1227,6 +1273,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
             DefaultValue.Add(MakeShared<FJsonValueNumber>(VectorParam->DefaultValue.B));
             DefaultValue.Add(MakeShared<FJsonValueNumber>(VectorParam->DefaultValue.A));
             NodeObj->SetArrayField(TEXT("default_value"), DefaultValue);
+            if (!VectorParam->Group.IsNone())
+            {
+                NodeObj->SetStringField(TEXT("group"), VectorParam->Group.ToString());
+            }
         }
         else if (UMaterialExpressionConstant* ConstExpr = Cast<UMaterialExpressionConstant>(Expr))
         {
@@ -1263,6 +1313,18 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
                 NodeObj->SetStringField(TEXT("texture_path"), TexObj->Texture->GetPathName());
             }
         }
+        else if (UMaterialExpressionTextureObjectParameter* TexObjParam = Cast<UMaterialExpressionTextureObjectParameter>(Expr))
+        {
+            if (TexObjParam->Texture)
+            {
+                NodeObj->SetStringField(TEXT("texture_path"), TexObjParam->Texture->GetPathName());
+            }
+            NodeObj->SetStringField(TEXT("parameter_name"), TexObjParam->ParameterName.ToString());
+            if (!TexObjParam->Group.IsNone())
+            {
+                NodeObj->SetStringField(TEXT("group"), TexObjParam->Group.ToString());
+            }
+        }
         else if (UMaterialExpressionTextureSampleParameter2D* TexParam = Cast<UMaterialExpressionTextureSampleParameter2D>(Expr))
         {
             if (TexParam->Texture)
@@ -1271,6 +1333,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
             }
             NodeObj->SetStringField(TEXT("sampler_type"), SamplerTypeToString(TexParam->SamplerType));
             NodeObj->SetStringField(TEXT("parameter_name"), TexParam->ParameterName.ToString());
+            if (!TexParam->Group.IsNone())
+            {
+                NodeObj->SetStringField(TEXT("group"), TexParam->Group.ToString());
+            }
         }
         else if (UMaterialExpressionTextureSample* TexSample = Cast<UMaterialExpressionTextureSample>(Expr))
         {
@@ -1738,6 +1804,46 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
 
                 NewExpression = TexParam;
             }
+            else if (ExpressionType == TEXT("TextureObject"))
+            {
+                UMaterialExpressionTextureObject* TexObj = NewObject<UMaterialExpressionTextureObject>(GraphOwner);
+                FString TexturePath;
+                if (NodeObj->TryGetStringField(TEXT("texture"), TexturePath) || NodeObj->TryGetStringField(TEXT("texture_path"), TexturePath))
+                {
+                    if (UTexture* Texture = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexturePath)))
+                    {
+                        TexObj->Texture = Texture;
+                    }
+                }
+
+                NewExpression = TexObj;
+            }
+            else if (ExpressionType == TEXT("TextureObjectParameter"))
+            {
+                UMaterialExpressionTextureObjectParameter* TexObjParam = NewObject<UMaterialExpressionTextureObjectParameter>(GraphOwner);
+                FString TexturePath;
+                if (NodeObj->TryGetStringField(TEXT("texture"), TexturePath) || NodeObj->TryGetStringField(TEXT("texture_path"), TexturePath))
+                {
+                    if (UTexture* Texture = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexturePath)))
+                    {
+                        TexObjParam->Texture = Texture;
+                    }
+                }
+
+                FString ParamName;
+                if (NodeObj->TryGetStringField(TEXT("parameter_name"), ParamName))
+                {
+                    TexObjParam->ParameterName = FName(*ParamName);
+                }
+
+                FString Group;
+                if (NodeObj->TryGetStringField(TEXT("group"), Group))
+                {
+                    TexObjParam->Group = FName(*Group);
+                }
+
+                NewExpression = TexObjParam;
+            }
             else if (ExpressionType == TEXT("ScalarParameter"))
             {
                 UMaterialExpressionScalarParameter* ScalarParam = NewObject<UMaterialExpressionScalarParameter>(GraphOwner);
@@ -1842,6 +1948,64 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
             else if (ExpressionType == TEXT("Power"))
             {
                 NewExpression = NewObject<UMaterialExpressionPower>(GraphOwner);
+            }
+            else if (ExpressionType == TEXT("Maximum"))
+            {
+                UMaterialExpressionMax* MaxExpr = NewObject<UMaterialExpressionMax>(GraphOwner);
+                float ConstA = 0.0f;
+                float ConstB = 1.0f;
+                NodeObj->TryGetNumberField(TEXT("const_a"), ConstA);
+                NodeObj->TryGetNumberField(TEXT("const_b"), ConstB);
+                MaxExpr->ConstA = ConstA;
+                MaxExpr->ConstB = ConstB;
+                NewExpression = MaxExpr;
+            }
+            else if (ExpressionType == TEXT("Minimum"))
+            {
+                UMaterialExpressionMin* MinExpr = NewObject<UMaterialExpressionMin>(GraphOwner);
+                float ConstA = 0.0f;
+                float ConstB = 1.0f;
+                NodeObj->TryGetNumberField(TEXT("const_a"), ConstA);
+                NodeObj->TryGetNumberField(TEXT("const_b"), ConstB);
+                MinExpr->ConstA = ConstA;
+                MinExpr->ConstB = ConstB;
+                NewExpression = MinExpr;
+            }
+            else if (ExpressionType == TEXT("Step"))
+            {
+                UMaterialExpressionStep* StepExpr = NewObject<UMaterialExpressionStep>(GraphOwner);
+                float ConstY = 0.0f;
+                float ConstX = 1.0f;
+                NodeObj->TryGetNumberField(TEXT("const_y"), ConstY);
+                NodeObj->TryGetNumberField(TEXT("const_x"), ConstX);
+                StepExpr->ConstY = ConstY;
+                StepExpr->ConstX = ConstX;
+                NewExpression = StepExpr;
+            }
+            else if (ExpressionType == TEXT("SmoothStep"))
+            {
+                UMaterialExpressionSmoothStep* SmoothStepExpr = NewObject<UMaterialExpressionSmoothStep>(GraphOwner);
+                float ConstMin = 0.0f;
+                float ConstMax = 1.0f;
+                float ConstValue = 0.0f;
+                NodeObj->TryGetNumberField(TEXT("const_min"), ConstMin);
+                NodeObj->TryGetNumberField(TEXT("const_max"), ConstMax);
+                NodeObj->TryGetNumberField(TEXT("const_value"), ConstValue);
+                SmoothStepExpr->ConstMin = ConstMin;
+                SmoothStepExpr->ConstMax = ConstMax;
+                SmoothStepExpr->ConstValue = ConstValue;
+                NewExpression = SmoothStepExpr;
+            }
+            else if (ExpressionType == TEXT("If"))
+            {
+                UMaterialExpressionIf* IfExpr = NewObject<UMaterialExpressionIf>(GraphOwner);
+                float ConstB = 0.0f;
+                float EqualsThreshold = 0.00001f;
+                NodeObj->TryGetNumberField(TEXT("const_b"), ConstB);
+                NodeObj->TryGetNumberField(TEXT("equals_threshold"), EqualsThreshold);
+                IfExpr->ConstB = ConstB;
+                IfExpr->EqualsThreshold = EqualsThreshold;
+                NewExpression = IfExpr;
             }
             else if (ExpressionType == TEXT("Panner"))
             {
@@ -2040,12 +2204,18 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
                     return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Failed to load material function: %s"), *FunctionPath));
                 }
 
+                FunctionAsset->UpdateFromFunctionResource();
+                FunctionAsset->PostEditChange();
+                FunctionAsset->ConditionalPostLoad();
+
                 if (!FunctionCall->SetMaterialFunction(FunctionAsset))
                 {
                     return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Failed to assign material function: %s"), *FunctionPath));
                 }
 
                 FunctionCall->UpdateFromFunctionResource();
+                FunctionCall->PostEditChange();
+                FunctionCall->ConditionalPostLoad();
                 NewExpression = FunctionCall;
             }
             else
@@ -2146,6 +2316,19 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
         }
     }
 
+    auto RefreshFunctionCalls = [&](const TArray<UMaterialExpression*>& Expressions)
+    {
+        for (UMaterialExpression* Expression : Expressions)
+        {
+            if (UMaterialExpressionMaterialFunctionCall* FunctionCall = Cast<UMaterialExpressionMaterialFunctionCall>(Expression))
+            {
+                FunctionCall->UpdateFromFunctionResource();
+                FunctionCall->PostEditChange();
+                FunctionCall->ConditionalPostLoad();
+            }
+        }
+    };
+
     // Process material properties if provided
     const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
     if (Params->TryGetObjectField(TEXT("properties"), PropertiesObj))
@@ -2207,13 +2390,19 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
 
     if (Material)
     {
+        RefreshFunctionCalls(Material->GetExpressionCollection().Expressions);
+        Material->PostEditChange();
+        Material->ConditionalPostLoad();
         Material->MarkPackageDirty();
         UEditorAssetLibrary::SaveAsset(MaterialPath, false);
     }
     else if (MaterialFunction)
     {
+        RefreshFunctionCalls(MaterialFunction->GetExpressionCollection().Expressions);
         MaterialFunction->MarkPackageDirty();
         MaterialFunction->UpdateFromFunctionResource();
+        MaterialFunction->PostEditChange();
+        MaterialFunction->ConditionalPostLoad();
         UEditorAssetLibrary::SaveAsset(MaterialPath, false);
     }
 

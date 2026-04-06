@@ -1,0 +1,280 @@
+﻿{
+  "success": true,
+  "manifest_path": "D:\\unity-mcp\\exports\\Wing_L\\manifest.json",
+  "material_path": "/Game/Materials/Wings/M_Wing_L_Rebuild",
+  "summary": {
+    "total_checks": 39,
+    "passed": 39,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "name": "manifest.worldDissolveRuntime.available",
+      "ok": true,
+      "actual": true,
+      "expected": true
+    },
+    {
+      "name": "manifest.worldDissolveRuntime.instanceCount",
+      "ok": true,
+      "actual": 1,
+      "expected": ">=1"
+    },
+    {
+      "name": "manifest.worldDissolveRuntime.activeMasks",
+      "ok": true,
+      "actual": 2,
+      "expected": 2
+    },
+    {
+      "name": "manifest.worldDissolveRuntime.maskType",
+      "ok": true,
+      "actual": "Box",
+      "expected": "Box"
+    },
+    {
+      "name": "material.TwoSided",
+      "ok": true,
+      "actual": true,
+      "expected": true
+    },
+    {
+      "name": "material.BlendMode",
+      "ok": true,
+      "actual": 1,
+      "expected": 1
+    },
+    {
+      "name": "material.OpacityMaskClipValue",
+      "ok": true,
+      "actual": 0.3089999854564667,
+      "expected": 0.309
+    },
+    {
+      "name": "graph.output.BaseColor",
+      "ok": true,
+      "actual": {
+        "node_id": "Expr_If_55125",
+        "output_index": 0
+      },
+      "expected": "connected"
+    },
+    {
+      "name": "graph.output.OpacityMask",
+      "ok": true,
+      "actual": {
+        "node_id": "Expr_If_55124",
+        "output_index": 0
+      },
+      "expected": "connected"
+    },
+    {
+      "name": "graph.output.Normal",
+      "ok": true,
+      "actual": {
+        "node_id": "Expr_TextureSampleParameter2D_55154",
+        "output_index": 0
+      },
+      "expected": "connected"
+    },
+    {
+      "name": "graph.output.Metallic",
+      "ok": true,
+      "actual": {
+        "node_id": "Expr_ScalarParameter_55134",
+        "output_index": 0
+      },
+      "expected": "connected"
+    },
+    {
+      "name": "graph.output.Roughness",
+      "ok": true,
+      "actual": {
+        "node_id": "Expr_OneMinus_55133",
+        "output_index": 0
+      },
+      "expected": "connected"
+    },
+    {
+      "name": "graph.output.AmbientOcclusion",
+      "ok": true,
+      "actual": {
+        "node_id": "Expr_ScalarParameter_55142",
+        "output_index": 0
+      },
+      "expected": "connected"
+    },
+    {
+      "name": "graph.output.EmissiveColor",
+      "ok": true,
+      "actual": {
+        "node_id": "Expr_If_55126",
+        "output_index": 0
+      },
+      "expected": "connected"
+    },
+    {
+      "name": "graph.param.UseDissolve.exists",
+      "ok": true,
+      "actual": {
+        "node_id": "Expr_ScalarParameter_55145",
+        "type": "ScalarParameter",
+        "name": "MaterialExpressionScalarParameter_5",
+        "pos_x": -2600,
+        "pos_y": 2640,
+        "parameter_name": "UseDissolve",
+        "default_value": 0,
+        "group": "Dissolve"
+      },
+      "expected": "present"
+    },
+    {
+      "name": "graph.param.UseDissolve.default",
+      "ok": true,
+      "actual": 0,
+      "expected": 0.0
+    },
+    {
+      "name": "graph.group.BaseColorTexture",
+      "ok": true,
+      "actual": "Standard Lit",
+      "expected": "Standard Lit"
+    },
+    {
+      "name": "graph.group.BaseColorTint",
+      "ok": true,
+      "actual": "Standard Lit",
+      "expected": "Standard Lit"
+    },
+    {
+      "name": "graph.group.NormalTexture",
+      "ok": true,
+      "actual": "Standard Lit",
+      "expected": "Standard Lit"
+    },
+    {
+      "name": "graph.group.Metallic",
+      "ok": true,
+      "actual": "Standard Lit",
+      "expected": "Standard Lit"
+    },
+    {
+      "name": "graph.group.Smoothness",
+      "ok": true,
+      "actual": "Standard Lit",
+      "expected": "Standard Lit"
+    },
+    {
+      "name": "graph.group.AmbientOcclusion",
+      "ok": true,
+      "actual": "Standard Lit",
+      "expected": "Standard Lit"
+    },
+    {
+      "name": "graph.group.GuideTexture",
+      "ok": true,
+      "actual": "Guide",
+      "expected": "Guide"
+    },
+    {
+      "name": "graph.group.GuideTiling",
+      "ok": true,
+      "actual": "Guide",
+      "expected": "Guide"
+    },
+    {
+      "name": "graph.group.GuideStrength",
+      "ok": true,
+      "actual": "Guide",
+      "expected": "Guide"
+    },
+    {
+      "name": "graph.group.UseDissolve",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.Invert",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.UseDithering",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.GlareOffset",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.GlareGuideStrength",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.GlareWidth",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.GlareSmoothness",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.GlareColorRGB",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.EdgeWidth",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.EdgeSmoothness",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.EdgeColorRGB",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.AffectAlbedo",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.UseBackColor",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    },
+    {
+      "name": "graph.group.BackColorRGB",
+      "ok": true,
+      "actual": "Dissolve",
+      "expected": "Dissolve"
+    }
+  ],
+  "notes": [
+    "Group checks depend on get_material_graph exposing parameter group names.",
+    "This verifier proves structural alignment and exported runtime-data availability; it does not prove per-pixel visual parity."
+  ]
+}

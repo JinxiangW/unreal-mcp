@@ -1,0 +1,4 @@
+interface:
+  display_name: "Material Reconstruction Planner"
+  short_description: "Plan Unreal material rebuilds from exported packages"
+  default_prompt: "Use $material-reconstruction-planner to turn an exported material package into a UE reconstruction plan."

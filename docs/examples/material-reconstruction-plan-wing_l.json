@@ -1,0 +1,494 @@
+{
+  "schemaVersion": "material-reconstruction-plan/0.1",
+  "planId": "material-plan:Wing_L:2026-04-05",
+  "sourcePackage": {
+    "root": "D:/unity-mcp/exports/Wing_L",
+    "manifest": "D:/unity-mcp/exports/Wing_L/manifest.json",
+    "shaderGraph": "D:/unity-mcp/exports/Wing_L/shadergraph.json"
+  },
+  "target": {
+    "projectPath": "/Game/Materials/Wings",
+    "materialName": "M_Wing_L",
+    "materialAssetPath": "/Game/Materials/Wings/M_Wing_L",
+    "materialInstanceName": null
+  },
+  "strategy": {
+    "mode": "graph_guided_semantic_surface",
+    "reason": "Use exported surface semantics and textures to build a reliable first-pass UE material. Treat ShaderGraph structure as supporting evidence only, because subgraph bodies are unavailable and Unity edges do not expose a stable cross-engine pin contract.",
+    "confidence": 0.71,
+    "evidence": {
+      "manifestTransferMode": "custom_graph_needed",
+      "manifestConfidence": 0.45,
+      "graphNodeCount": 79,
+      "graphEdgeCount": 75,
+      "subgraphIndexEntries": 0,
+      "keyOutputDrivers": [
+        "Standard Lit Properties",
+        "Edge Smooth",
+        "Guide Triplanar",
+        "World Dissolve Masks Value",
+        "Position Displacement",
+        "Foliage Wind"
+      ]
+    }
+  },
+  "resourceBindings": [
+    {
+      "resourceId": "baseColor",
+      "semantic": "baseColor",
+      "packageFile": "Wing_L__BaseColor.psd",
+      "absoluteSourcePath": "D:/unity-mcp/exports/Wing_L/Wing_L__BaseColor.psd",
+      "ueAssetPath": "/Game/Materials/Wings/Textures/T_Wing_L_BaseColor",
+      "status": "needs_import",
+      "usageHints": {
+        "samplerType": "Color",
+        "compression": "Default",
+        "srgb": true,
+        "uvSet": 0
+      }
+    },
+    {
+      "resourceId": "normal",
+      "semantic": "normal",
+      "packageFile": "Wing_L__Normal.PNG",
+      "absoluteSourcePath": "D:/unity-mcp/exports/Wing_L/Wing_L__Normal.PNG",
+      "ueAssetPath": "/Game/Materials/Wings/Textures/T_Wing_L_Normal",
+      "status": "needs_import",
+      "usageHints": {
+        "samplerType": "Normal",
+        "compression": "Normalmap",
+        "srgb": false,
+        "uvSet": 0
+      }
+    },
+    {
+      "resourceId": "custom_guideTexture",
+      "semantic": "custom.guideTexture",
+      "packageFile": "Wing_L__GuideTexture.png",
+      "absoluteSourcePath": "D:/unity-mcp/exports/Wing_L/Wing_L__GuideTexture.png",
+      "ueAssetPath": "/Game/Materials/Wings/Textures/T_Wing_L_Guide",
+      "status": "needs_import",
+      "usageHints": {
+        "samplerType": "Color",
+        "compression": "Default",
+        "srgb": true,
+        "uvSet": 0,
+        "currentPlanUsage": "import_only_unconnected"
+      }
+    }
+  ],
+  "execution": {
+    "imports": [
+      {
+        "operation": "import_texture_asset",
+        "resourceId": "baseColor",
+        "sourcePath": "D:/unity-mcp/exports/Wing_L/Wing_L__BaseColor.psd",
+        "name": "T_Wing_L_BaseColor",
+        "destinationPath": "/Game/Materials/Wings/Textures"
+      },
+      {
+        "operation": "import_texture_asset",
+        "resourceId": "normal",
+        "sourcePath": "D:/unity-mcp/exports/Wing_L/Wing_L__Normal.PNG",
+        "name": "T_Wing_L_Normal",
+        "destinationPath": "/Game/Materials/Wings/Textures"
+      },
+      {
+        "operation": "import_texture_asset",
+        "resourceId": "custom_guideTexture",
+        "sourcePath": "D:/unity-mcp/exports/Wing_L/Wing_L__GuideTexture.png",
+        "name": "T_Wing_L_Guide",
+        "destinationPath": "/Game/Materials/Wings/Textures"
+      }
+    ],
+    "material": {
+      "create": true,
+      "path": "/Game/Materials/Wings",
+      "name": "M_Wing_L",
+      "assetPath": "/Game/Materials/Wings/M_Wing_L",
+      "properties": {
+        "shading_model": "DefaultLit",
+        "blend_mode": "Masked",
+        "two_sided": true,
+        "material_domain": "Surface"
+      },
+      "postCreateAssetProperties": {
+        "opacity_mask_clip_value": 0.309
+      }
+    },
+    "graph": {
+      "material_name": "/Game/Materials/Wings/M_Wing_L",
+      "recipe": {
+        "nodes": [
+          {
+            "id": "texcoord_0",
+            "type": "TextureCoordinate",
+            "pos_x": 0,
+            "pos_y": 0
+          },
+          {
+            "id": "basecolor_tex",
+            "type": "TextureSampleParameter2D",
+            "parameter_name": "BaseColorTexture",
+            "group": "Surface",
+            "texture": "/Game/Materials/Wings/Textures/T_Wing_L_BaseColor",
+            "sampler_type": "Color",
+            "pos_x": 320,
+            "pos_y": 0
+          },
+          {
+            "id": "basecolor_tint",
+            "type": "VectorParameter",
+            "parameter_name": "BaseColorTint",
+            "group": "Surface",
+            "value": [
+              0.980392158,
+              0.980392158,
+              0.980392158,
+              1.0
+            ],
+            "pos_x": 320,
+            "pos_y": 220
+          },
+          {
+            "id": "basecolor_mul",
+            "type": "Multiply",
+            "pos_x": 640,
+            "pos_y": 80
+          },
+          {
+            "id": "normal_tex",
+            "type": "TextureSampleParameter2D",
+            "parameter_name": "NormalTexture",
+            "group": "Surface",
+            "texture": "/Game/Materials/Wings/Textures/T_Wing_L_Normal",
+            "sampler_type": "Normal",
+            "pos_x": 320,
+            "pos_y": 440
+          },
+          {
+            "id": "metallic_param",
+            "type": "ScalarParameter",
+            "parameter_name": "Metallic",
+            "group": "Surface",
+            "value": 0.107,
+            "pos_x": 320,
+            "pos_y": 660
+          },
+          {
+            "id": "smoothness_param",
+            "type": "ScalarParameter",
+            "parameter_name": "Smoothness",
+            "group": "Surface",
+            "value": 0.0,
+            "pos_x": 320,
+            "pos_y": 880
+          },
+          {
+            "id": "roughness_from_smoothness",
+            "type": "OneMinus",
+            "pos_x": 640,
+            "pos_y": 880
+          },
+          {
+            "id": "occlusion_param",
+            "type": "ScalarParameter",
+            "parameter_name": "OcclusionStrength",
+            "group": "Surface",
+            "value": 0.153,
+            "pos_x": 320,
+            "pos_y": 1100
+          }
+        ],
+        "connections": [
+          {
+            "source": "texcoord_0",
+            "source_output": "Output",
+            "target": "basecolor_tex",
+            "target_input": "Coordinates"
+          },
+          {
+            "source": "texcoord_0",
+            "source_output": "Output",
+            "target": "normal_tex",
+            "target_input": "Coordinates"
+          },
+          {
+            "source": "basecolor_tex",
+            "source_output": "RGB",
+            "target": "basecolor_mul",
+            "target_input": "A"
+          },
+          {
+            "source": "basecolor_tint",
+            "source_output": "Output",
+            "target": "basecolor_mul",
+            "target_input": "B"
+          },
+          {
+            "source": "basecolor_mul",
+            "source_output": "Output",
+            "target": "Material",
+            "target_input": "BaseColor"
+          },
+          {
+            "source": "basecolor_tex",
+            "source_output": "A",
+            "target": "Material",
+            "target_input": "OpacityMask"
+          },
+          {
+            "source": "normal_tex",
+            "source_output": "RGB",
+            "target": "Material",
+            "target_input": "Normal"
+          },
+          {
+            "source": "metallic_param",
+            "source_output": "Output",
+            "target": "Material",
+            "target_input": "Metallic"
+          },
+          {
+            "source": "smoothness_param",
+            "source_output": "Output",
+            "target": "roughness_from_smoothness",
+            "target_input": "Input"
+          },
+          {
+            "source": "roughness_from_smoothness",
+            "source_output": "Output",
+            "target": "Material",
+            "target_input": "Roughness"
+          },
+          {
+            "source": "occlusion_param",
+            "source_output": "Output",
+            "target": "Material",
+            "target_input": "AmbientOcclusion"
+          }
+        ],
+        "properties": {
+          "shading_model": "DefaultLit",
+          "blend_mode": "Masked",
+          "two_sided": true,
+          "material_domain": "Surface"
+        }
+      }
+    },
+    "instance": null
+  },
+  "approximations": [
+    {
+      "kind": "graph_simplification",
+      "source": "Edge Smooth output branch",
+      "decision": "Ignore custom dissolve edge shaping and reconstruct only base color tinting plus alpha-driven opacity mask.",
+      "impact": "Dissolve edge color, back color, glare, and edge emissive effects are absent."
+    },
+    {
+      "kind": "graph_simplification",
+      "source": "Position Displacement and Foliage Wind",
+      "decision": "Omit World Position Offset and animated vertex branches in the first pass.",
+      "impact": "The UE material is visually static and does not reproduce wind or displacement motion."
+    },
+    {
+      "kind": "semantic_conversion",
+      "source": "roughness",
+      "decision": "Reconstruct roughness as OneMinus(Smoothness) with Smoothness defaulting to 0.0.",
+      "impact": "If Unity modifies smoothness downstream in hidden subgraphs, UE gloss response will differ."
+    },
+    {
+      "kind": "semantic_conversion",
+      "source": "occlusion",
+      "decision": "Use a scalar occlusion value of 0.153 because no occlusion texture is assigned.",
+      "impact": "Ambient occlusion detail is uniform."
+    },
+    {
+      "kind": "uv_mapping_assumption",
+      "source": "baseColor and normal sampling",
+      "decision": "Use UV0 TextureCoordinate for the core PBR subset.",
+      "impact": "This does not reproduce triplanar or guide-driven UV behavior."
+    },
+    {
+      "kind": "output_mapping_guess",
+      "source": "shaderFamily=CustomLit",
+      "decision": "Map source shading to UE DefaultLit for the first executable pass.",
+      "impact": "Lighting is stable but may differ from source custom lighting logic."
+    },
+    {
+      "kind": "resource_substitution",
+      "source": "custom.guideTexture",
+      "decision": "Import the guide texture now but leave it unconnected.",
+      "impact": "Later custom graph work can reuse the texture without changing imports."
+    }
+  ],
+  "unresolved": [
+    {
+      "kind": "subgraph_translation_missing",
+      "source": "Edge Smooth",
+      "reason": "The package indicates this subgraph drives BaseColor, Alpha, and Emission, but no subgraph body is available for deterministic translation.",
+      "evidence": {
+        "connectedOutputs": [
+          "SurfaceDescription.BaseColor",
+          "SurfaceDescription.Alpha",
+          "SurfaceDescription.Emission"
+        ]
+      },
+      "severity": "warning"
+    },
+    {
+      "kind": "subgraph_translation_missing",
+      "source": "Standard Lit Properties",
+      "reason": "The package indicates this subgraph drives NormalTS, AlphaClipThreshold, Metallic, Smoothness, and Occlusion, but no subgraph body is available for deterministic translation.",
+      "evidence": {
+        "connectedOutputs": [
+          "SurfaceDescription.NormalTS",
+          "SurfaceDescription.AlphaClipThreshold",
+          "SurfaceDescription.Metallic",
+          "SurfaceDescription.Smoothness",
+          "SurfaceDescription.Occlusion"
+        ]
+      },
+      "severity": "warning"
+    },
+    {
+      "kind": "custom_graph_logic",
+      "source": "custom.guideTexture",
+      "reason": "Guide Triplanar and world dissolve mask logic cannot be reproduced safely with current evidence.",
+      "evidence": {
+        "rawPropertyNames": [
+          "_GuideTexture",
+          "_GuideTiling",
+          "_GuideStrength"
+        ],
+        "parameters": {
+          "guideTiling": 0.76,
+          "guideStrength": 0.55
+        }
+      },
+      "severity": "warning"
+    },
+    {
+      "kind": "custom_graph_logic",
+      "source": "dissolve",
+      "reason": "Unity-specific dissolve controls are present but not translated into the first-pass UE graph.",
+      "evidence": {
+        "rawPropertyNames": [
+          "_Invert",
+          "_UseBackColor",
+          "_BackColor",
+          "_UseDithering",
+          "_EdgeColor",
+          "_EdgeWidth",
+          "_EdgeSmoothness",
+          "_AffectAlbedo",
+          "_GlareColor",
+          "_GlareGuideStrength",
+          "_GlareWidth",
+          "_GlareSmoothness",
+          "_GlareOffset"
+        ]
+      },
+      "severity": "warning"
+    },
+    {
+      "kind": "custom_graph_logic",
+      "source": "displacement",
+      "reason": "Vertex displacement and motion controls are source-specific and omitted from the first-pass graph.",
+      "evidence": {
+        "rawPropertyNames": [
+          "_DisplacementPerVertex",
+          "_DisplacementSmoothness",
+          "_DisplacementOffset",
+          "_RotationAxis",
+          "_RotationMin",
+          "_RotationMax",
+          "_RandomPositionOffset",
+          "_PositionOffset",
+          "_Scale",
+          "_NormalOffset"
+        ]
+      },
+      "severity": "warning"
+    },
+    {
+      "kind": "insufficient_port_semantics",
+      "source": "shadergraph.json",
+      "reason": "Unity graph edges are encoded as opaque slot ids rather than a reusable cross-engine pin contract.",
+      "evidence": {
+        "edgeEncoding": "outputSlotId/inputSlotId integers",
+        "subgraphIndexEntries": 0
+      },
+      "severity": "info"
+    }
+  ],
+  "verificationGoals": [
+    {
+      "kind": "material_property",
+      "field": "shading_model",
+      "expected": "DefaultLit"
+    },
+    {
+      "kind": "material_property",
+      "field": "blend_mode",
+      "expected": "Masked"
+    },
+    {
+      "kind": "material_property",
+      "field": "two_sided",
+      "expected": true
+    },
+    {
+      "kind": "material_property",
+      "field": "opacity_mask_clip_value",
+      "expected": 0.309
+    },
+    {
+      "kind": "graph_output_connected",
+      "output": "BaseColor",
+      "expectedSourceNode": "basecolor_mul"
+    },
+    {
+      "kind": "graph_output_connected",
+      "output": "OpacityMask",
+      "expectedSourceNode": "basecolor_tex",
+      "expectedSourceOutput": "A"
+    },
+    {
+      "kind": "graph_output_connected",
+      "output": "Normal",
+      "expectedSourceNode": "normal_tex",
+      "expectedSourceOutput": "RGB"
+    },
+    {
+      "kind": "graph_output_connected",
+      "output": "Metallic",
+      "expectedSourceNode": "metallic_param"
+    },
+    {
+      "kind": "graph_output_connected",
+      "output": "Roughness",
+      "expectedSourceNode": "roughness_from_smoothness"
+    },
+    {
+      "kind": "graph_output_connected",
+      "output": "AmbientOcclusion",
+      "expectedSourceNode": "occlusion_param"
+    },
+    {
+      "kind": "resource_bound",
+      "resourceId": "baseColor",
+      "expectedAssetPath": "/Game/Materials/Wings/Textures/T_Wing_L_BaseColor"
+    },
+    {
+      "kind": "resource_bound",
+      "resourceId": "normal",
+      "expectedAssetPath": "/Game/Materials/Wings/Textures/T_Wing_L_Normal"
+    },
+    {
+      "kind": "resource_bound",
+      "resourceId": "custom_guideTexture",
+      "expectedAssetPath": "/Game/Materials/Wings/Textures/T_Wing_L_Guide"
+    }
+  ]
+}

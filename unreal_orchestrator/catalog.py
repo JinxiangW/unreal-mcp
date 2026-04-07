@@ -66,6 +66,24 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "packages": ["unreal_material_graph"],
     },
+    "renderdoc": {
+        "domain": "renderdoc",
+        "backend": "python",
+        "target_backend": "ue_context_and_capture_control",
+        "status": "active",
+        "summary": "RenderDoc capture control, UE context snapshots, selection mapping, and diff metadata helpers.",
+        "keywords": [
+            "renderdoc",
+            "capture",
+            "rdc",
+            "gpu debug",
+            "viewport issue",
+            "selection capture",
+            "render graph",
+            "rdg pass",
+        ],
+        "packages": ["unreal_renderdoc"],
+    },
     "niagara": {
         "domain": "niagara",
         "backend": "internal_tcp_backend",
@@ -144,7 +162,7 @@ def route_text(text: str) -> Dict[str, Any]:
     if not scored:
         return {
             "primary_domain": "diagnostics",
-            "candidate_domains": ["scene", "asset", "material", "material_graph"],
+            "candidate_domains": ["scene", "asset", "material", "material_graph", "renderdoc"],
             "reason": "No strong keyword match; default to diagnostics and manual classification.",
         }
 

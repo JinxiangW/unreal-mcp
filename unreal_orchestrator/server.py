@@ -65,6 +65,19 @@ from unreal_scene.tools import (
     set_scene_light_intensity as scene_set_scene_light_intensity,
     spawn_actor_with_defaults as scene_spawn_actor_with_defaults,
 )
+from unreal_renderdoc.tools import (
+    capture_current_selection as renderdoc_capture_current_selection,
+    capture_current_viewport_issue as renderdoc_capture_current_viewport_issue,
+    capture_renderdoc_diff_pair as renderdoc_capture_renderdoc_diff_pair,
+    get_renderdoc_capture_context,
+    get_renderdoc_harness_info,
+    get_renderdoc_runtime_status,
+    get_renderdoc_selection_context,
+    map_material_to_renderdoc_context,
+    normalize_renderdoc_debug_labels,
+    request_renderdoc_capture,
+    set_renderdoc_debug_workflow,
+)
 
 
 _CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -901,6 +914,17 @@ for tool in [get_harness_domains, get_domain_design, route_harness_task]:
 DEFAULT_TOOLS = [
     get_scene_harness_info,
     get_scene_backend_status,
+    get_renderdoc_harness_info,
+    get_renderdoc_runtime_status,
+    get_renderdoc_capture_context,
+    get_renderdoc_selection_context,
+    map_material_to_renderdoc_context,
+    normalize_renderdoc_debug_labels,
+    set_renderdoc_debug_workflow,
+    request_renderdoc_capture,
+    renderdoc_capture_current_selection,
+    renderdoc_capture_current_viewport_issue,
+    renderdoc_capture_renderdoc_diff_pair,
     apply_scene_actor_batch,
     delete_scene_actors_batch,
     query_scene_actors,

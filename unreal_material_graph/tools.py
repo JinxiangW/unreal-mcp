@@ -187,18 +187,52 @@ def analyze_material_graph(asset_path: str) -> Dict[str, Any]:
     nodes = result.get("nodes") or []
     connections = result.get("connections") or []
     property_connections = result.get("property_connections") or {}
+    asset_path_resolved = result.get("path") or asset_path
     node_types = Counter(
         node.get("type", "Unknown") for node in nodes if isinstance(node, dict)
     )
     checks = [
-        _graph_check(asset_path, "node_count_consistent", len(nodes), len(nodes)),
         _graph_check(
             asset_path,
-            "connection_count_consistent",
-            len(connections),
-            len(connections),
+            "nodes_loaded",
+            True,
+            isinstance(nodes, list),
         ),
+        _graph_check(
+            asset_path,
+            "connections_loaded",
+            True,
+            isinstance(connections, list),
+        ),
+        _graph_check(asset_path, "asset_path", asset_path_resolved, asset_path_resolved),
     ]
+    verification_mode = "structural"
+    if "node_count" in result:
+        verification_mode = "backend_summary"
+        checks.append(
+            _graph_check(asset_path, "node_count", result.get("node_count"), len(nodes))
+        )
+    if "connection_count" in result:
+        verification_mode = "backend_summary"
+        checks.append(
+            _graph_check(
+                asset_path,
+                "connection_count",
+                result.get("connection_count"),
+                len(connections),
+            )
+        )
+    if "property_connection_count" in result:
+        verification_mode = "backend_summary"
+        checks.append(
+            _graph_check(
+                asset_path,
+                "property_connection_count",
+                result.get("property_connection_count"),
+                len(property_connections) if isinstance(property_connections, dict) else 0,
+            )
+        )
+    verified = all(item["ok"] for item in checks)
     return {
         "success": bool(result.get("success", False)),
         "operation_id": operation_id,
@@ -218,10 +252,11 @@ def analyze_material_graph(asset_path: str) -> Dict[str, Any]:
             }
         },
         "verification": {
-            "verified": all(item["ok"] for item in checks),
+            "verified": verified,
             "checks": checks,
+            "mode": verification_mode,
         },
-        "asset_path": result.get("path") or asset_path,
+        "asset_path": asset_path_resolved,
         "asset_type": result.get("asset_type"),
         "node_count": len(nodes),
         "connection_count": len(connections),

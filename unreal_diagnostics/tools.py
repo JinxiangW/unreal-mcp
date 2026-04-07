@@ -16,6 +16,7 @@ from unreal_harness_runtime.config import (
     get_editor_cmd_path,
     get_editor_exe_path,
     get_project_path,
+    get_project_path_optional,
     get_unreal_host,
     get_unreal_port,
     get_runtime_paths,
@@ -300,9 +301,11 @@ def get_editor_process_status() -> Dict[str, Any]:
 def get_commandlet_runtime_status() -> Dict[str, Any]:
     """Check whether commandlet prerequisites are present on disk."""
     runtime_paths = get_runtime_paths()
+    project_path = get_project_path_optional()
     checks = {
         "editor_cmd_exists": get_editor_cmd_path().exists(),
-        "project_exists": get_project_path().exists(),
+        "project_path_configured": project_path is not None,
+        "project_exists": project_path.exists() if project_path is not None else False,
         "commandlet_script_exists": Path(runtime_paths["commandlet_script"]).exists(),
     }
     verification_checks = [
@@ -472,6 +475,7 @@ def get_token_usage_summary(top_n: int = 10) -> Dict[str, Any]:
 
 def get_runtime_policy() -> Dict[str, Any]:
     """Describe the runtime policy boundary between normal usage and MCP development."""
+    runtime_paths = get_runtime_paths()
     payload = {
         "default_mode": "usage",
         "auto_launch_default": False,
@@ -485,7 +489,7 @@ def get_runtime_policy() -> Dict[str, Any]:
         "dev_only_tools": [
             "dev_launch_editor_and_wait_ready",
         ],
-        "runtime_paths": get_runtime_paths(),
+        "runtime_paths": runtime_paths,
     }
     return _diag_wrap(
         "get_runtime_policy",
@@ -670,9 +674,12 @@ def dev_launch_editor_and_wait_ready(
     """
     pre_state = get_editor_ready_state()
     if pre_state.get("ready"):
+        ready_project_path = (
+            Path(project_path) if project_path else get_project_path_optional()
+        )
         return _diag_wrap(
             "dev_launch_editor_and_wait_ready",
-            targets=[str(get_project_path())],
+            targets=[str(ready_project_path)] if ready_project_path is not None else [],
             post_state={"editor_launch": pre_state},
             checks=[_diag_check("editor_launch", "ready", True, True)],
             success=True,
@@ -684,17 +691,112 @@ def dev_launch_editor_and_wait_ready(
             },
         )
 
-    resolved_editor_exe = editor_exe or str(get_editor_exe_path())
-    resolved_project_path = project_path or str(get_project_path())
+    resolved_editor_exe = Path(editor_exe) if editor_exe else get_editor_exe_path()
+    resolved_project_path = (
+        Path(project_path) if project_path else get_project_path_optional()
+    )
+    missing_checks = [
+        _diag_check("editor_launch", "editor_exe_exists", True, resolved_editor_exe.exists()),
+        _diag_check(
+            "editor_launch",
+            "project_path_configured",
+            True,
+            resolved_project_path is not None,
+        ),
+        _diag_check(
+            "editor_launch",
+            "project_path_exists",
+            True,
+            resolved_project_path.exists() if resolved_project_path is not None else False,
+        ),
+    ]
+    missing_failed_changes = []
+    if not resolved_editor_exe.exists():
+        missing_failed_changes.append(
+            {
+                "target": str(resolved_editor_exe),
+                "field": "editor_exe",
+                "error": "Editor executable not found",
+            }
+        )
+    if resolved_project_path is None:
+        missing_failed_changes.append(
+            {
+                "target": "UE_PROJECT_PATH",
+                "field": "project_path",
+                "error": "UE_PROJECT_PATH is not configured",
+            }
+        )
+    elif not resolved_project_path.exists():
+        missing_failed_changes.append(
+            {
+                "target": str(resolved_project_path),
+                "field": "project_path",
+                "error": "Project path not found",
+            }
+        )
+    if missing_failed_changes:
+        return _diag_wrap(
+            "dev_launch_editor_and_wait_ready",
+            targets=[str(resolved_project_path)] if resolved_project_path is not None else [],
+            post_state={
+                "editor_launch": {
+                    "ready": False,
+                    "mode": "dev",
+                    "editor_exe": str(resolved_editor_exe),
+                    "project_path": str(resolved_project_path) if resolved_project_path is not None else None,
+                }
+            },
+            checks=missing_checks,
+            success=False,
+            failed_changes=missing_failed_changes,
+            extras={
+                "launched": False,
+                "mode": "dev",
+                "editor_exe": str(resolved_editor_exe),
+                "project_path": str(resolved_project_path) if resolved_project_path is not None else None,
+                "error": "Editor launch prerequisites are missing",
+            },
+        )
+
     command = [
-        resolved_editor_exe,
-        resolved_project_path,
+        str(resolved_editor_exe),
+        str(resolved_project_path),
         "-NoSplash",
         "-NoSound",
         "-NoRHIValidation",
         "-SkipCompile",
     ]
-    subprocess.Popen(command, shell=False)
+    try:
+        subprocess.Popen(command, shell=False)
+    except OSError as exc:
+        return _diag_wrap(
+            "dev_launch_editor_and_wait_ready",
+            targets=[str(resolved_project_path)],
+            post_state={
+                "editor_launch": {
+                    "ready": False,
+                    "mode": "dev",
+                    "editor_exe": str(resolved_editor_exe),
+                    "project_path": str(resolved_project_path),
+                }
+            },
+            checks=missing_checks,
+            success=False,
+            failed_changes=[
+                {
+                    "target": str(resolved_project_path),
+                    "field": "launch",
+                    "error": str(exc),
+                }
+            ],
+            extras={
+                "launched": False,
+                "mode": "dev",
+                "command": command,
+                "error": str(exc),
+            },
+        )
 
     final_state = wait_for_editor_ready(
         timeout_seconds=timeout_seconds,
@@ -704,7 +806,7 @@ def dev_launch_editor_and_wait_ready(
     )
     return _diag_wrap(
         "dev_launch_editor_and_wait_ready",
-        targets=[resolved_project_path],
+        targets=[str(resolved_project_path)],
         post_state={"editor_launch": final_state},
         checks=[_diag_check("editor_launch", "ready", True, final_state.get("ready"))],
         success=bool(final_state.get("ready")),

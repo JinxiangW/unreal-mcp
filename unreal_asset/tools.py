@@ -545,7 +545,7 @@ else:
         }})
 """
     result = run_editor_python(wrap_editor_python(body))
-    if not result.get("success"):
+    if not result.get("success") and not result.get("asset_path"):
         return _structured_asset_failure(
             operation_id,
             f"{path.rstrip('/')}/{name}.{name}",
@@ -553,10 +553,13 @@ else:
         )
     asset_path_name = result.get("asset_path")
     failed_properties = result.get("failed_properties", [])
+    failed_property_fields = {
+        failure.split(":", 1)[0].strip() for failure in failed_properties if ":" in failure
+    }
     applied_changes = [
         {"target": asset_path_name, "field": key, "value": value}
         for key, value in (properties or {}).items()
-        if not any(str(key) in failed for failed in failed_properties)
+        if ("parent" if key == "parent_material" else key) not in failed_property_fields
     ]
     failed_changes = [
         {"target": asset_path_name, "field": failure.split(":", 1)[0], "error": failure}
@@ -773,11 +776,19 @@ else:
     modified_properties = result.get("modified_properties", [])
     failed_properties = result.get("failed_properties", [])
     checks = []
+    applied_changes = []
     for field in modified_properties:
         requested_key = (
             "parent_material"
             if field == "parent" and "parent_material" in properties
             else field
+        )
+        applied_changes.append(
+            {
+                "target": asset_path,
+                "field": field,
+                "value": properties.get(requested_key),
+            }
         )
         checks.append(
             _asset_check(
@@ -793,10 +804,7 @@ else:
         "operation_id": operation_id,
         "domain": "asset",
         "targets": [asset_path],
-        "applied_changes": [
-            {"target": asset_path, "field": field, "value": properties.get(field)}
-            for field in modified_properties
-        ],
+        "applied_changes": applied_changes,
         "failed_changes": [
             {"target": asset_path, "field": failure.split(":", 1)[0], "error": failure}
             for failure in failed_properties

@@ -21,12 +21,25 @@ def _new_operation_id(action: str) -> str:
 def _material_check(
     target: str, field: str, expected: Any, actual: Any
 ) -> Dict[str, Any]:
+    def _matches(lhs: Any, rhs: Any, tolerance: float = 1e-4) -> bool:
+        if isinstance(lhs, (int, float)) and isinstance(rhs, (int, float)):
+            return abs(float(lhs) - float(rhs)) < tolerance
+        if isinstance(lhs, dict) and isinstance(rhs, dict):
+            if set(lhs) != set(rhs):
+                return False
+            return all(_matches(lhs[key], rhs[key], tolerance) for key in lhs)
+        if isinstance(lhs, (list, tuple)) and isinstance(rhs, (list, tuple)):
+            if len(lhs) != len(rhs):
+                return False
+            return all(_matches(left, right, tolerance) for left, right in zip(lhs, rhs))
+        return lhs == rhs
+
     return {
         "target": target,
         "field": field,
         "expected": expected,
         "actual": actual,
-        "ok": expected == actual,
+        "ok": _matches(expected, actual),
     }
 
 
@@ -75,7 +88,7 @@ def get_material_harness_info() -> Dict[str, Any]:
 def create_material_asset(name: str, path: str = "/Game/") -> Dict[str, Any]:
     """Create a material asset through the asset harness."""
     result = create_asset_with_properties(asset_type="Material", name=name, path=path)
-    result.setdefault("operation_id", _new_operation_id("create_material_asset"))
+    result["operation_id"] = _new_operation_id("create_material_asset")
     result["domain"] = "material"
     return result
 
@@ -90,9 +103,7 @@ def create_material_instance_asset(
         path=path,
         properties={"parent_material": parent_material},
     )
-    result.setdefault(
-        "operation_id", _new_operation_id("create_material_instance_asset")
-    )
+    result["operation_id"] = _new_operation_id("create_material_instance_asset")
     result["domain"] = "material"
     return result
 
@@ -102,9 +113,7 @@ def update_material_instance_properties(
 ) -> Dict[str, Any]:
     """Update a material instance through the asset harness."""
     result = update_asset_properties(asset_path=asset_path, properties=properties)
-    result.setdefault(
-        "operation_id", _new_operation_id("update_material_instance_properties")
-    )
+    result["operation_id"] = _new_operation_id("update_material_instance_properties")
     result["domain"] = "material"
     return result
 

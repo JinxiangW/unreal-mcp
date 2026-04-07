@@ -14,11 +14,6 @@ _DEFAULT_EDITOR_EXE_CANDIDATES = [
     Path(r"F:\GFFEngines\Main\Engine\Binaries\Win64\UnrealEditor.exe"),
 ]
 
-_DEFAULT_PROJECT_PATH_CANDIDATES = [
-    _REPO_ROOT / "RenderingMCP" / "RenderingMCP.uproject",
-]
-
-
 def _first_existing_path(candidates: list[Path]) -> Path:
     for candidate in candidates:
         if candidate.exists():
@@ -57,11 +52,18 @@ def get_editor_cmd_path() -> Path:
     return editor_exe.parent / "UnrealEditor-Cmd.exe"
 
 
-def get_project_path() -> Path:
+def get_project_path_optional() -> Path | None:
     configured = _env_path("UE_PROJECT_PATH")
+    return configured
+
+
+def get_project_path() -> Path:
+    configured = get_project_path_optional()
     if configured is not None:
         return configured
-    return _first_existing_path(_DEFAULT_PROJECT_PATH_CANDIDATES)
+    raise RuntimeError(
+        "UE_PROJECT_PATH is not configured. Set UE_PROJECT_PATH to the target .uproject path."
+    )
 
 
 def get_commandlet_script_path() -> Path:
@@ -69,11 +71,13 @@ def get_commandlet_script_path() -> Path:
 
 
 def get_runtime_paths() -> dict[str, str]:
+    project_path = get_project_path_optional()
     return {
         "host": get_unreal_host(),
         "port": str(get_unreal_port()),
         "editor_exe": str(get_editor_exe_path()),
         "editor_cmd": str(get_editor_cmd_path()),
-        "project_path": str(get_project_path()),
+        "project_path": str(project_path) if project_path is not None else "",
+        "project_path_configured": "true" if project_path is not None else "false",
         "commandlet_script": str(get_commandlet_script_path()),
     }

@@ -109,6 +109,9 @@ def _mcp_read_transform(actor):
         "scale": _mcp_to_simple(actor.get_actor_scale3d()),
     }
 
+def _mcp_make_rotator(pitch, yaw, roll):
+    return unreal.Rotator(pitch=pitch, yaw=yaw, roll=roll)
+
 def _mcp_get_root_component(actor):
     if hasattr(actor, "get_root_component"):
         try:
@@ -733,7 +736,7 @@ for item in actor_updates:
         actor = actor_subsystem.spawn_actor_from_class(
             unreal.SpotLight,
             unreal.Vector(item["location"]["x"], item["location"]["y"], item["location"]["z"]),
-            unreal.Rotator(item["rotation"]["pitch"], item["rotation"]["yaw"], item["rotation"]["roll"]),
+            _mcp_make_rotator(item["rotation"]["pitch"], item["rotation"]["yaw"], item["rotation"]["roll"]),
         )
         if actor is not None:
             actor.set_actor_label(name)
@@ -744,7 +747,7 @@ for item in actor_updates:
         continue
 
     actor.set_actor_location(unreal.Vector(item["location"]["x"], item["location"]["y"], item["location"]["z"]), False, False)
-    actor.set_actor_rotation(unreal.Rotator(item["rotation"]["pitch"], item["rotation"]["yaw"], item["rotation"]["roll"]), False)
+    actor.set_actor_rotation(_mcp_make_rotator(item["rotation"]["pitch"], item["rotation"]["yaw"], item["rotation"]["roll"]), False)
     actor_key = _mcp_get_actor_identifier(actor)
 
     light_component = actor.get_component_by_class(unreal.SpotLightComponent)
@@ -871,7 +874,7 @@ else:
     current_rotation = actor.get_actor_rotation()
     look_rotation = unreal.MathLibrary.find_look_at_rotation(actor_location, target_location)
     final_roll = requested_roll if requested_roll is not None else (current_rotation.roll if preserve_roll else 0.0)
-    desired_rotation = unreal.Rotator(look_rotation.pitch, look_rotation.yaw, final_roll)
+    desired_rotation = _mcp_make_rotator(look_rotation.pitch, look_rotation.yaw, final_roll)
     actor.set_actor_rotation(desired_rotation, False)
     post_rotation = actor.get_actor_rotation()
     checks = [
@@ -1512,7 +1515,7 @@ else:
         spawned_actor = unreal.EditorLevelLibrary.spawn_actor_from_class(
             actor_class,
             unreal.Vector(location["x"], location["y"], location["z"]),
-            unreal.Rotator(rotation["pitch"], rotation["yaw"], rotation["roll"]),
+            _mcp_make_rotator(rotation["pitch"], rotation["yaw"], rotation["roll"]),
         )
         if spawned_actor is None:
             _mcp_emit({{
@@ -1531,7 +1534,7 @@ else:
                 spawned_actor.set_actor_label(requested_name)
             actor_key = _mcp_get_actor_identifier(spawned_actor)
             spawned_actor.set_actor_location(unreal.Vector(location["x"], location["y"], location["z"]), False, False)
-            spawned_actor.set_actor_rotation(unreal.Rotator(rotation["pitch"], rotation["yaw"], rotation["roll"]), False)
+            spawned_actor.set_actor_rotation(_mcp_make_rotator(rotation["pitch"], rotation["yaw"], rotation["roll"]), False)
             spawned_actor.set_actor_scale3d(unreal.Vector(scale["x"], scale["y"], scale["z"]))
 
             root_component = _mcp_get_root_component(spawned_actor)

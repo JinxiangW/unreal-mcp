@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import json
+import tempfile
 
 from unreal_asset import tools as asset_tools
 from unreal_diagnostics import tools as diagnostics_tools
@@ -12,6 +13,22 @@ from unreal_renderdoc import tools as renderdoc_tools
 
 
 class AssetToolContractTests(unittest.TestCase):
+    def test_upsert_texture_lod_group_lines_appends_missing_group(self) -> None:
+        lines = [
+            "[GlobalDefaults DeviceProfile]",
+            "TextureLODGroups=(Group=TEXTUREGROUP_World,MinLODSize=1,MaxLODSize=16384)",
+        ]
+
+        updated = asset_tools._upsert_texture_lod_group_lines(
+            lines,
+            group_name="TEXTUREGROUP_PROJECT01",
+            max_lod_size=2048,
+        )
+
+        joined = "\n".join(updated)
+        self.assertIn("Group=TEXTUREGROUP_PROJECT01", joined)
+        self.assertIn("MaxLODSize=2048", joined)
+
     @patch("unreal_asset.tools.run_editor_python")
     def test_create_asset_with_properties_preserves_partial_creation_details(
         self, mock_run_editor_python
@@ -55,6 +72,60 @@ class AssetToolContractTests(unittest.TestCase):
             {"parent_material": "/Game/Base/M_Base.M_Base"},
         )
 
+        self.assertEqual(len(result["applied_changes"]), 1)
+        self.assertEqual(
+            result["applied_changes"][0]["value"], "/Game/Base/M_Base.M_Base"
+        )
+
+    @patch("unreal_asset.tools._resolve_project_config_dir")
+    def test_update_texture_group_config_writes_default_device_profiles(
+        self, mock_resolve_project_config_dir
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir)
+            ini_path = config_dir / "DefaultDeviceProfiles.ini"
+            ini_path.write_text("[GlobalDefaults DeviceProfile]\n", encoding="utf-8")
+            mock_resolve_project_config_dir.return_value = config_dir
+
+            result = asset_tools.update_texture_group_config(
+                "TEXTUREGROUP_PROJECT01",
+                2048,
+            )
+
+            written = ini_path.read_text(encoding="utf-8")
+            self.assertTrue(result["success"])
+            self.assertIn("Group=TEXTUREGROUP_PROJECT01", written)
+            self.assertIn("MaxLODSize=2048", written)
+
+    @patch("unreal_asset.tools.run_editor_python")
+    def test_update_asset_properties_batch_preserves_requested_parent_key(
+        self, mock_run_editor_python
+    ) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "summary": {"requested": 1, "succeeded": 1, "failed": 0},
+            "results": [
+                {
+                    "success": True,
+                    "asset_path": "/Game/Test/MI_Test.MI_Test",
+                    "modified_properties": ["parent"],
+                    "post_state": {"parent": "/Game/Base/M_Base.M_Base"},
+                    "failed_properties": [],
+                }
+            ],
+        }
+
+        result = asset_tools.update_asset_properties_batch(
+            [
+                {
+                    "asset_path": "/Game/Test/MI_Test.MI_Test",
+                    "properties": {"parent_material": "/Game/Base/M_Base.M_Base"},
+                }
+            ]
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["summary"]["verified"], 1)
         self.assertEqual(len(result["applied_changes"]), 1)
         self.assertEqual(
             result["applied_changes"][0]["value"], "/Game/Base/M_Base.M_Base"

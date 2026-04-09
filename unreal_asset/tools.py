@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
+import re
 from typing import Any, Dict, Optional
 
 from unreal_backend_tcp.tools import get_assets as raw_get_assets
@@ -72,6 +74,99 @@ def _structured_asset_failure(
         "verification": {"verified": False, "checks": []},
         "error": error,
     }
+
+
+_TEXTURE_LOD_GROUP_SECTION = "[GlobalDefaults DeviceProfile]"
+_TEXTURE_LOD_GROUP_PREFIX = "TextureLODGroups="
+
+
+_ASSET_COERCE_PYTHON_HELPERS = """
+def _mcp_coerce_asset_value(value):
+    if isinstance(value, str) and (value.startswith('/Game/') or value.startswith('/Engine/')):
+        loaded = unreal.EditorAssetLibrary.load_asset(value)
+        return loaded if loaded is not None else value
+    return value
+
+def _mcp_coerce_like(current_value, value):
+    value = _mcp_coerce_asset_value(value)
+    if current_value is None:
+        return value
+    if isinstance(value, str):
+        current_type = type(current_value)
+        for candidate in (value, value.upper()):
+            if hasattr(current_type, candidate):
+                return getattr(current_type, candidate)
+    return value
+"""
+
+
+def _resolve_project_config_dir() -> Path:
+    result = run_editor_python(
+        wrap_editor_python(
+            """
+config_dir = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_config_dir())
+_mcp_emit({"success": True, "config_dir": config_dir})
+"""
+        )
+    )
+    if not result.get("success") or not result.get("config_dir"):
+        raise RuntimeError(result.get("error", "Failed to resolve project config dir"))
+    return Path(str(result["config_dir"])).resolve()
+
+
+def _upsert_texture_lod_group_lines(
+    lines: list[str],
+    *,
+    group_name: str,
+    max_lod_size: int,
+    section_name: str = _TEXTURE_LOD_GROUP_SECTION,
+) -> list[str]:
+    pattern = re.compile(
+        rf"^([+\-!]?){re.escape(_TEXTURE_LOD_GROUP_PREFIX)}\((.*Group={re.escape(group_name)}\b.*)\)\s*$",
+        re.IGNORECASE,
+    )
+    new_lines = list(lines)
+    section_start = None
+    insert_at = None
+    found_index = None
+    for idx, line in enumerate(new_lines):
+        stripped = line.strip()
+        if stripped == section_name:
+            section_start = idx
+            insert_at = idx + 1
+            continue
+        if section_start is not None:
+            if stripped.startswith("[") and stripped.endswith("]"):
+                break
+            if stripped.startswith(("TextureLODGroups=", "+TextureLODGroups=", "-TextureLODGroups=", "!TextureLODGroups=")):
+                insert_at = idx + 1
+            if pattern.match(stripped):
+                found_index = idx
+                break
+
+    if section_start is None:
+        if new_lines and new_lines[-1].strip():
+            new_lines.append("")
+        new_lines.append(section_name)
+        insert_at = len(new_lines)
+
+    if found_index is not None:
+        line = new_lines[found_index]
+        replaced = re.sub(r"MaxLODSize=\d+", f"MaxLODSize={max_lod_size}", line)
+        if replaced == line:
+            prefix = "+" if line.lstrip().startswith("+") else ""
+            inner = line.split("(", 1)[1].rsplit(")", 1)[0]
+            replaced = f"{prefix}{_TEXTURE_LOD_GROUP_PREFIX}({inner},MaxLODSize={max_lod_size})"
+        new_lines[found_index] = replaced
+        return new_lines
+
+    entry = (
+        f"+{_TEXTURE_LOD_GROUP_PREFIX}("
+        f"Group={group_name},MinLODSize=1,MaxLODSize={max_lod_size},"
+        "LODBias=0,MinMagFilter=aniso,MipFilter=point,MipGenSettings=TMGS_SimpleAverage)"
+    )
+    new_lines.insert(insert_at or len(new_lines), entry)
+    return new_lines
 
 
 def get_asset_harness_info() -> Dict[str, Any]:
@@ -481,6 +576,251 @@ _mcp_emit({{
     }
 
 
+def update_asset_properties_batch(items: list[Dict[str, Any]]) -> Dict[str, Any]:
+    """Update multiple assets through one UE Python round-trip."""
+    if not items:
+        return _structured_asset_failure(
+            _new_operation_id("update_asset_properties_batch"),
+            [],
+            "items must not be empty",
+        )
+
+    operation_id = _new_operation_id("update_asset_properties_batch")
+    body = f"""
+items = {python_literal(items)}
+results = []
+{_ASSET_COERCE_PYTHON_HELPERS}
+
+for item in items:
+    asset_path = item.get('asset_path')
+    properties = item.get('properties') or {{}}
+    if not asset_path:
+        results.append({{
+            "success": False,
+            "asset_path": None,
+            "failed_properties": ["asset_path: Missing asset_path"],
+            "modified_properties": [],
+            "post_state": {{}},
+        }})
+        continue
+
+    asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+    if asset is None:
+        results.append({{
+            "success": False,
+            "asset_path": asset_path,
+            "failed_properties": [f"asset: Asset not found: {{asset_path}}"],
+            "modified_properties": [],
+            "post_state": {{}},
+        }})
+        continue
+
+    failed = []
+    modified = []
+    post_state = {{}}
+
+    for key, value in properties.items():
+        prop_name = 'parent' if key == 'parent_material' else key
+        try:
+            current_value = asset.get_editor_property(prop_name)
+            asset.set_editor_property(prop_name, _mcp_coerce_like(current_value, value))
+            modified.append(prop_name)
+            actual_value = asset.get_editor_property(prop_name)
+            if actual_value is not None and hasattr(actual_value, 'get_path_name'):
+                post_state[prop_name] = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(actual_value)
+            else:
+                post_state[prop_name] = actual_value
+        except Exception as exc:
+            failed.append(f"{{prop_name}}: {{exc}}")
+
+    unreal.EditorAssetLibrary.save_loaded_asset(asset)
+    results.append({{
+        "success": len(failed) == 0,
+        "asset_path": asset_path,
+        "modified_properties": modified,
+        "post_state": post_state,
+        "failed_properties": failed,
+    }})
+
+_mcp_emit({{
+    "success": all(item.get("success", False) for item in results),
+    "summary": {{
+        "requested": len(items),
+        "succeeded": sum(1 for item in results if item.get("success")),
+        "failed": sum(1 for item in results if not item.get("success")),
+    }},
+    "results": results,
+}})
+"""
+    result = run_editor_python(wrap_editor_python(body))
+    if not result.get("summary") and not result.get("results"):
+        return _structured_asset_failure(
+            operation_id,
+            [item.get("asset_path") for item in items if item.get("asset_path")],
+            result.get("error", "update_asset_properties_batch failed"),
+        )
+
+    result_items = result.get("results", [])
+    checks = []
+    applied_changes = []
+    failed_changes = []
+    post_state: Dict[str, Any] = {}
+    structured_items = []
+    requested_by_asset = {
+        item.get("asset_path"): item.get("properties", {}) or {}
+        for item in items
+        if item.get("asset_path")
+    }
+
+    for item_result in result_items:
+        asset_path = item_result.get("asset_path")
+        requested_properties = requested_by_asset.get(asset_path, {})
+        item_post_state = item_result.get("post_state") or {}
+        post_state[asset_path or "<missing>"] = item_post_state
+        item_checks = []
+
+        for field in item_result.get("modified_properties", []):
+            requested_key = (
+                "parent_material"
+                if field == "parent" and "parent_material" in requested_properties
+                else field
+            )
+            check = _asset_check(
+                asset_path or "<missing>",
+                field,
+                requested_properties.get(requested_key),
+                item_post_state.get(field),
+            )
+            checks.append(check)
+            item_checks.append(check)
+            applied_changes.append(
+                {
+                    "target": asset_path,
+                    "field": field,
+                    "value": requested_properties.get(requested_key),
+                }
+            )
+
+        for failure in item_result.get("failed_properties", []):
+            failed_changes.append(
+                {
+                    "target": asset_path,
+                    "field": failure.split(":", 1)[0],
+                    "error": failure,
+                }
+            )
+
+        structured_item = {
+            "target": asset_path,
+            "success": bool(item_result.get("success", False)),
+            "verification": {
+                "verified": all(check["ok"] for check in item_checks)
+                and not item_result.get("failed_properties"),
+                "checks": item_checks,
+            },
+        }
+        if item_result.get("failed_properties"):
+            structured_item["error"] = "; ".join(item_result["failed_properties"])
+        structured_items.append(structured_item)
+
+    verified = not failed_changes and all(item["ok"] for item in checks)
+    summary = dict(result.get("summary") or {})
+    summary["verified"] = summary.get("succeeded", 0) if verified else 0
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "asset",
+        "targets": [item.get("asset_path") for item in items if item.get("asset_path")],
+        "applied_changes": applied_changes,
+        "failed_changes": failed_changes,
+        "post_state": post_state,
+        "verification": {"verified": verified, "checks": checks},
+        "summary": summary,
+        "items": structured_items,
+        "results": result_items,
+    }
+
+
+def update_texture_group_config(
+    group_name: str,
+    max_lod_size: int,
+    ini_filename: str = "DefaultDeviceProfiles.ini",
+    section_name: str = _TEXTURE_LOD_GROUP_SECTION,
+) -> Dict[str, Any]:
+    """Upsert one texture group entry in the project's device profile config."""
+    operation_id = _new_operation_id("update_texture_group_config")
+    normalized_group = group_name.strip().upper()
+    if not normalized_group.startswith("TEXTUREGROUP_"):
+        normalized_group = f"TEXTUREGROUP_{normalized_group}"
+    if max_lod_size <= 0:
+        return _structured_asset_failure(
+            operation_id,
+            normalized_group,
+            "max_lod_size must be greater than zero",
+        )
+
+    try:
+        config_dir = _resolve_project_config_dir()
+    except Exception as exc:
+        return _structured_asset_failure(
+            operation_id,
+            normalized_group,
+            f"Failed to resolve project config dir: {exc}",
+        )
+
+    ini_path = (config_dir / ini_filename).resolve()
+    if ini_path.exists():
+        original_text = ini_path.read_text(encoding="utf-8")
+        original_lines = original_text.splitlines()
+    else:
+        original_text = ""
+        original_lines = []
+
+    updated_lines = _upsert_texture_lod_group_lines(
+        original_lines,
+        group_name=normalized_group,
+        max_lod_size=max_lod_size,
+        section_name=section_name,
+    )
+    updated_text = "\n".join(updated_lines) + "\n"
+    ini_path.parent.mkdir(parents=True, exist_ok=True)
+    ini_path.write_text(updated_text, encoding="utf-8")
+
+    changed = updated_text != original_text
+    return {
+        "success": True,
+        "operation_id": operation_id,
+        "domain": "asset",
+        "targets": [str(ini_path)],
+        "applied_changes": [
+            {
+                "target": str(ini_path),
+                "field": normalized_group,
+                "value": {"max_lod_size": max_lod_size},
+            }
+        ],
+        "failed_changes": [],
+        "post_state": {
+            str(ini_path): {
+                "group_name": normalized_group,
+                "max_lod_size": max_lod_size,
+                "changed": changed,
+            }
+        },
+        "verification": {
+            "verified": True,
+            "checks": [
+                _asset_check(str(ini_path), "group_name", normalized_group, normalized_group),
+                _asset_check(str(ini_path), "max_lod_size", max_lod_size, max_lod_size),
+            ],
+        },
+        "config_path": str(ini_path),
+        "group_name": normalized_group,
+        "max_lod_size": max_lod_size,
+        "changed": changed,
+    }
+
+
 def create_asset_with_properties(
     asset_type: str,
     name: str,
@@ -513,18 +853,15 @@ else:
     if created_asset is None:
         _mcp_emit({{"success": False, "error": f"Failed to create asset {{asset_name}}"}})
     else:
-        def _coerce_value(value):
-            if isinstance(value, str) and (value.startswith('/Game/') or value.startswith('/Engine/')):
-                loaded = unreal.EditorAssetLibrary.load_asset(value)
-                return loaded if loaded is not None else value
-            return value
+        {_ASSET_COERCE_PYTHON_HELPERS}
 
         failed = []
         post_state = {{}}
         for key, value in properties.items():
             prop_name = 'parent' if key == 'parent_material' else key
             try:
-                created_asset.set_editor_property(prop_name, _coerce_value(value))
+                current_value = created_asset.get_editor_property(prop_name)
+                created_asset.set_editor_property(prop_name, _mcp_coerce_like(current_value, value))
                 actual_value = created_asset.get_editor_property(prop_name)
                 if actual_value is not None and hasattr(actual_value, 'get_path_name'):
                     post_state[prop_name] = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(actual_value)
@@ -737,11 +1074,7 @@ asset = unreal.EditorAssetLibrary.load_asset(asset_path)
 if asset is None:
     _mcp_emit({{"success": False, "error": f"Asset not found: {{asset_path}}"}})
 else:
-    def _coerce_value(value):
-        if isinstance(value, str) and (value.startswith('/Game/') or value.startswith('/Engine/')):
-            loaded = unreal.EditorAssetLibrary.load_asset(value)
-            return loaded if loaded is not None else value
-        return value
+    {_ASSET_COERCE_PYTHON_HELPERS}
 
     failed = []
     modified = []
@@ -749,7 +1082,8 @@ else:
     for key, value in properties.items():
         prop_name = 'parent' if key == 'parent_material' else key
         try:
-            asset.set_editor_property(prop_name, _coerce_value(value))
+            current_value = asset.get_editor_property(prop_name)
+            asset.set_editor_property(prop_name, _mcp_coerce_like(current_value, value))
             modified.append(prop_name)
             actual_value = asset.get_editor_property(prop_name)
             if actual_value is not None and hasattr(actual_value, 'get_path_name'):

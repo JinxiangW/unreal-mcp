@@ -17,6 +17,8 @@ from .tools import (
     import_texture_asset,
     move_asset_batch,
     query_assets_summary,
+    update_texture_group_config,
+    update_asset_properties_batch,
     update_asset_properties,
 )
 
@@ -36,6 +38,8 @@ for tool in [
     duplicate_asset_with_overrides,
     move_asset_batch,
     create_asset_with_properties,
+    update_texture_group_config,
+    update_asset_properties_batch,
     update_asset_properties,
     import_texture_asset,
     import_fbx_asset,

@@ -21,6 +21,8 @@ from unreal_asset.tools import (
     import_texture_asset,
     move_asset_batch as asset_move_asset_batch,
     query_assets_summary as asset_query_assets_summary,
+    update_texture_group_config as asset_update_texture_group_config,
+    update_asset_properties_batch as asset_update_asset_properties_batch,
     update_asset_properties as asset_update_asset_properties,
 )
 from unreal_diagnostics.tools import (
@@ -606,6 +608,36 @@ def update_asset_properties(
     )
 
 
+def update_asset_properties_batch(
+    items: list[Dict[str, Any]],
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded batch asset update with automatic editor readiness preflight."""
+    return _guard_live_editor_call(
+        "asset.update_asset_properties_batch",
+        asset_update_asset_properties_batch,
+        items,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def update_texture_group_config(
+    group_name: str,
+    max_lod_size: int,
+    ini_filename: str = "DefaultDeviceProfiles.ini",
+) -> Dict[str, Any]:
+    """Update one project texture group config entry."""
+    return asset_update_texture_group_config(
+        group_name=group_name,
+        max_lod_size=max_lod_size,
+        ini_filename=ini_filename,
+    )
+
+
 def create_material_asset(
     name: str,
     path: str = "/Game/",
@@ -961,7 +993,9 @@ if ENABLE_EXTENDED_TOOLS:
     DEFAULT_TOOLS.extend(
         [
             create_asset_with_properties,
+            update_texture_group_config,
             update_asset_properties,
+            update_asset_properties_batch,
             import_texture_asset,
             import_fbx_asset,
             create_material_asset,

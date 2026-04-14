@@ -1,18 +1,149 @@
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import importlib
 import json
 import tempfile
+import tomllib
 
 from unreal_asset import tools as asset_tools
 from unreal_diagnostics import tools as diagnostics_tools
 from unreal_harness_runtime import config as runtime_config
 from unreal_material import tools as material_tools
 from unreal_material_graph import tools as material_graph_tools
+from unreal_orchestrator import server as orchestrator_server
 from unreal_renderdoc import tools as renderdoc_tools
 
 
 class AssetToolContractTests(unittest.TestCase):
+    @patch("unreal_asset.tools.run_editor_python")
+    def test_get_asset_properties_normalizes_enum_payloads(self, mock_run_editor_python) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "summary": {"requested": 1, "succeeded": 1, "failed": 0},
+            "results": [
+                {
+                    "success": True,
+                    "asset_path": "/Game/Textures/T_Normal.T_Normal",
+                    "properties": {
+                        "compression_settings": {"name": "TC_NORMALMAP", "value": 1},
+                        "srgb": False,
+                    },
+                    "failed_properties": [],
+                }
+            ],
+        }
+
+        result = asset_tools.get_asset_properties(
+            ["/Game/Textures/T_Normal.T_Normal"],
+            ["compression_settings", "srgb"],
+        )
+
+        self.assertTrue(result["success"])
+        props = result["post_state"]["/Game/Textures/T_Normal.T_Normal"]
+        self.assertEqual(props["compression_settings"]["name"], "TC_NORMALMAP")
+        self.assertEqual(props["compression_settings"]["value"], 1)
+        self.assertFalse(props["srgb"])
+
+    @patch("unreal_asset.tools.run_editor_python")
+    def test_set_asset_properties_reports_save_result(self, mock_run_editor_python) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "summary": {"requested": 1, "succeeded": 1, "failed": 0},
+            "results": [
+                {
+                    "success": True,
+                    "asset_path": "/Game/Textures/T_Albedo.T_Albedo",
+                    "modified_properties": ["srgb"],
+                    "post_state": {"srgb": False},
+                    "failed_properties": [],
+                    "save_result": {"save_requested": True, "saved": True},
+                }
+            ],
+        }
+
+        result = asset_tools.set_asset_properties(
+            ["/Game/Textures/T_Albedo.T_Albedo"],
+            {"srgb": False},
+            save=True,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["items"][0]["save_result"]["saved"], True)
+        self.assertEqual(result["applied_changes"][0]["field"], "srgb")
+
+    @patch("unreal_asset.tools.get_asset_properties")
+    @patch("unreal_asset.tools.raw_get_assets")
+    def test_query_textures_merges_requested_properties(
+        self, mock_raw_get_assets, mock_get_asset_properties
+    ) -> None:
+        mock_raw_get_assets.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "assets": [
+                    {
+                        "name": "T_Normal",
+                        "path": "/Game/Textures/T_Normal.T_Normal",
+                        "class": "Texture2D",
+                        "package": "/Game/Textures",
+                    }
+                ],
+                "total_count": 1,
+                "returned_count": 1,
+                "limit": 20,
+                "offset": 0,
+            },
+        }
+        mock_get_asset_properties.return_value = {
+            "success": True,
+            "failed_changes": [],
+            "post_state": {
+                "/Game/Textures/T_Normal.T_Normal": {
+                    "compression_settings": {"name": "TC_NORMALMAP", "value": 1},
+                    "srgb": False,
+                }
+            },
+            "verification": {"checks": []},
+        }
+
+        result = asset_tools.query_textures(
+            path="/Game/Textures",
+            properties=["compression_settings", "srgb"],
+        )
+
+        self.assertTrue(result["success"])
+        texture = result["textures"][0]
+        self.assertEqual(
+            texture["properties"]["compression_settings"]["name"], "TC_NORMALMAP"
+        )
+        self.assertFalse(texture["properties"]["srgb"])
+
+    @patch("unreal_asset.tools.send_command")
+    @patch("unreal_asset.tools.run_editor_python")
+    def test_inspect_particle_system_falls_back_to_niagara_backend(
+        self, mock_run_editor_python, mock_send_command
+    ) -> None:
+        mock_run_editor_python.return_value = {
+            "success": False,
+            "asset_class": "NiagaraSystem",
+            "error": "inspect_particle_system currently supports Cascade ParticleSystem only, got NiagaraSystem",
+        }
+        mock_send_command.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "emitter_count": 1,
+                "emitters": [{"name": "EmitterA", "renderer_count": 1}],
+            },
+        }
+
+        result = asset_tools.inspect_particle_system("/Game/VFX/NS_Test.NS_Test")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["asset_class"], "NiagaraSystem")
+        self.assertEqual(result["emitters"][0]["name"], "EmitterA")
+
     def test_upsert_texture_lod_group_lines_appends_missing_group(self) -> None:
         lines = [
             "[GlobalDefaults DeviceProfile]",
@@ -61,10 +192,17 @@ class AssetToolContractTests(unittest.TestCase):
     ) -> None:
         mock_run_editor_python.return_value = {
             "success": True,
-            "asset_path": "/Game/Test/MI_Test.MI_Test",
-            "modified_properties": ["parent"],
-            "post_state": {"parent": "/Game/Base/M_Base.M_Base"},
-            "failed_properties": [],
+            "summary": {"requested": 1, "succeeded": 1, "failed": 0},
+            "results": [
+                {
+                    "success": True,
+                    "asset_path": "/Game/Test/MI_Test.MI_Test",
+                    "modified_properties": ["parent"],
+                    "post_state": {"parent": "/Game/Base/M_Base.M_Base"},
+                    "failed_properties": [],
+                    "save_result": {"save_requested": True, "saved": True},
+                }
+            ],
         }
 
         result = asset_tools.update_asset_properties(
@@ -193,6 +331,31 @@ class MaterialGraphContractTests(unittest.TestCase):
         self.assertIn("node_count", check_fields)
         self.assertIn("connection_count", check_fields)
 
+    @patch("unreal_material_graph.tools._load_full_graph")
+    def test_analyze_material_graph_detects_mismatched_asset_path(self, mock_load_full_graph) -> None:
+        mock_load_full_graph.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "path": "/Game/Materials/M_Other",
+                "asset_type": "Material",
+                "nodes": [],
+                "connections": [],
+                "property_connections": {},
+            },
+        }
+
+        result = material_graph_tools.analyze_material_graph("/Game/Materials/M_Test")
+
+        self.assertTrue(result["success"])
+        self.assertFalse(result["verification"]["verified"])
+        asset_path_checks = [
+            check
+            for check in result["verification"]["checks"]
+            if check["field"] == "asset_path"
+        ]
+        self.assertEqual(asset_path_checks[0]["actual"], "/Game/Materials/M_Other")
+
 
 class DiagnosticsContractTests(unittest.TestCase):
     @patch.dict("os.environ", {}, clear=True)
@@ -253,6 +416,33 @@ class DiagnosticsContractTests(unittest.TestCase):
 
 
 class RenderDocContractTests(unittest.TestCase):
+    def test_reverse_lookup_renderdoc_symbols_scans_provided_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            shader_dir = Path(tmpdir) / "Saved" / "ShaderDebugInfo"
+            source_dir = Path(tmpdir) / "Source"
+            shader_dir.mkdir(parents=True, exist_ok=True)
+            source_dir.mkdir(parents=True, exist_ok=True)
+            (shader_dir / "MyShader.usf").write_text(
+                "// DebugName: FancyLightPixelShader\n", encoding="utf-8"
+            )
+            (source_dir / "LightComponent.cpp").write_text(
+                "Params.LightColor = FVector3f::ZeroVector;\n", encoding="utf-8"
+            )
+
+            with patch(
+                "unreal_renderdoc.tools._renderdoc_lookup_roots",
+                return_value=[shader_dir, source_dir],
+            ):
+                result = renderdoc_tools.reverse_lookup_renderdoc_symbols(
+                    shader_hints=["FancyLightPixelShader"],
+                    parameter_hints=["LightColor"],
+                    limit=10,
+                )
+
+            self.assertTrue(result["success"])
+            self.assertTrue(result["shader_debug_matches"])
+            self.assertTrue(result["cpp_symbol_matches"])
+
     def test_normalize_renderdoc_debug_labels_produces_stable_ids(self) -> None:
         result = renderdoc_tools.normalize_renderdoc_debug_labels(
             ["BasePass/Main View", "Nanite::Emit GBuffer"]
@@ -445,6 +635,24 @@ class RenderDocContractTests(unittest.TestCase):
             self.assertTrue(result["success"])
             changed = result["comparison_metadata"]["structured_inputs"]["cvars"]
             self.assertEqual(changed[0]["name"], "r.ScreenPercentage")
+
+
+class PackagingAndExposureContractTests(unittest.TestCase):
+    def test_pyproject_includes_unreal_renderdoc_package(self) -> None:
+        pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+        includes = pyproject["tool"]["setuptools"]["packages"]["find"]["include"]
+        self.assertIn("unreal_renderdoc*", includes)
+
+    def test_orchestrator_default_tools_include_asset_and_material_workflows(self) -> None:
+        importlib.reload(orchestrator_server)
+        tool_names = {tool.__name__ for tool in orchestrator_server.DEFAULT_TOOLS}
+
+        self.assertIn("create_asset_with_properties", tool_names)
+        self.assertIn("update_asset_properties", tool_names)
+        self.assertIn("import_texture_asset", tool_names)
+        self.assertIn("create_material_asset", tool_names)
+        self.assertIn("query_textures", tool_names)
+        self.assertIn("get_asset_properties", tool_names)
 
 
 if __name__ == "__main__":

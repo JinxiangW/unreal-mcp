@@ -28,6 +28,15 @@ def _graph_check(target: str, field: str, expected: Any, actual: Any) -> Dict[st
     }
 
 
+def _normalize_graph_asset_path(value: str) -> str:
+    normalized = (value or "").strip()
+    if not normalized:
+        return normalized
+    if normalized.startswith("/"):
+        return normalized
+    return f"/Game/Materials/{normalized}"
+
+
 def get_material_graph_harness_info() -> Dict[str, Any]:
     """Describe the current material graph harness boundary."""
     payload = {
@@ -106,9 +115,16 @@ def create_material_graph_recipe(
             "error": result.get("error", "graph build failed"),
         }
     graph_summary = analyze_material_graph(material_name)
+    requested_asset_path = _normalize_graph_asset_path(material_name)
     checks = [
         _graph_check(
             material_name, "node_count", len(nodes), graph_summary.get("node_count")
+        ),
+        _graph_check(
+            material_name,
+            "asset_path",
+            requested_asset_path,
+            _normalize_graph_asset_path(graph_summary.get("asset_path", "")),
         ),
     ]
     if connections:
@@ -188,6 +204,8 @@ def analyze_material_graph(asset_path: str) -> Dict[str, Any]:
     connections = result.get("connections") or []
     property_connections = result.get("property_connections") or {}
     asset_path_resolved = result.get("path") or asset_path
+    requested_asset_path = _normalize_graph_asset_path(asset_path)
+    resolved_asset_path = _normalize_graph_asset_path(asset_path_resolved)
     node_types = Counter(
         node.get("type", "Unknown") for node in nodes if isinstance(node, dict)
     )
@@ -204,7 +222,7 @@ def analyze_material_graph(asset_path: str) -> Dict[str, Any]:
             True,
             isinstance(connections, list),
         ),
-        _graph_check(asset_path, "asset_path", asset_path_resolved, asset_path_resolved),
+        _graph_check(asset_path, "asset_path", requested_asset_path, resolved_asset_path),
     ]
     verification_mode = "structural"
     if "node_count" in result:

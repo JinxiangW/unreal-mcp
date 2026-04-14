@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 from typing import Any, Dict, Optional
 
+from unreal_backend_tcp.common import send_command
 from unreal_backend_tcp.tools import get_assets as raw_get_assets
 from unreal_harness_runtime.python_exec import (
     json_literal,
@@ -27,6 +28,21 @@ def _new_operation_id(action: str) -> str:
 
 
 def _asset_check(target: str, field: str, expected: Any, actual: Any) -> Dict[str, Any]:
+    def _normalize_enum(value: Any) -> Any:
+        if isinstance(value, dict) and "name" in value and "value" in value:
+            return value
+        if isinstance(value, str) and value.startswith("<") and ":" in value and "." in value:
+            enum_text = value.strip("<>")
+            enum_head, _, enum_value = enum_text.partition(":")
+            _, _, enum_name = enum_head.rpartition(".")
+            enum_value = enum_value.strip()
+            try:
+                parsed_value: Any = int(enum_value)
+            except ValueError:
+                parsed_value = enum_value
+            return {"name": enum_name, "value": parsed_value}
+        return value
+
     def _normalize_asset_ref(value: Any) -> Any:
         if not isinstance(value, str):
             return value
@@ -36,8 +52,17 @@ def _asset_check(target: str, field: str, expected: Any, actual: Any) -> Dict[st
                 return f"{value}.{name}"
         return value
 
-    normalized_expected = _normalize_asset_ref(expected)
-    normalized_actual = _normalize_asset_ref(actual)
+    normalized_expected = _normalize_asset_ref(_normalize_enum(expected))
+    normalized_actual = _normalize_asset_ref(_normalize_enum(actual))
+
+    if isinstance(normalized_actual, dict) and "name" in normalized_actual and "value" in normalized_actual:
+        if isinstance(normalized_expected, str):
+            normalized_expected = normalized_expected.split(".")[-1]
+            if normalized_expected.startswith("<") and ":" in normalized_expected:
+                normalized_expected = _normalize_enum(normalized_expected)
+        elif isinstance(normalized_expected, int):
+            normalized_expected = {"name": normalized_actual["name"], "value": normalized_expected}
+
     return {
         "target": target,
         "field": field,
@@ -81,6 +106,49 @@ _TEXTURE_LOD_GROUP_PREFIX = "TextureLODGroups="
 
 
 _ASSET_COERCE_PYTHON_HELPERS = """
+import enum
+
+def _mcp_to_simple(value):
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return round(value, 6)
+    if isinstance(value, enum.Enum):
+        raw_value = value.value
+        if isinstance(raw_value, float):
+            raw_value = round(raw_value, 6)
+        return {"name": value.name, "value": raw_value}
+    if isinstance(value, unreal.Vector):
+        return {"x": round(value.x, 4), "y": round(value.y, 4), "z": round(value.z, 4)}
+    if isinstance(value, unreal.Vector2D):
+        return {"x": round(value.x, 4), "y": round(value.y, 4)}
+    if hasattr(unreal, "Vector4") and isinstance(value, unreal.Vector4):
+        return {"x": round(value.x, 4), "y": round(value.y, 4), "z": round(value.z, 4), "w": round(value.w, 4)}
+    if isinstance(value, unreal.Rotator):
+        return {"pitch": round(value.pitch, 4), "yaw": round(value.yaw, 4), "roll": round(value.roll, 4)}
+    if isinstance(value, unreal.LinearColor):
+        return {"r": round(value.r, 4), "g": round(value.g, 4), "b": round(value.b, 4), "a": round(value.a, 4)}
+    if isinstance(value, unreal.Color):
+        return {"r": value.r, "g": value.g, "b": value.b, "a": value.a}
+    if isinstance(value, dict):
+        return {str(key): _mcp_to_simple(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_mcp_to_simple(item) for item in value]
+    if hasattr(value, "get_path_name"):
+        try:
+            return unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(value)
+        except Exception:
+            try:
+                return value.get_path_name()
+            except Exception:
+                pass
+    if hasattr(value, "get_name"):
+        try:
+            return value.get_name()
+        except Exception:
+            pass
+    return str(value)
+
 def _mcp_coerce_asset_value(value):
     if isinstance(value, str) and (value.startswith('/Game/') or value.startswith('/Engine/')):
         loaded = unreal.EditorAssetLibrary.load_asset(value)
@@ -91,13 +159,87 @@ def _mcp_coerce_like(current_value, value):
     value = _mcp_coerce_asset_value(value)
     if current_value is None:
         return value
+    if isinstance(current_value, enum.Enum):
+        enum_type = type(current_value)
+        if isinstance(value, dict):
+            candidate_value = value.get("name", value.get("value"))
+        else:
+            candidate_value = value
+        if isinstance(candidate_value, str):
+            normalized = candidate_value.split(".")[-1]
+            normalized = normalized.split(":")[0].strip("<>")
+            for candidate in (candidate_value, candidate_value.upper(), normalized, normalized.upper()):
+                if hasattr(enum_type, candidate):
+                    return getattr(enum_type, candidate)
+        return value
     if isinstance(value, str):
         current_type = type(current_value)
         for candidate in (value, value.upper()):
             if hasattr(current_type, candidate):
                 return getattr(current_type, candidate)
     return value
+
+def _mcp_finalize_asset_edit(asset, asset_path, save):
+    try:
+        asset.modify()
+    except Exception:
+        pass
+    try:
+        if hasattr(asset, "post_edit_change"):
+            asset.post_edit_change()
+    except Exception:
+        pass
+    try:
+        if hasattr(asset, "mark_package_dirty"):
+            asset.mark_package_dirty()
+    except Exception:
+        pass
+
+    if not save:
+        return {"saved": False, "save_requested": False}
+
+    save_error = None
+    try:
+        saved = bool(unreal.EditorAssetLibrary.save_loaded_asset(asset))
+        return {"saved": saved, "save_requested": True}
+    except Exception as exc:
+        save_error = str(exc)
+
+    try:
+        saved = bool(unreal.EditorAssetLibrary.save_asset(asset_path))
+        payload = {"saved": saved, "save_requested": True}
+        if save_error:
+            payload["save_fallback_error"] = save_error
+        return payload
+    except Exception as exc:
+        return {
+            "saved": False,
+            "save_requested": True,
+            "save_error": save_error or str(exc),
+            "save_fallback_error": str(exc),
+        }
 """
+
+
+_TEXTURE_DEFAULT_PROPERTIES = [
+    "compression_settings",
+    "srgb",
+    "lod_group",
+    "max_texture_size",
+]
+
+
+def _coerce_asset_paths(asset_paths: str | list[str], *, field_name: str) -> list[str]:
+    if isinstance(asset_paths, str):
+        normalized = [asset_paths]
+    elif isinstance(asset_paths, list):
+        normalized = asset_paths
+    else:
+        raise ValueError(f"{field_name} must be a string or an array of strings")
+    cleaned = [item.strip() for item in normalized if isinstance(item, str) and item.strip()]
+    if not cleaned:
+        raise ValueError(f"{field_name} must contain at least one asset path")
+    return cleaned
 
 
 def _resolve_project_config_dir() -> Path:
@@ -177,8 +319,12 @@ def get_asset_harness_info() -> Dict[str, Any]:
         "target_backend": "ue_python",
         "supports": [
             "asset_crud",
+            "asset_property_reads",
+            "asset_property_writes",
             "imports_via_commandlet",
             "batch_asset_workflows",
+            "texture_property_workflows",
+            "cascade_particle_inspection",
         ],
         "supported_create_types": [
             "Material",
@@ -576,6 +722,700 @@ _mcp_emit({{
     }
 
 
+def get_asset_properties(
+    asset_paths: str | list[str],
+    properties: list[str],
+) -> Dict[str, Any]:
+    """Read selected editor properties from one or more assets."""
+    operation_id = _new_operation_id("get_asset_properties")
+    try:
+        normalized_asset_paths = _coerce_asset_paths(
+            asset_paths, field_name="asset_paths"
+        )
+    except ValueError as exc:
+        return _structured_asset_failure(operation_id, [], str(exc))
+    if not isinstance(properties, list) or not all(
+        isinstance(item, str) and item.strip() for item in properties
+    ):
+        return _structured_asset_failure(
+            operation_id,
+            normalized_asset_paths,
+            "properties must be an array of non-empty strings",
+        )
+
+    requested_properties = [item.strip() for item in properties]
+    body = f"""
+asset_paths = {python_literal(normalized_asset_paths)}
+properties = {python_literal(requested_properties)}
+results = []
+{_ASSET_COERCE_PYTHON_HELPERS}
+
+for asset_path in asset_paths:
+    asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+    if asset is None:
+        results.append({{
+            "success": False,
+            "asset_path": asset_path,
+            "properties": {{}},
+            "failed_properties": [f"asset: Asset not found: {{asset_path}}"],
+        }})
+        continue
+
+    property_payload = {{}}
+    failed = []
+    for key in properties:
+        prop_name = 'parent' if key == 'parent_material' else key
+        try:
+            actual_value = asset.get_editor_property(prop_name)
+            property_payload[prop_name] = _mcp_to_simple(actual_value)
+        except Exception as exc:
+            failed.append(f"{{prop_name}}: {{exc}}")
+
+    results.append({{
+        "success": len(failed) == 0,
+        "asset_path": asset_path,
+        "properties": property_payload,
+        "failed_properties": failed,
+    }})
+
+_mcp_emit({{
+    "success": all(item.get("success", False) for item in results),
+    "summary": {{
+        "requested": len(asset_paths),
+        "succeeded": sum(1 for item in results if item.get("success")),
+        "failed": sum(1 for item in results if not item.get("success")),
+    }},
+    "results": results,
+}})
+"""
+    result = run_editor_python(wrap_editor_python(body))
+    if not result.get("results"):
+        return _structured_asset_failure(
+            operation_id,
+            normalized_asset_paths,
+            result.get("error", "get_asset_properties failed"),
+        )
+
+    result_items = result.get("results", [])
+    checks = []
+    failed_changes = []
+    post_state: Dict[str, Any] = {}
+    items = []
+    for item_result in result_items:
+        asset_path = item_result.get("asset_path")
+        properties_payload = item_result.get("properties") or {}
+        post_state[asset_path or "<missing>"] = properties_payload
+        item_checks = []
+
+        for requested_property in requested_properties:
+            prop_name = (
+                "parent"
+                if requested_property == "parent_material"
+                else requested_property
+            )
+            if prop_name in properties_payload:
+                check = {
+                    "target": asset_path,
+                    "field": prop_name,
+                    "expected": "readable",
+                    "actual": True,
+                    "ok": True,
+                }
+                checks.append(check)
+                item_checks.append(check)
+
+        for failure in item_result.get("failed_properties", []):
+            failed_changes.append(
+                {
+                    "target": asset_path,
+                    "field": failure.split(":", 1)[0],
+                    "error": failure,
+                }
+            )
+
+        item_payload = {
+            "target": asset_path,
+            "success": bool(item_result.get("success", False)),
+            "verification": {
+                "verified": not item_result.get("failed_properties"),
+                "checks": item_checks,
+            },
+            "properties": properties_payload,
+        }
+        if item_result.get("failed_properties"):
+            item_payload["error"] = "; ".join(item_result["failed_properties"])
+        items.append(item_payload)
+
+    verified = not failed_changes
+    summary = dict(result.get("summary") or {})
+    summary["verified"] = summary.get("succeeded", 0) if verified else 0
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "asset",
+        "targets": normalized_asset_paths,
+        "applied_changes": [],
+        "failed_changes": failed_changes,
+        "post_state": post_state,
+        "verification": {"verified": verified, "checks": checks},
+        "summary": summary,
+        "items": items,
+        "properties": requested_properties,
+        "results": result_items,
+    }
+
+
+def set_asset_properties(
+    asset_paths: str | list[str],
+    properties: Dict[str, Any],
+    save: bool = True,
+) -> Dict[str, Any]:
+    """Update one shared property payload across multiple assets."""
+    operation_id = _new_operation_id("set_asset_properties")
+    try:
+        normalized_asset_paths = _coerce_asset_paths(
+            asset_paths, field_name="asset_paths"
+        )
+    except ValueError as exc:
+        return _structured_asset_failure(operation_id, [], str(exc))
+    if not isinstance(properties, dict) or not properties:
+        return _structured_asset_failure(
+            operation_id,
+            normalized_asset_paths,
+            "properties must be a non-empty object",
+        )
+
+    body = f"""
+asset_paths = {python_literal(normalized_asset_paths)}
+properties = {python_literal(properties)}
+save = {str(save)}
+results = []
+{_ASSET_COERCE_PYTHON_HELPERS}
+
+for asset_path in asset_paths:
+    asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+    if asset is None:
+        results.append({{
+            "success": False,
+            "asset_path": asset_path,
+            "modified_properties": [],
+            "post_state": {{}},
+            "failed_properties": [f"asset: Asset not found: {{asset_path}}"],
+            "save_result": {{"save_requested": save, "saved": False}},
+        }})
+        continue
+
+    failed = []
+    modified = []
+    post_state = {{}}
+    for key, value in properties.items():
+        prop_name = 'parent' if key == 'parent_material' else key
+        try:
+            current_value = asset.get_editor_property(prop_name)
+            coerced_value = _mcp_coerce_like(current_value, value)
+            asset.set_editor_property(prop_name, coerced_value)
+            modified.append(prop_name)
+            actual_value = asset.get_editor_property(prop_name)
+            post_state[prop_name] = _mcp_to_simple(actual_value)
+        except Exception as exc:
+            failed.append(f"{{prop_name}}: {{exc}}")
+
+    save_result = _mcp_finalize_asset_edit(asset, asset_path, save)
+    if save and not save_result.get("saved", False):
+        failed.append(
+            "save: " + str(save_result.get("save_error") or save_result.get("save_fallback_error") or "save failed")
+        )
+
+    results.append({{
+        "success": len(failed) == 0,
+        "asset_path": asset_path,
+        "modified_properties": modified,
+        "post_state": post_state,
+        "failed_properties": failed,
+        "save_result": save_result,
+    }})
+
+_mcp_emit({{
+    "success": all(item.get("success", False) for item in results),
+    "summary": {{
+        "requested": len(asset_paths),
+        "succeeded": sum(1 for item in results if item.get("success")),
+        "failed": sum(1 for item in results if not item.get("success")),
+    }},
+    "results": results,
+}})
+"""
+    result = run_editor_python(wrap_editor_python(body))
+    if not result.get("results"):
+        return _structured_asset_failure(
+            operation_id,
+            normalized_asset_paths,
+            result.get("error", "set_asset_properties failed"),
+        )
+
+    result_items = result.get("results", [])
+    checks = []
+    applied_changes = []
+    failed_changes = []
+    post_state: Dict[str, Any] = {}
+    items = []
+    for item_result in result_items:
+        asset_path = item_result.get("asset_path")
+        item_post_state = item_result.get("post_state") or {}
+        post_state[asset_path or "<missing>"] = item_post_state
+        item_checks = []
+
+        for field in item_result.get("modified_properties", []):
+            requested_key = (
+                "parent_material" if field == "parent" and "parent_material" in properties else field
+            )
+            requested_value = properties.get(requested_key)
+            check = _asset_check(
+                asset_path or "<missing>",
+                field,
+                requested_value,
+                item_post_state.get(field),
+            )
+            checks.append(check)
+            item_checks.append(check)
+            applied_changes.append(
+                {
+                    "target": asset_path,
+                    "field": field,
+                    "value": requested_value,
+                }
+            )
+
+        for failure in item_result.get("failed_properties", []):
+            failed_changes.append(
+                {
+                    "target": asset_path,
+                    "field": failure.split(":", 1)[0],
+                    "error": failure,
+                }
+            )
+
+        item_payload = {
+            "target": asset_path,
+            "success": bool(item_result.get("success", False)),
+            "verification": {
+                "verified": all(check["ok"] for check in item_checks)
+                and not item_result.get("failed_properties"),
+                "checks": item_checks,
+            },
+            "save_result": item_result.get("save_result") or {},
+        }
+        if item_result.get("failed_properties"):
+            item_payload["error"] = "; ".join(item_result["failed_properties"])
+        items.append(item_payload)
+
+    verified = not failed_changes and all(item["ok"] for item in checks)
+    summary = dict(result.get("summary") or {})
+    summary["verified"] = summary.get("succeeded", 0) if verified else 0
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "asset",
+        "targets": normalized_asset_paths,
+        "applied_changes": applied_changes,
+        "failed_changes": failed_changes,
+        "post_state": post_state,
+        "verification": {"verified": verified, "checks": checks},
+        "summary": summary,
+        "items": items,
+        "properties": properties,
+        "save": save,
+        "results": result_items,
+    }
+
+
+def query_textures(
+    path: str = "/Game/",
+    name_filter: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+    properties: Optional[list[str]] = None,
+) -> Dict[str, Any]:
+    """Query textures and inline selected editor properties."""
+    operation_id = _new_operation_id("query_textures")
+    requested_properties = properties or list(_TEXTURE_DEFAULT_PROPERTIES)
+    base_result = raw_get_assets(
+        path=path,
+        asset_class="Texture2D",
+        name_filter=name_filter,
+        limit=limit,
+        offset=offset,
+        summary_only=True,
+        fields=["name", "path", "class", "package"],
+    )
+    inner = base_result.get("result") or {}
+    textures = inner.get("assets", [])
+    success = bool(
+        (base_result.get("status") == "success") and inner.get("success", True)
+    )
+    filters = {
+        "path": path,
+        "name_filter": name_filter,
+        "limit": inner.get("limit", limit),
+        "offset": inner.get("offset", offset),
+        "properties": requested_properties,
+    }
+    summary = build_query_summary(
+        requested=inner.get("limit", limit),
+        returned=inner.get("returned_count", len(textures)),
+        total=inner.get("total_count", len(textures)),
+        offset=inner.get("offset", offset),
+        verified=inner.get("returned_count", len(textures)) if success else 0,
+    )
+    if not success:
+        return structured_query_failure(
+            operation_id=operation_id,
+            domain="asset",
+            target=path,
+            error=base_result.get("error")
+            or inner.get("error")
+            or inner.get("message")
+            or "query_textures failed",
+            summary=summary,
+            filters=filters,
+            result=inner,
+            extra={"path": path},
+        )
+
+    property_result = (
+        get_asset_properties(
+            [item.get("path") for item in textures if item.get("path")],
+            requested_properties,
+        )
+        if textures
+        else {
+            "success": True,
+            "failed_changes": [],
+            "post_state": {},
+            "items": [],
+            "summary": {"verified": 0},
+        }
+    )
+    property_state = property_result.get("post_state") or {}
+    property_failures = property_result.get("failed_changes") or []
+
+    merged_items = []
+    for texture in textures:
+        texture_path = texture.get("path")
+        merged_items.append(
+            {
+                **texture,
+                "properties": property_state.get(texture_path, {}),
+            }
+        )
+
+    verified = not property_failures
+    summary = build_query_summary(
+        requested=inner.get("limit", limit),
+        returned=len(merged_items),
+        total=inner.get("total_count", len(merged_items)),
+        offset=inner.get("offset", offset),
+        verified=len(merged_items) if verified else 0,
+    )
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "asset",
+        "targets": [item.get("path") for item in merged_items if item.get("path")],
+        "applied_changes": [],
+        "failed_changes": property_failures,
+        "post_state": {path: {"textures": merged_items}},
+        "verification": {
+            "verified": verified,
+            "checks": property_result.get("verification", {}).get("checks", []),
+        },
+        "summary": summary,
+        "items": [
+            {
+                "target": item.get("path"),
+                "success": not any(
+                    failure.get("target") == item.get("path")
+                    for failure in property_failures
+                ),
+                "verification": {"verified": verified, "checks": []},
+                "properties": item.get("properties", {}),
+            }
+            for item in merged_items
+        ],
+        "filters": filters,
+        "textures": merged_items,
+    }
+
+
+def set_texture_compression_settings(
+    texture_paths: str | list[str],
+    compression_settings: str,
+    save: bool = True,
+) -> Dict[str, Any]:
+    """Set `compression_settings` on one or more textures."""
+    result = set_asset_properties(
+        texture_paths,
+        {"compression_settings": compression_settings},
+        save=save,
+    )
+    result["operation_id"] = _new_operation_id("set_texture_compression_settings")
+    result["compression_settings"] = compression_settings
+    return result
+
+
+def set_texture_srgb(
+    texture_paths: str | list[str],
+    srgb: bool,
+    save: bool = True,
+) -> Dict[str, Any]:
+    """Set `srgb` on one or more textures."""
+    result = set_asset_properties(
+        texture_paths,
+        {"srgb": bool(srgb)},
+        save=save,
+    )
+    result["operation_id"] = _new_operation_id("set_texture_srgb")
+    result["srgb"] = bool(srgb)
+    return result
+
+
+def inspect_particle_system(
+    asset_path: str,
+    emitter_names: Optional[list[str]] = None,
+) -> Dict[str, Any]:
+    """Inspect a Cascade particle system and summarize emitter/material usage."""
+    operation_id = _new_operation_id("inspect_particle_system")
+    if emitter_names is not None and (
+        not isinstance(emitter_names, list)
+        or not all(isinstance(item, str) and item.strip() for item in emitter_names)
+    ):
+        return _structured_asset_failure(
+            operation_id,
+            asset_path,
+            "emitter_names must be an array of non-empty strings when provided",
+        )
+
+    body = f"""
+asset_path = {python_literal(asset_path)}
+requested_emitters = set({python_literal(emitter_names or [])})
+{_ASSET_COERCE_PYTHON_HELPERS}
+
+asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+if asset is None:
+    _mcp_emit({{"success": False, "error": f"Asset not found: {{asset_path}}"}})
+else:
+    asset_class = asset.get_class().get_name() if hasattr(asset, "get_class") else type(asset).__name__
+    if asset_class != "ParticleSystem":
+        _mcp_emit({{
+            "success": False,
+            "error": f"inspect_particle_system currently supports Cascade ParticleSystem only, got {{asset_class}}",
+            "asset_class": asset_class,
+        }})
+    else:
+        emitters = []
+        for emitter in asset.get_editor_property("emitters") or []:
+            emitter_name = emitter.get_name() if hasattr(emitter, "get_name") else str(emitter)
+            if requested_emitters and emitter_name not in requested_emitters:
+                continue
+            lod_levels = []
+            try:
+                lod_levels = list(emitter.get_editor_property("lod_levels") or [])
+            except Exception:
+                lod_levels = []
+            primary_lod = lod_levels[0] if lod_levels else None
+            required_module = None
+            spawn_module = None
+            modules = []
+            if primary_lod is not None:
+                try:
+                    required_module = primary_lod.get_editor_property("required_module")
+                except Exception:
+                    required_module = None
+                try:
+                    spawn_module = primary_lod.get_editor_property("spawn_module")
+                except Exception:
+                    spawn_module = None
+                try:
+                    modules = list(primary_lod.get_editor_property("modules") or [])
+                except Exception:
+                    modules = []
+
+            material_path = None
+            screen_alignment = None
+            subuv_module = None
+            dynamic_module = None
+            if required_module is not None:
+                try:
+                    material = required_module.get_editor_property("material")
+                    material_path = _mcp_to_simple(material)
+                except Exception:
+                    material_path = None
+                try:
+                    screen_alignment = _mcp_to_simple(required_module.get_editor_property("screen_alignment"))
+                except Exception:
+                    screen_alignment = None
+
+            module_summaries = []
+            all_modules = ([required_module] if required_module else []) + ([spawn_module] if spawn_module else []) + modules
+            seen_modules = set()
+            for module in all_modules:
+                if module is None:
+                    continue
+                module_name = module.get_name() if hasattr(module, "get_name") else str(module)
+                if module_name in seen_modules:
+                    continue
+                seen_modules.add(module_name)
+                module_class = module.get_class().get_name() if hasattr(module, "get_class") else type(module).__name__
+                module_payload = {{"name": module_name, "class": module_class}}
+                if "SubUV" in module_class and subuv_module is None:
+                    subuv_module = module_payload
+                if "Dynamic" in module_class and dynamic_module is None:
+                    dynamic_module = module_payload
+                module_summaries.append(module_payload)
+
+            emitters.append({{
+                "name": emitter_name,
+                "lod_count": len(lod_levels),
+                "required_material": material_path,
+                "required_screen_alignment": screen_alignment,
+                "subuv_module": subuv_module,
+                "dynamic_module": dynamic_module,
+                "modules": module_summaries,
+            }})
+
+        _mcp_emit({{
+            "success": True,
+            "asset_path": asset_path,
+            "asset_class": asset_class,
+            "emitter_count": len(emitters),
+            "emitters": emitters,
+        }})
+"""
+    result = run_editor_python(wrap_editor_python(body))
+    if not result.get("success"):
+        if result.get("asset_class") == "NiagaraSystem":
+            niagara_response = send_command(
+                "get_niagara_emitter",
+                {"asset_path": asset_path},
+            )
+            niagara_body = (
+                niagara_response.get("result")
+                if niagara_response.get("status") == "success"
+                else None
+            ) or {}
+            if niagara_body.get("success"):
+                emitters = niagara_body.get("emitters", [])
+                checks = [
+                    _asset_check(asset_path, "asset_class", "NiagaraSystem", "NiagaraSystem"),
+                    _asset_check(
+                        asset_path,
+                        "emitter_count",
+                        niagara_body.get("emitter_count", len(emitters)),
+                        len(emitters),
+                    ),
+                ]
+                verified = all(item["ok"] for item in checks)
+                return {
+                    "success": verified,
+                    "operation_id": operation_id,
+                    "domain": "asset",
+                    "targets": [asset_path],
+                    "applied_changes": [],
+                    "failed_changes": [],
+                    "post_state": {
+                        asset_path: {
+                            "asset_class": "NiagaraSystem",
+                            "emitter_count": niagara_body.get("emitter_count", len(emitters)),
+                            "emitters": emitters,
+                        }
+                    },
+                    "verification": {"verified": verified, "checks": checks},
+                    "asset_path": asset_path,
+                    "asset_class": "NiagaraSystem",
+                    "emitter_count": niagara_body.get("emitter_count", len(emitters)),
+                    "emitters": emitters,
+                }
+        return _structured_asset_failure(
+            operation_id,
+            asset_path,
+            result.get("error", "inspect_particle_system failed"),
+            post_state={asset_path: {"asset_class": result.get("asset_class")}}
+            if result.get("asset_class")
+            else None,
+        )
+
+    emitters = result.get("emitters", [])
+    checks = [
+        _asset_check(asset_path, "asset_class", "ParticleSystem", result.get("asset_class")),
+        _asset_check(asset_path, "emitter_count", len(emitters), result.get("emitter_count")),
+    ]
+    verified = all(item["ok"] for item in checks)
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "asset",
+        "targets": [asset_path],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {
+            asset_path: {
+                "asset_class": result.get("asset_class"),
+                "emitter_count": result.get("emitter_count"),
+                "emitters": emitters,
+            }
+        },
+        "verification": {"verified": verified, "checks": checks},
+        "asset_path": asset_path,
+        "asset_class": result.get("asset_class"),
+        "emitter_count": result.get("emitter_count"),
+        "emitters": emitters,
+    }
+
+
+def inspect_cascade_emitter(
+    asset_path: str,
+    emitter_name: str,
+) -> Dict[str, Any]:
+    """Inspect one named Cascade emitter inside a particle system."""
+    operation_id = _new_operation_id("inspect_cascade_emitter")
+    if not isinstance(emitter_name, str) or not emitter_name.strip():
+        return _structured_asset_failure(
+            operation_id,
+            asset_path,
+            "emitter_name must be a non-empty string",
+        )
+
+    result = inspect_particle_system(asset_path=asset_path, emitter_names=[emitter_name])
+    if not result.get("success"):
+        result["operation_id"] = operation_id
+        return result
+
+    emitters = result.get("emitters", [])
+    if not emitters:
+        return _structured_asset_failure(
+            operation_id,
+            asset_path,
+            f"Cascade emitter not found: {emitter_name}",
+            post_state={asset_path: {"emitters": []}},
+        )
+    emitter_payload = emitters[0]
+    return {
+        "success": True,
+        "operation_id": operation_id,
+        "domain": "asset",
+        "targets": [asset_path, emitter_name],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {asset_path: {"emitter": emitter_payload}},
+        "verification": {
+            "verified": True,
+            "checks": [_asset_check(asset_path, "emitter_name", emitter_name, emitter_payload.get("name"))],
+        },
+        "asset_path": asset_path,
+        "emitter": emitter_payload,
+    }
+
+
 def update_asset_properties_batch(items: list[Dict[str, Any]]) -> Dict[str, Any]:
     """Update multiple assets through one UE Python round-trip."""
     if not items:
@@ -626,20 +1466,20 @@ for item in items:
             asset.set_editor_property(prop_name, _mcp_coerce_like(current_value, value))
             modified.append(prop_name)
             actual_value = asset.get_editor_property(prop_name)
-            if actual_value is not None and hasattr(actual_value, 'get_path_name'):
-                post_state[prop_name] = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(actual_value)
-            else:
-                post_state[prop_name] = actual_value
+            post_state[prop_name] = _mcp_to_simple(actual_value)
         except Exception as exc:
             failed.append(f"{{prop_name}}: {{exc}}")
 
-    unreal.EditorAssetLibrary.save_loaded_asset(asset)
+    save_result = _mcp_finalize_asset_edit(asset, asset_path, True)
+    if not save_result.get("saved", False):
+        failed.append("save: " + str(save_result.get("save_error") or save_result.get("save_fallback_error") or "save failed"))
     results.append({{
         "success": len(failed) == 0,
         "asset_path": asset_path,
         "modified_properties": modified,
         "post_state": post_state,
         "failed_properties": failed,
+        "save_result": save_result,
     }})
 
 _mcp_emit({{
@@ -863,15 +1703,14 @@ else:
                 current_value = created_asset.get_editor_property(prop_name)
                 created_asset.set_editor_property(prop_name, _mcp_coerce_like(current_value, value))
                 actual_value = created_asset.get_editor_property(prop_name)
-                if actual_value is not None and hasattr(actual_value, 'get_path_name'):
-                    post_state[prop_name] = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(actual_value)
-                else:
-                    post_state[prop_name] = actual_value
+                post_state[prop_name] = _mcp_to_simple(actual_value)
             except Exception as exc:
                 failed.append(f"{{prop_name}}: {{exc}}")
 
         asset_path_name = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(created_asset)
-        unreal.EditorAssetLibrary.save_loaded_asset(created_asset)
+        save_result = _mcp_finalize_asset_edit(created_asset, asset_path_name, True)
+        if not save_result.get("saved", False):
+            failed.append("save: " + str(save_result.get("save_error") or save_result.get("save_fallback_error") or "save failed"))
         _mcp_emit({{
             "success": len(failed) == 0,
             "asset_name": created_asset.get_name(),
@@ -879,6 +1718,7 @@ else:
             "asset_class": asset_type,
             "post_state": post_state,
             "failed_properties": failed,
+            "save_result": save_result,
         }})
 """
     result = run_editor_python(wrap_editor_python(body))
@@ -937,6 +1777,7 @@ else:
         "asset_path": asset_path_name,
         "asset_class": result.get("asset_class"),
         "failed_properties": failed_properties,
+        "save_result": result.get("save_result"),
     }
 
 
@@ -1066,86 +1907,13 @@ def update_asset_properties(
 ) -> Dict[str, Any]:
     """Update asset properties through UE Python."""
     operation_id = _new_operation_id("update_asset_properties")
-    body = f"""
-asset_path = {python_literal(asset_path)}
-properties = {python_literal(properties)}
-asset = unreal.EditorAssetLibrary.load_asset(asset_path)
-
-if asset is None:
-    _mcp_emit({{"success": False, "error": f"Asset not found: {{asset_path}}"}})
-else:
-    {_ASSET_COERCE_PYTHON_HELPERS}
-
-    failed = []
-    modified = []
-    post_state = {{}}
-    for key, value in properties.items():
-        prop_name = 'parent' if key == 'parent_material' else key
-        try:
-            current_value = asset.get_editor_property(prop_name)
-            asset.set_editor_property(prop_name, _mcp_coerce_like(current_value, value))
-            modified.append(prop_name)
-            actual_value = asset.get_editor_property(prop_name)
-            if actual_value is not None and hasattr(actual_value, 'get_path_name'):
-                post_state[prop_name] = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(actual_value)
-            else:
-                post_state[prop_name] = actual_value
-        except Exception as exc:
-            failed.append(f"{{prop_name}}: {{exc}}")
-
-    unreal.EditorAssetLibrary.save_loaded_asset(asset)
-    _mcp_emit({{
-        "success": len(failed) == 0,
-        "asset_path": asset_path,
-        "modified_properties": modified,
-        "post_state": post_state,
-        "failed_properties": failed,
-    }})
-"""
-    result = run_editor_python(wrap_editor_python(body))
-    if not result.get("success") and not result.get("modified_properties"):
-        return _structured_asset_failure(
-            operation_id, asset_path, result.get("error", "asset update failed")
-        )
-    modified_properties = result.get("modified_properties", [])
-    failed_properties = result.get("failed_properties", [])
-    checks = []
-    applied_changes = []
-    for field in modified_properties:
-        requested_key = (
-            "parent_material"
-            if field == "parent" and "parent_material" in properties
-            else field
-        )
-        applied_changes.append(
-            {
-                "target": asset_path,
-                "field": field,
-                "value": properties.get(requested_key),
-            }
-        )
-        checks.append(
-            _asset_check(
-                asset_path,
-                field,
-                properties.get(requested_key),
-                (result.get("post_state") or {}).get(field),
-            )
-        )
-    verified = not failed_properties and all(item["ok"] for item in checks)
-    return {
-        "success": verified,
-        "operation_id": operation_id,
-        "domain": "asset",
-        "targets": [asset_path],
-        "applied_changes": applied_changes,
-        "failed_changes": [
-            {"target": asset_path, "field": failure.split(":", 1)[0], "error": failure}
-            for failure in failed_properties
-        ],
-        "post_state": {asset_path: (result.get("post_state") or {})},
-        "verification": {"verified": verified, "checks": checks},
-        "modified_properties": modified_properties,
-        "failed_properties": failed_properties,
-        "asset_path": asset_path,
-    }
+    result = set_asset_properties([asset_path], properties, save=True)
+    result["operation_id"] = operation_id
+    result["asset_path"] = asset_path
+    result["modified_properties"] = [
+        change["field"] for change in result.get("applied_changes", [])
+    ]
+    result["failed_properties"] = [
+        failure["error"] for failure in result.get("failed_changes", [])
+    ]
+    return result

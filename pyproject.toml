@@ -22,6 +22,7 @@ include = [
     "unreal_material*",
     "unreal_material_graph*",
     "unreal_diagnostics*",
+    "unreal_renderdoc*",
     "unreal_harness_runtime*",
     "unreal_observability*",
 ]

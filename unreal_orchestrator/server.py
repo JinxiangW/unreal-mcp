@@ -16,11 +16,18 @@ from unreal_asset.tools import (
     duplicate_asset_with_overrides as asset_duplicate_asset_with_overrides,
     ensure_asset_with_properties as asset_ensure_asset_with_properties,
     ensure_folder as asset_ensure_folder,
+    get_asset_properties as asset_get_asset_properties,
     get_asset_harness_info,
     import_fbx_asset,
     import_texture_asset,
+    inspect_cascade_emitter as asset_inspect_cascade_emitter,
+    inspect_particle_system as asset_inspect_particle_system,
     move_asset_batch as asset_move_asset_batch,
     query_assets_summary as asset_query_assets_summary,
+    query_textures as asset_query_textures,
+    set_asset_properties as asset_set_asset_properties,
+    set_texture_compression_settings as asset_set_texture_compression_settings,
+    set_texture_srgb as asset_set_texture_srgb,
     update_texture_group_config as asset_update_texture_group_config,
     update_asset_properties_batch as asset_update_asset_properties_batch,
     update_asset_properties as asset_update_asset_properties,
@@ -77,6 +84,7 @@ from unreal_renderdoc.tools import (
     get_renderdoc_selection_context,
     map_material_to_renderdoc_context,
     normalize_renderdoc_debug_labels,
+    reverse_lookup_renderdoc_symbols,
     request_renderdoc_capture,
     set_renderdoc_debug_workflow,
 )
@@ -95,7 +103,6 @@ logger = logging.getLogger("UnrealOrchestrator")
 
 
 ENABLE_DEV_TOOLS = os.environ.get("UNREAL_MCP_ENABLE_DEV_TOOLS", "0") == "1"
-ENABLE_EXTENDED_TOOLS = os.environ.get("UNREAL_MCP_ENABLE_EXTENDED_TOOLS", "0") == "1"
 
 
 def _new_orchestrator_operation_id(action: str) -> str:
@@ -509,6 +516,71 @@ def query_assets_summary(
     )
 
 
+def query_textures(
+    path: str = "/Game/",
+    name_filter: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    properties: list[str] | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded texture query with selected editor-property readback."""
+    return _guard_live_editor_call(
+        "asset.query_textures",
+        asset_query_textures,
+        path,
+        name_filter,
+        limit,
+        offset,
+        properties,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def get_asset_properties(
+    asset_paths: str | list[str],
+    properties: list[str],
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded generic editor-property readback for assets."""
+    return _guard_live_editor_call(
+        "asset.get_asset_properties",
+        asset_get_asset_properties,
+        asset_paths,
+        properties,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def set_asset_properties(
+    asset_paths: str | list[str],
+    properties: Dict[str, Any],
+    save: bool = True,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded generic editor-property update for assets."""
+    return _guard_live_editor_call(
+        "asset.set_asset_properties",
+        asset_set_asset_properties,
+        asset_paths,
+        properties,
+        save,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
 def ensure_folder(
     path: str,
     wait_for_ready: bool = True,
@@ -635,6 +707,86 @@ def update_texture_group_config(
         group_name=group_name,
         max_lod_size=max_lod_size,
         ini_filename=ini_filename,
+    )
+
+
+def set_texture_compression_settings(
+    texture_paths: str | list[str],
+    compression_settings: str,
+    save: bool = True,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded texture compression update workflow."""
+    return _guard_live_editor_call(
+        "asset.set_texture_compression_settings",
+        asset_set_texture_compression_settings,
+        texture_paths,
+        compression_settings,
+        save,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def set_texture_srgb(
+    texture_paths: str | list[str],
+    srgb: bool,
+    save: bool = True,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded texture sRGB update workflow."""
+    return _guard_live_editor_call(
+        "asset.set_texture_srgb",
+        asset_set_texture_srgb,
+        texture_paths,
+        srgb,
+        save,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def inspect_particle_system(
+    asset_path: str,
+    emitter_names: list[str] | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded Cascade particle-system inspection."""
+    return _guard_live_editor_call(
+        "asset.inspect_particle_system",
+        asset_inspect_particle_system,
+        asset_path,
+        emitter_names,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def inspect_cascade_emitter(
+    asset_path: str,
+    emitter_name: str,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded single-emitter Cascade inspection."""
+    return _guard_live_editor_call(
+        "asset.inspect_cascade_emitter",
+        asset_inspect_cascade_emitter,
+        asset_path,
+        emitter_name,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
     )
 
 
@@ -952,6 +1104,7 @@ DEFAULT_TOOLS = [
     get_renderdoc_selection_context,
     map_material_to_renderdoc_context,
     normalize_renderdoc_debug_labels,
+    reverse_lookup_renderdoc_symbols,
     set_renderdoc_debug_workflow,
     request_renderdoc_capture,
     renderdoc_capture_current_selection,
@@ -966,6 +1119,19 @@ DEFAULT_TOOLS = [
     duplicate_asset_with_overrides,
     move_asset_batch,
     query_assets_summary,
+    query_textures,
+    get_asset_properties,
+    set_asset_properties,
+    create_asset_with_properties,
+    update_asset_properties,
+    update_asset_properties_batch,
+    update_texture_group_config,
+    set_texture_compression_settings,
+    set_texture_srgb,
+    inspect_particle_system,
+    inspect_cascade_emitter,
+    import_texture_asset,
+    import_fbx_asset,
     set_scene_light_intensity,
     create_spot_light_ring,
     aim_actor_at,
@@ -973,6 +1139,13 @@ DEFAULT_TOOLS = [
     spawn_actor_with_defaults,
     get_asset_harness_info,
     get_material_harness_info,
+    create_material_asset,
+    create_material_instance_asset,
+    update_material_instance_properties,
+    get_material_instance_parameter_names,
+    set_material_instance_scalar_parameter,
+    set_material_instance_vector_parameter,
+    set_material_instance_texture_parameter,
     update_material_instance_parameters_and_verify,
     analyze_material_graph,
     create_material_graph_recipe,
@@ -988,25 +1161,6 @@ DEFAULT_TOOLS = [
     get_editor_ready_state,
     wait_for_editor_ready,
 ]
-
-if ENABLE_EXTENDED_TOOLS:
-    DEFAULT_TOOLS.extend(
-        [
-            create_asset_with_properties,
-            update_texture_group_config,
-            update_asset_properties,
-            update_asset_properties_batch,
-            import_texture_asset,
-            import_fbx_asset,
-            create_material_asset,
-            create_material_instance_asset,
-            update_material_instance_properties,
-            get_material_instance_parameter_names,
-            set_material_instance_scalar_parameter,
-            set_material_instance_vector_parameter,
-            set_material_instance_texture_parameter,
-        ]
-    )
 
 if ENABLE_DEV_TOOLS:
     DEFAULT_TOOLS.append(dev_launch_editor_and_wait_ready)

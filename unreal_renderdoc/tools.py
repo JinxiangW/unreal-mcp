@@ -180,6 +180,158 @@ def _write_json_file(path: Path, payload: Dict[str, Any]) -> str:
     return str(path.resolve())
 
 
+_LOOKUP_TEXT_SUFFIXES = {
+    ".usf",
+    ".ush",
+    ".hlsl",
+    ".h",
+    ".hpp",
+    ".cpp",
+    ".inl",
+    ".txt",
+    ".json",
+    ".log",
+}
+
+
+def _project_root_optional(project_path: Optional[str] = None) -> Optional[Path]:
+    try:
+        project = Path(project_path) if project_path else get_project_path()
+    except RuntimeError:
+        return None
+    return project.resolve().parent
+
+
+def _engine_root_optional() -> Optional[Path]:
+    try:
+        editor_exe = get_editor_exe_path().resolve()
+    except Exception:
+        return None
+    if not editor_exe.exists():
+        return None
+    try:
+        return editor_exe.parents[2]
+    except IndexError:
+        return None
+
+
+def _renderdoc_lookup_roots(
+    *,
+    project_path: Optional[str],
+    source_roots: Optional[List[str]],
+) -> list[Path]:
+    roots: list[Path] = []
+    project_root = _project_root_optional(project_path)
+    if project_root is not None:
+        roots.extend(
+            [
+                project_root / "Saved" / "ShaderDebugInfo",
+                project_root / "Source",
+                project_root / "Shaders",
+            ]
+        )
+    engine_root = _engine_root_optional()
+    if engine_root is not None:
+        roots.extend([engine_root / "Shaders", engine_root / "Source"])
+    roots.append(Path(__file__).resolve().parents[1])
+    for item in source_roots or []:
+        if item and str(item).strip():
+            roots.append(Path(item).resolve())
+
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root.resolve()) if root.exists() else str(root)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(root)
+    return deduped
+
+
+def _lookup_bucket_for_path(path: Path) -> str:
+    normalized = str(path).lower()
+    if "shaderdebuginfo" in normalized:
+        return "shader_debug_matches"
+    if path.suffix.lower() in {".usf", ".ush", ".hlsl"} or "\\shaders\\" in normalized:
+        return "shader_source_matches"
+    return "cpp_symbol_matches"
+
+
+def _search_roots_for_terms(
+    *,
+    roots: list[Path],
+    terms: list[str],
+    limit: int,
+) -> Dict[str, list[Dict[str, Any]]]:
+    buckets: Dict[str, list[Dict[str, Any]]] = {
+        "shader_debug_matches": [],
+        "shader_source_matches": [],
+        "cpp_symbol_matches": [],
+    }
+    if not terms or limit <= 0:
+        return buckets
+
+    lowered_terms = [term.lower() for term in terms if term]
+    remaining = limit
+    for root in roots:
+        if remaining <= 0 or not root.exists():
+            break
+        try:
+            candidates = root.rglob("*")
+        except OSError:
+            continue
+        for path in candidates:
+            if remaining <= 0:
+                break
+            if not path.is_file():
+                continue
+            if path.suffix.lower() not in _LOOKUP_TEXT_SUFFIXES:
+                continue
+
+            normalized_path = str(path).lower()
+            path_hit = next((term for term in lowered_terms if term in normalized_path), None)
+            if path_hit:
+                bucket = _lookup_bucket_for_path(path)
+                buckets[bucket].append(
+                    {
+                        "path": str(path.resolve()),
+                        "match_type": "path",
+                        "term": path_hit,
+                    }
+                )
+                remaining -= 1
+                if remaining <= 0:
+                    break
+
+            try:
+                with path.open("r", encoding="utf-8", errors="ignore") as handle:
+                    for line_no, line in enumerate(handle, 1):
+                        lowered_line = line.lower()
+                        matched_term = next(
+                            (term for term in lowered_terms if term in lowered_line),
+                            None,
+                        )
+                        if not matched_term:
+                            continue
+                        bucket = _lookup_bucket_for_path(path)
+                        buckets[bucket].append(
+                            {
+                                "path": str(path.resolve()),
+                                "match_type": "content",
+                                "term": matched_term,
+                                "line": line_no,
+                                "snippet": line.strip()[:240],
+                            }
+                        )
+                        remaining -= 1
+                        if remaining <= 0:
+                            break
+            except OSError:
+                continue
+    return buckets
+
+
 def _normalize_scalar_value(value: Any) -> Any:
     if isinstance(value, bool):
         return value
@@ -1025,6 +1177,7 @@ def get_renderdoc_harness_info() -> Dict[str, Any]:
             "selection_semantic_mapping",
             "debug_view_toggles",
             "capture_pair_diff_metadata",
+            "shader_symbol_reverse_lookup",
         ],
         "high_level_commands": [
             "get_renderdoc_runtime_status",
@@ -1032,6 +1185,7 @@ def get_renderdoc_harness_info() -> Dict[str, Any]:
             "get_renderdoc_selection_context",
             "map_material_to_renderdoc_context",
             "normalize_renderdoc_debug_labels",
+            "reverse_lookup_renderdoc_symbols",
             "set_renderdoc_debug_workflow",
             "request_renderdoc_capture",
             "capture_current_selection",
@@ -1427,6 +1581,106 @@ def set_renderdoc_debug_workflow(
         applied_changes=result["applied_changes"],
         failed_changes=result["failed_changes"],
         extras={"viewmode": viewmode, "cvars": cvars or {}},
+    )
+
+
+def reverse_lookup_renderdoc_symbols(
+    shader_hints: List[str],
+    parameter_hints: Optional[List[str]] = None,
+    source_roots: Optional[List[str]] = None,
+    project_path: Optional[str] = None,
+    limit: int = 20,
+) -> Dict[str, Any]:
+    """Search shader debug/source/C++ files using RenderDoc-facing symbol hints."""
+    if not isinstance(shader_hints, list) or not all(
+        isinstance(item, str) and item.strip() for item in shader_hints
+    ):
+        return _wrap_result(
+            "reverse_lookup_renderdoc_symbols",
+            success=False,
+            targets=[],
+            post_state={},
+            failed_changes=[
+                {
+                    "target": "renderdoc_symbol_lookup",
+                    "field": "shader_hints",
+                    "error": "shader_hints must be an array of non-empty strings",
+                }
+            ],
+            extras={"error": "invalid shader_hints"},
+        )
+    if parameter_hints is not None and (
+        not isinstance(parameter_hints, list)
+        or not all(isinstance(item, str) and item.strip() for item in parameter_hints)
+    ):
+        return _wrap_result(
+            "reverse_lookup_renderdoc_symbols",
+            success=False,
+            targets=[],
+            post_state={},
+            failed_changes=[
+                {
+                    "target": "renderdoc_symbol_lookup",
+                    "field": "parameter_hints",
+                    "error": "parameter_hints must be an array of non-empty strings when provided",
+                }
+            ],
+            extras={"error": "invalid parameter_hints"},
+        )
+
+    shader_terms = _dedupe([item.strip() for item in shader_hints if item.strip()])
+    parameter_terms = _dedupe(
+        [item.strip() for item in (parameter_hints or []) if item.strip()]
+    )
+    roots = _renderdoc_lookup_roots(
+        project_path=project_path,
+        source_roots=source_roots,
+    )
+    shader_matches = _search_roots_for_terms(
+        roots=roots,
+        terms=shader_terms,
+        limit=max(1, int(limit)),
+    )
+    parameter_matches = _search_roots_for_terms(
+        roots=roots,
+        terms=parameter_terms,
+        limit=max(1, int(limit)),
+    )
+
+    merged_matches = {
+        key: shader_matches.get(key, []) + parameter_matches.get(key, [])
+        for key in (
+            "shader_debug_matches",
+            "shader_source_matches",
+            "cpp_symbol_matches",
+        )
+    }
+    match_count = sum(len(items) for items in merged_matches.values())
+    checks = [
+        _check("renderdoc_symbol_lookup", "roots_scanned", True, bool(roots)),
+        _check("renderdoc_symbol_lookup", "matches_found", True, match_count > 0),
+    ]
+    return _wrap_result(
+        "reverse_lookup_renderdoc_symbols",
+        success=bool(roots),
+        targets=[str(root) for root in roots],
+        post_state={"renderdoc_symbol_lookup": merged_matches},
+        checks=checks,
+        failed_changes=[]
+        if roots
+        else [
+            {
+                "target": "renderdoc_symbol_lookup",
+                "field": "roots",
+                "error": "no searchable source roots were available",
+            }
+        ],
+        extras={
+            "shader_hints": shader_terms,
+            "parameter_hints": parameter_terms,
+            "searched_roots": [str(root) for root in roots],
+            **merged_matches,
+        },
     )
 
 

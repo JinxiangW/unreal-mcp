@@ -17,6 +17,7 @@ from .tools import (
     get_renderdoc_selection_context,
     map_material_to_renderdoc_context,
     normalize_renderdoc_debug_labels,
+    reverse_lookup_renderdoc_symbols,
     request_renderdoc_capture,
     set_renderdoc_debug_workflow,
 )
@@ -36,6 +37,7 @@ for tool in [
     get_renderdoc_selection_context,
     map_material_to_renderdoc_context,
     normalize_renderdoc_debug_labels,
+    reverse_lookup_renderdoc_symbols,
     set_renderdoc_debug_workflow,
     request_renderdoc_capture,
     capture_current_selection,

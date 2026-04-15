@@ -16,6 +16,16 @@ from unreal_renderdoc import tools as renderdoc_tools
 
 
 class AssetToolContractTests(unittest.TestCase):
+    def test_asset_check_treats_enum_name_and_serialized_enum_as_equal(self) -> None:
+        result = asset_tools._asset_check(
+            "/Game/Textures/T_RMO.T_RMO",
+            "compression_settings",
+            "TC_MASKS",
+            "<TextureCompressionSettings.TC_MASKS: 2>",
+        )
+
+        self.assertTrue(result["ok"])
+
     @patch("unreal_asset.tools.run_editor_python")
     def test_get_asset_properties_normalizes_enum_payloads(self, mock_run_editor_python) -> None:
         mock_run_editor_python.return_value = {
@@ -87,10 +97,16 @@ class AssetToolContractTests(unittest.TestCase):
                         "path": "/Game/Textures/T_Normal.T_Normal",
                         "class": "Texture2D",
                         "package": "/Game/Textures",
+                    },
+                    {
+                        "name": "SK_Enemy",
+                        "path": "/Game/Textures/SK_Enemy.SK_Enemy",
+                        "class": "SkeletalMesh",
+                        "package": "/Game/Textures",
                     }
                 ],
-                "total_count": 1,
-                "returned_count": 1,
+                "total_count": 2,
+                "returned_count": 2,
                 "limit": 20,
                 "offset": 0,
             },
@@ -113,11 +129,14 @@ class AssetToolContractTests(unittest.TestCase):
         )
 
         self.assertTrue(result["success"])
+        self.assertEqual(len(result["textures"]), 1)
         texture = result["textures"][0]
         self.assertEqual(
             texture["properties"]["compression_settings"]["name"], "TC_NORMALMAP"
         )
         self.assertFalse(texture["properties"]["srgb"])
+        self.assertEqual(result["raw_asset_count"], 2)
+        self.assertEqual(result["filtered_texture_count"], 1)
 
     @patch("unreal_asset.tools.send_command")
     @patch("unreal_asset.tools.run_editor_python")
@@ -143,6 +162,55 @@ class AssetToolContractTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["asset_class"], "NiagaraSystem")
         self.assertEqual(result["emitters"][0]["name"], "EmitterA")
+
+    @patch("unreal_asset.tools.run_editor_python")
+    def test_update_asset_properties_batch_chunks_large_requests(self, mock_run_editor_python) -> None:
+        mock_run_editor_python.side_effect = [
+            {
+                "success": True,
+                "summary": {"requested": 25, "succeeded": 25, "failed": 0},
+                "results": [
+                    {
+                        "success": True,
+                        "asset_path": f"/Game/Tex/T_{i}.T_{i}",
+                        "modified_properties": ["lod_group"],
+                        "post_state": {"lod_group": {"name": "TEXTUREGROUP_PROJECT02", "value": 35}},
+                        "failed_properties": [],
+                        "save_result": {"save_requested": True, "saved": True},
+                    }
+                    for i in range(25)
+                ],
+            },
+            {
+                "success": True,
+                "summary": {"requested": 5, "succeeded": 5, "failed": 0},
+                "results": [
+                    {
+                        "success": True,
+                        "asset_path": f"/Game/Tex/T_{i}.T_{i}",
+                        "modified_properties": ["lod_group"],
+                        "post_state": {"lod_group": {"name": "TEXTUREGROUP_PROJECT02", "value": 35}},
+                        "failed_properties": [],
+                        "save_result": {"save_requested": True, "saved": True},
+                    }
+                    for i in range(25, 30)
+                ],
+            },
+        ]
+
+        items = [
+            {
+                "asset_path": f"/Game/Tex/T_{i}.T_{i}",
+                "properties": {"lod_group": "TEXTUREGROUP_PROJECT02"},
+            }
+            for i in range(30)
+        ]
+        result = asset_tools.update_asset_properties_batch(items)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(mock_run_editor_python.call_count, 2)
+        self.assertEqual(result["summary"]["chunks"], 2)
+        self.assertEqual(result["summary"]["succeeded"], 30)
 
     def test_upsert_texture_lod_group_lines_appends_missing_group(self) -> None:
         lines = [
@@ -308,6 +376,47 @@ class MaterialToolContractTests(unittest.TestCase):
 
 class MaterialGraphContractTests(unittest.TestCase):
     @patch("unreal_material_graph.tools._load_full_graph")
+    def test_analyze_material_graph_can_return_full_graph_with_normalized_connections(
+        self, mock_load_full_graph
+    ) -> None:
+        mock_load_full_graph.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "path": "/Game/Materials/M_Test",
+                "asset_type": "Material",
+                "nodes": [{"node_id": "Expr_Constant_1", "type": "Constant"}],
+                "connections": [
+                    {
+                        "from": "Expr_Constant_1",
+                        "to": "Expr_Add_2",
+                        "from_output": "Output_0",
+                        "to_input": "A",
+                    }
+                ],
+                "property_connections": {
+                    "EmissiveColor": {"node_id": "Expr_Add_2", "output_index": 0}
+                },
+            },
+        }
+
+        result = material_graph_tools.analyze_material_graph(
+            "/Game/Materials/M_Test",
+            include_full_graph=True,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["connections"][0]["source"], "Expr_Constant_1")
+        self.assertEqual(result["connections"][0]["target_input"], "A")
+        self.assertEqual(
+            result["property_connections"]["EmissiveColor"]["target"], "Material"
+        )
+        self.assertEqual(
+            result["graph"]["property_connections"]["EmissiveColor"]["source"],
+            "Expr_Add_2",
+        )
+
+    @patch("unreal_material_graph.tools._load_full_graph")
     def test_analyze_material_graph_verifies_backend_counts(self, mock_load_full_graph) -> None:
         mock_load_full_graph.return_value = {
             "status": "success",
@@ -355,6 +464,102 @@ class MaterialGraphContractTests(unittest.TestCase):
             if check["field"] == "asset_path"
         ]
         self.assertEqual(asset_path_checks[0]["actual"], "/Game/Materials/M_Other")
+
+    @patch("unreal_material_graph.tools.analyze_material_graph")
+    @patch("unreal_material_graph.tools.build_material_graph")
+    def test_create_material_graph_recipe_uses_delta_validation_for_append(
+        self, mock_build_material_graph, mock_analyze_material_graph
+    ) -> None:
+        mock_analyze_material_graph.side_effect = [
+            {
+                "success": True,
+                "node_count": 5,
+                "connection_count": 4,
+                "property_connections": {"EmissiveColor": {"source": "Expr_1"}},
+                "asset_path": "/Game/Materials/M_Test",
+            },
+            {
+                "success": True,
+                "node_count": 7,
+                "connection_count": 5,
+                "property_connections": {"EmissiveColor": {"source": "Expr_1"}},
+                "asset_path": "/Game/Materials/M_Test",
+            },
+        ]
+        mock_build_material_graph.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "node_count": 2,
+                "connection_count": 1,
+            },
+        }
+
+        result = material_graph_tools.create_material_graph_recipe(
+            material_name="/Game/Materials/M_Test",
+            nodes=[{"id": "NodeA", "type": "Constant"}, {"id": "NodeB", "type": "Add"}],
+            connections=[
+                {
+                    "source": "NodeA",
+                    "target": "NodeB",
+                    "source_output": "Output_0",
+                    "target_input": "A",
+                }
+            ],
+        )
+
+        self.assertTrue(result["success"])
+        post_count_checks = [
+            check
+            for check in result["verification"]["checks"]
+            if check["field"] == "post_node_count"
+        ]
+        self.assertEqual(post_count_checks[0]["expected"], 7)
+
+    @patch("unreal_material_graph.tools.analyze_material_graph")
+    @patch("unreal_material_graph.tools.build_material_graph")
+    def test_patch_material_graph_passes_delete_and_disconnect_to_backend(
+        self, mock_build_material_graph, mock_analyze_material_graph
+    ) -> None:
+        mock_analyze_material_graph.side_effect = [
+            {
+                "success": True,
+                "node_count": 4,
+                "connection_count": 3,
+                "property_connections": {
+                    "EmissiveColor": {"source": "Expr_Old", "target_input": "EmissiveColor"}
+                },
+                "asset_path": "/Game/Materials/M_Test",
+            },
+            {
+                "success": True,
+                "node_count": 3,
+                "connection_count": 2,
+                "property_connections": {},
+                "asset_path": "/Game/Materials/M_Test",
+            },
+        ]
+        mock_build_material_graph.return_value = {
+            "status": "success",
+            "result": {"success": True, "node_count": 0, "connection_count": 0},
+        }
+
+        result = material_graph_tools.patch_material_graph(
+            material_name="/Game/Materials/M_Test",
+            delete_nodes=["Expr_Dead_7"],
+            disconnect_connections=[
+                {"source": "Expr_A", "target": "Expr_B", "target_input": "A"}
+            ],
+            disconnect_properties=["EmissiveColor"],
+        )
+
+        self.assertTrue(result["success"])
+        backend_kwargs = mock_build_material_graph.call_args.kwargs
+        self.assertEqual(backend_kwargs["delete_nodes"], ["Expr_Dead_7"])
+        self.assertEqual(
+            backend_kwargs["disconnect_connections"][0]["target_input"], "A"
+        )
+        self.assertEqual(backend_kwargs["disconnect_properties"], ["EmissiveColor"])
 
 
 class DiagnosticsContractTests(unittest.TestCase):

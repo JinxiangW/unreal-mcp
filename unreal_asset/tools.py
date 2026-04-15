@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 import re
@@ -29,18 +30,13 @@ def _new_operation_id(action: str) -> str:
 
 def _asset_check(target: str, field: str, expected: Any, actual: Any) -> Dict[str, Any]:
     def _normalize_enum(value: Any) -> Any:
-        if isinstance(value, dict) and "name" in value and "value" in value:
-            return value
+        if isinstance(value, dict) and "name" in value:
+            return value.get("name")
         if isinstance(value, str) and value.startswith("<") and ":" in value and "." in value:
             enum_text = value.strip("<>")
             enum_head, _, enum_value = enum_text.partition(":")
             _, _, enum_name = enum_head.rpartition(".")
-            enum_value = enum_value.strip()
-            try:
-                parsed_value: Any = int(enum_value)
-            except ValueError:
-                parsed_value = enum_value
-            return {"name": enum_name, "value": parsed_value}
+            return enum_name
         return value
 
     def _normalize_asset_ref(value: Any) -> Any:
@@ -55,13 +51,10 @@ def _asset_check(target: str, field: str, expected: Any, actual: Any) -> Dict[st
     normalized_expected = _normalize_asset_ref(_normalize_enum(expected))
     normalized_actual = _normalize_asset_ref(_normalize_enum(actual))
 
-    if isinstance(normalized_actual, dict) and "name" in normalized_actual and "value" in normalized_actual:
-        if isinstance(normalized_expected, str):
-            normalized_expected = normalized_expected.split(".")[-1]
-            if normalized_expected.startswith("<") and ":" in normalized_expected:
-                normalized_expected = _normalize_enum(normalized_expected)
-        elif isinstance(normalized_expected, int):
-            normalized_expected = {"name": normalized_actual["name"], "value": normalized_expected}
+    if isinstance(normalized_expected, str):
+        normalized_expected = normalized_expected.split(".")[-1]
+    if isinstance(normalized_actual, str):
+        normalized_actual = normalized_actual.split(".")[-1]
 
     return {
         "target": target,
@@ -227,6 +220,9 @@ _TEXTURE_DEFAULT_PROPERTIES = [
     "lod_group",
     "max_texture_size",
 ]
+_ASSET_BATCH_CHUNK_SIZE = max(
+    1, int(os.environ.get("UE_MCP_ASSET_BATCH_CHUNK_SIZE", "25"))
+)
 
 
 def _coerce_asset_paths(asset_paths: str | list[str], *, field_name: str) -> list[str]:
@@ -240,6 +236,14 @@ def _coerce_asset_paths(asset_paths: str | list[str], *, field_name: str) -> lis
     if not cleaned:
         raise ValueError(f"{field_name} must contain at least one asset path")
     return cleaned
+
+
+def _is_texture_asset_summary(item: Dict[str, Any]) -> bool:
+    asset_class = str(item.get("class") or "").strip()
+    if not asset_class:
+        return False
+    normalized = asset_class.split(".")[-1]
+    return normalized == "Texture2D"
 
 
 def _resolve_project_config_dir() -> Path:
@@ -1049,7 +1053,8 @@ def query_textures(
         fields=["name", "path", "class", "package"],
     )
     inner = base_result.get("result") or {}
-    textures = inner.get("assets", [])
+    raw_assets = inner.get("assets", [])
+    textures = [item for item in raw_assets if _is_texture_asset_summary(item)]
     success = bool(
         (base_result.get("status") == "success") and inner.get("success", True)
     )
@@ -1062,10 +1067,10 @@ def query_textures(
     }
     summary = build_query_summary(
         requested=inner.get("limit", limit),
-        returned=inner.get("returned_count", len(textures)),
-        total=inner.get("total_count", len(textures)),
+        returned=len(textures),
+        total=len(textures),
         offset=inner.get("offset", offset),
-        verified=inner.get("returned_count", len(textures)) if success else 0,
+        verified=len(textures) if success else 0,
     )
     if not success:
         return structured_query_failure(
@@ -1113,7 +1118,7 @@ def query_textures(
     summary = build_query_summary(
         requested=inner.get("limit", limit),
         returned=len(merged_items),
-        total=inner.get("total_count", len(merged_items)),
+        total=len(merged_items),
         offset=inner.get("offset", offset),
         verified=len(merged_items) if verified else 0,
     )
@@ -1144,6 +1149,8 @@ def query_textures(
         ],
         "filters": filters,
         "textures": merged_items,
+        "raw_asset_count": len(raw_assets),
+        "filtered_texture_count": len(merged_items),
     }
 
 
@@ -1416,16 +1423,11 @@ def inspect_cascade_emitter(
     }
 
 
-def update_asset_properties_batch(items: list[Dict[str, Any]]) -> Dict[str, Any]:
-    """Update multiple assets through one UE Python round-trip."""
-    if not items:
-        return _structured_asset_failure(
-            _new_operation_id("update_asset_properties_batch"),
-            [],
-            "items must not be empty",
-        )
-
-    operation_id = _new_operation_id("update_asset_properties_batch")
+def _run_update_asset_properties_batch_chunk(
+    items: list[Dict[str, Any]],
+    *,
+    operation_id: str,
+) -> Dict[str, Any]:
     body = f"""
 items = {python_literal(items)}
 results = []
@@ -1499,8 +1501,36 @@ _mcp_emit({{
             [item.get("asset_path") for item in items if item.get("asset_path")],
             result.get("error", "update_asset_properties_batch failed"),
         )
+    return result
 
-    result_items = result.get("results", [])
+
+def update_asset_properties_batch(items: list[Dict[str, Any]]) -> Dict[str, Any]:
+    """Update multiple assets through one UE Python round-trip."""
+    if not items:
+        return _structured_asset_failure(
+            _new_operation_id("update_asset_properties_batch"),
+            [],
+            "items must not be empty",
+        )
+
+    operation_id = _new_operation_id("update_asset_properties_batch")
+    chunk_size = _ASSET_BATCH_CHUNK_SIZE
+    chunk_results: list[Dict[str, Any]] = []
+    for start in range(0, len(items), chunk_size):
+        chunk = items[start : start + chunk_size]
+        chunk_result = _run_update_asset_properties_batch_chunk(
+            chunk,
+            operation_id=operation_id,
+        )
+        if not chunk_result.get("results") and not chunk_result.get("summary"):
+            return chunk_result
+        chunk_results.append(chunk_result)
+
+    result_items = [
+        item_result
+        for chunk_result in chunk_results
+        for item_result in (chunk_result.get("results") or [])
+    ]
     checks = []
     applied_changes = []
     failed_changes = []
@@ -1564,7 +1594,19 @@ _mcp_emit({{
         structured_items.append(structured_item)
 
     verified = not failed_changes and all(item["ok"] for item in checks)
-    summary = dict(result.get("summary") or {})
+    summary = {
+        "requested": len(items),
+        "succeeded": sum(
+            (chunk_result.get("summary") or {}).get("succeeded", 0)
+            for chunk_result in chunk_results
+        ),
+        "failed": sum(
+            (chunk_result.get("summary") or {}).get("failed", 0)
+            for chunk_result in chunk_results
+        ),
+        "chunks": len(chunk_results),
+        "chunk_size": chunk_size,
+    }
     summary["verified"] = summary.get("succeeded", 0) if verified else 0
     return {
         "success": verified,

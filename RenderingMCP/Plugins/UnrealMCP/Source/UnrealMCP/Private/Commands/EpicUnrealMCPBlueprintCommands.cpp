@@ -771,6 +771,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintCommands::HandleGetAssets(const T
         {
             Filter.ClassPaths.Add(UTexture::StaticClass()->GetClassPathName());
         }
+        else if (LowerClass == TEXT("texture2d") || LowerClass == TEXT("texture_2d"))
+        {
+            Filter.ClassPaths.Add(UTexture2D::StaticClass()->GetClassPathName());
+        }
         else if (LowerClass == TEXT("staticmesh") || LowerClass == TEXT("static_mesh"))
         {
             Filter.ClassPaths.Add(UStaticMesh::StaticClass()->GetClassPathName());

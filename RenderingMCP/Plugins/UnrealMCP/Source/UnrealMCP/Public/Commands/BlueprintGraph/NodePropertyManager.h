@@ -9,8 +9,10 @@
 
 class UEdGraph;
 class UEdGraphNode;
+class UEdGraphPin;
 class UBlueprint;
 class UK2Node;
+class UEdGraphSchema_K2;
 
 /**
  * Manages Blueprint node property modification
@@ -76,6 +78,27 @@ private:
 	static bool SetGenericNodeProperty(
 		UEdGraphNode* Node,
 		const FString& PropertyName,
+		const TSharedPtr<FJsonValue>& Value);
+
+	/**
+	 * Set a pin default value/object/text using K2 schema helpers.
+	 */
+	static bool SetPinDefaultProperty(
+		UEdGraphNode* Node,
+		const FString& PinName,
+		const TSharedPtr<FJsonValue>& Value);
+
+	static bool ApplyPinDefaultValue(
+		UEdGraphPin* Pin,
+		const TSharedPtr<FJsonValue>& Value,
+		const UEdGraphSchema_K2* Schema);
+
+	static FString SerializePinDefaultValue(
+		UEdGraphPin* Pin,
+		const TSharedPtr<FJsonValue>& Value);
+
+	static UObject* ResolvePinDefaultObject(
+		UEdGraphPin* Pin,
 		const TSharedPtr<FJsonValue>& Value);
 
 	/**

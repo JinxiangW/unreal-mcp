@@ -60,8 +60,16 @@
 #include "Materials/MaterialExpressionReflectionVectorWS.h"
 #include "Materials/MaterialExpressionVertexTangentWS.h"
 #include "Materials/MaterialExpressionDesaturation.h"
+#include "Materials/MaterialExpressionConstantBiasScale.h"
 #include "Materials/MaterialExpressionDDX.h"
 #include "Materials/MaterialExpressionDDY.h"
+#include "Materials/MaterialExpressionSphereMask.h"
+#include "Materials/MaterialExpressionEyeAdaptation.h"
+#include "Materials/MaterialExpressionRayTracingQualitySwitch.h"
+#include "Materials/MaterialExpressionArctangent2.h"
+#include "Materials/MaterialExpressionArctangent2Fast.h"
+#include "Materials/MaterialExpressionLength.h"
+#include "Materials/MaterialExpressionFmod.h"
 #include "Materials/MaterialExpressionTextureObject.h"
 #include "Materials/MaterialExpressionIf.h"
 #include "Materials/MaterialExpressionParticleSubUV.h"
@@ -261,6 +269,38 @@ namespace
         }
 
         return INDEX_NONE;
+    }
+
+    FString BuildGraphNodeId(UMaterialExpression* Expression)
+    {
+        if (!Expression)
+        {
+            return FString();
+        }
+
+        FString ExprType = Expression->GetClass()->GetName();
+        if (ExprType.StartsWith(TEXT("MaterialExpression")))
+        {
+            ExprType = ExprType.Mid(18);
+        }
+
+        return FString::Printf(TEXT("Expr_%s_%d"), *ExprType, Expression->GetUniqueID());
+    }
+
+    void DisconnectExpressionInput(FExpressionInput* Input)
+    {
+        if (!Input)
+        {
+            return;
+        }
+
+        Input->Expression = nullptr;
+        Input->OutputIndex = 0;
+        Input->Mask = 0;
+        Input->MaskR = 0;
+        Input->MaskG = 0;
+        Input->MaskB = 0;
+        Input->MaskA = 0;
     }
 }
 
@@ -980,6 +1020,54 @@ FExpressionInput* FEpicUnrealMCPMaterialCommands::GetExpressionInputByName(UMate
     {
         if (LowerInputName == TEXT("coordinates")) return &TexSample->Coordinates;
     }
+    else if (UMaterialExpressionDDX* DDXExpr = Cast<UMaterialExpressionDDX>(Expression))
+    {
+        if (LowerInputName == TEXT("value") || LowerInputName == TEXT("input")) return &DDXExpr->Value;
+    }
+    else if (UMaterialExpressionDDY* DDYExpr = Cast<UMaterialExpressionDDY>(Expression))
+    {
+        if (LowerInputName == TEXT("value") || LowerInputName == TEXT("input")) return &DDYExpr->Value;
+    }
+    else if (UMaterialExpressionConstantBiasScale* BiasScaleExpr = Cast<UMaterialExpressionConstantBiasScale>(Expression))
+    {
+        if (LowerInputName == TEXT("input")) return &BiasScaleExpr->Input;
+    }
+    else if (UMaterialExpressionSphereMask* SphereMaskExpr = Cast<UMaterialExpressionSphereMask>(Expression))
+    {
+        if (LowerInputName == TEXT("a")) return &SphereMaskExpr->A;
+        if (LowerInputName == TEXT("b")) return &SphereMaskExpr->B;
+        if (LowerInputName == TEXT("radius")) return &SphereMaskExpr->Radius;
+        if (LowerInputName == TEXT("hardness")) return &SphereMaskExpr->Hardness;
+    }
+    else if (UMaterialExpressionRayTracingQualitySwitch* RayTracingSwitchExpr = Cast<UMaterialExpressionRayTracingQualitySwitch>(Expression))
+    {
+        if (LowerInputName == TEXT("normal")) return &RayTracingSwitchExpr->Normal;
+        if (LowerInputName == TEXT("raytraced") || LowerInputName == TEXT("ray_traced")) return &RayTracingSwitchExpr->RayTraced;
+    }
+    else if (UMaterialExpressionArctangent2* Atan2Expr = Cast<UMaterialExpressionArctangent2>(Expression))
+    {
+        if (LowerInputName == TEXT("x")) return &Atan2Expr->X;
+        if (LowerInputName == TEXT("y")) return &Atan2Expr->Y;
+    }
+    else if (UMaterialExpressionArctangent2Fast* Atan2FastExpr = Cast<UMaterialExpressionArctangent2Fast>(Expression))
+    {
+        if (LowerInputName == TEXT("x")) return &Atan2FastExpr->X;
+        if (LowerInputName == TEXT("y")) return &Atan2FastExpr->Y;
+    }
+    else if (UMaterialExpressionLength* LengthExpr = Cast<UMaterialExpressionLength>(Expression))
+    {
+        if (LowerInputName == TEXT("input") || LowerInputName == TEXT("value")) return &LengthExpr->Input;
+    }
+    else if (UMaterialExpressionDistance* DistanceExpr = Cast<UMaterialExpressionDistance>(Expression))
+    {
+        if (LowerInputName == TEXT("a")) return &DistanceExpr->A;
+        if (LowerInputName == TEXT("b")) return &DistanceExpr->B;
+    }
+    else if (UMaterialExpressionFmod* FmodExpr = Cast<UMaterialExpressionFmod>(Expression))
+    {
+        if (LowerInputName == TEXT("a")) return &FmodExpr->A;
+        if (LowerInputName == TEXT("b")) return &FmodExpr->B;
+    }
     else if (UMaterialExpressionFunctionInput* FunctionInput = Cast<UMaterialExpressionFunctionInput>(Expression))
     {
         if (LowerInputName == TEXT("preview"))
@@ -1008,6 +1096,24 @@ FExpressionInput* FEpicUnrealMCPMaterialCommands::GetExpressionInputByName(UMate
             if (!FuncInputName.IsEmpty() && FuncInputName == LowerInputName)
             {
                 return &FuncInput.Input;
+            }
+        }
+    }
+    else if (UMaterialExpressionCustom* CustomExpr = Cast<UMaterialExpressionCustom>(Expression))
+    {
+        for (int32 CustomInputIdx = 0; CustomInputIdx < CustomExpr->Inputs.Num(); ++CustomInputIdx)
+        {
+            FCustomInput& CustomInput = CustomExpr->Inputs[CustomInputIdx];
+            const FString IndexedName = FString::Printf(TEXT("input_%d"), CustomInputIdx);
+            const FString OneBasedIndexedName = FString::Printf(TEXT("input_%d"), CustomInputIdx + 1);
+            if (LowerInputName == IndexedName || LowerInputName == OneBasedIndexedName)
+            {
+                return &CustomInput.Input;
+            }
+            const FString CustomInputName = CustomInput.InputName.ToString().ToLower();
+            if (!CustomInputName.IsEmpty() && CustomInputName == LowerInputName)
+            {
+                return &CustomInput.Input;
             }
         }
     }
@@ -1228,7 +1334,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
             ExprType = ExprType.Mid(18);
         }
         
-        FString NodeId = FString::Printf(TEXT("Expr_%s_%d"), *ExprType, Expr->GetUniqueID());
+        FString NodeId = BuildGraphNodeId(Expr);
         ExprToNodeId.Add(Expr, NodeId);
         
         NodeObj->SetStringField(TEXT("node_id"), NodeId);
@@ -1346,6 +1452,16 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
             }
             NodeObj->SetStringField(TEXT("sampler_type"), SamplerTypeToString(TexSample->SamplerType));
         }
+        else if (UMaterialExpressionConstantBiasScale* BiasScaleExpr = Cast<UMaterialExpressionConstantBiasScale>(Expr))
+        {
+            NodeObj->SetNumberField(TEXT("bias"), BiasScaleExpr->Bias);
+            NodeObj->SetNumberField(TEXT("scale"), BiasScaleExpr->Scale);
+        }
+        else if (UMaterialExpressionSphereMask* SphereMaskExpr = Cast<UMaterialExpressionSphereMask>(Expr))
+        {
+            NodeObj->SetNumberField(TEXT("attenuation_radius"), SphereMaskExpr->AttenuationRadius);
+            NodeObj->SetNumberField(TEXT("hardness_percent"), SphereMaskExpr->HardnessPercent);
+        }
         else if (UMaterialExpressionCustom* CustomExpr = Cast<UMaterialExpressionCustom>(Expr))
         {
             NodeObj->SetStringField(TEXT("code"), CustomExpr->Code);
@@ -1365,9 +1481,21 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
 
                 TSharedPtr<FJsonObject> CustomInputObj = MakeShared<FJsonObject>();
                 CustomInputObj->SetStringField(TEXT("input_name"), CustomInput.InputName.ToString());
+                CustomInputObj->SetStringField(TEXT("pin_name"), CustomInput.InputName.ToString());
+                CustomInputObj->SetNumberField(TEXT("input_index"), CustomInputs.Num());
                 CustomInputs.Add(MakeShared<FJsonValueObject>(CustomInputObj));
             }
             NodeObj->SetArrayField(TEXT("inputs"), CustomInputs);
+        }
+        else if (UMaterialExpressionMaterialFunctionCall* FuncCall = Cast<UMaterialExpressionMaterialFunctionCall>(Expr))
+        {
+            if (FuncCall->MaterialFunction)
+            {
+                const FString FunctionPath = FuncCall->MaterialFunction->GetPathName();
+                NodeObj->SetStringField(TEXT("material_function"), FunctionPath);
+                NodeObj->SetStringField(TEXT("function_path"), FunctionPath);
+                NodeObj->SetStringField(TEXT("material_function_path"), FunctionPath);
+            }
         }
         
         NodesArray.Add(MakeShared<FJsonValueObject>(NodeObj));
@@ -1391,6 +1519,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
                 if (FromNodeId)
                 {
                     TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+                    ConnObj->SetStringField(TEXT("source"), *FromNodeId);
+                    ConnObj->SetStringField(TEXT("target"), TargetNodeId);
+                    ConnObj->SetStringField(TEXT("source_output"), OutputName);
+                    ConnObj->SetStringField(TEXT("target_input"), InputName);
                     ConnObj->SetStringField(TEXT("from"), *FromNodeId);
                     ConnObj->SetStringField(TEXT("to"), TargetNodeId);
                     ConnObj->SetStringField(TEXT("from_output"), OutputName);
@@ -1526,6 +1658,24 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
                 }
             }
         }
+        else if (UMaterialExpressionCustom* CustomExpr = Cast<UMaterialExpressionCustom>(Expr))
+        {
+            for (int32 CustomInputIdx = 0; CustomInputIdx < CustomExpr->Inputs.Num(); ++CustomInputIdx)
+            {
+                const FCustomInput& CustomInput = CustomExpr->Inputs[CustomInputIdx];
+                if (CustomInput.Input.Expression)
+                {
+                    const FString InputName = !CustomInput.InputName.IsNone()
+                        ? CustomInput.InputName.ToString()
+                        : FString::Printf(TEXT("Input_%d"), CustomInputIdx);
+                    AddConnection(
+                        CustomInput.Input.Expression,
+                        FString::Printf(TEXT("Output_%d"), CustomInput.Input.OutputIndex),
+                        InputName
+                    );
+                }
+            }
+        }
         else
         {
             // Generic input iteration for other expression types
@@ -1539,6 +1689,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
                     if (SourceNodeId)
                     {
                         TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+                        ConnObj->SetStringField(TEXT("source"), *SourceNodeId);
+                        ConnObj->SetStringField(TEXT("target"), TargetNodeId);
+                        ConnObj->SetStringField(TEXT("source_output"), FString::Printf(TEXT("Output_%d"), Input->OutputIndex));
+                        ConnObj->SetStringField(TEXT("target_input"), FString::Printf(TEXT("Input_%d"), InputIndex));
                         ConnObj->SetStringField(TEXT("from"), *SourceNodeId);
                         ConnObj->SetStringField(TEXT("to"), TargetNodeId);
                         ConnObj->SetStringField(TEXT("from_output"), FString::Printf(TEXT("Output_%d"), Input->OutputIndex));
@@ -1567,6 +1721,14 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
                 {
                     PropConnObj->SetStringField(TEXT("node_id"), *ConnectedNodeId);
                     PropConnObj->SetNumberField(TEXT("output_index"), PropertyInput->OutputIndex);
+                    PropConnObj->SetStringField(TEXT("source"), *ConnectedNodeId);
+                    PropConnObj->SetStringField(TEXT("target"), TEXT("Material"));
+                    PropConnObj->SetStringField(TEXT("source_output"), FString::Printf(TEXT("Output_%d"), PropertyInput->OutputIndex));
+                    PropConnObj->SetStringField(TEXT("target_input"), PropertyName);
+                    PropConnObj->SetStringField(TEXT("from"), *ConnectedNodeId);
+                    PropConnObj->SetStringField(TEXT("to"), TEXT("Material"));
+                    PropConnObj->SetStringField(TEXT("from_output"), FString::Printf(TEXT("Output_%d"), PropertyInput->OutputIndex));
+                    PropConnObj->SetStringField(TEXT("to_input"), PropertyName);
                     PropertyConnectionsObj->SetObjectField(PropertyName, PropConnObj);
                 }
             }
@@ -1583,6 +1745,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
         AddPropertyConnection(TEXT("AmbientOcclusion"), MP_AmbientOcclusion);
         
         ResultObj->SetObjectField(TEXT("property_connections"), PropertyConnectionsObj);
+        ResultObj->SetNumberField(TEXT("property_connection_count"), PropertyConnectionsObj->Values.Num());
     }
     
     ResultObj->SetArrayField(TEXT("nodes"), NodesArray);
@@ -1640,6 +1803,204 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
             MaterialFunction->GetExpressionCollection().AddExpression(Expression);
         }
     };
+
+    auto RemoveExpressionFromOwner = [&](UMaterialExpression* Expression)
+    {
+        if (!Expression)
+        {
+            return;
+        }
+
+        if (Material)
+        {
+            Material->GetExpressionCollection().RemoveExpression(Expression);
+        }
+        else if (MaterialFunction)
+        {
+            MaterialFunction->GetExpressionCollection().RemoveExpression(Expression);
+        }
+    };
+
+    const TArray<UMaterialExpression*>& ExistingExpressions = Material
+        ? Material->GetExpressionCollection().Expressions
+        : MaterialFunction->GetExpressionCollection().Expressions;
+
+    for (UMaterialExpression* ExistingExpression : ExistingExpressions)
+    {
+        if (!ExistingExpression)
+        {
+            continue;
+        }
+        NodeIdToExpression.Add(BuildGraphNodeId(ExistingExpression), ExistingExpression);
+    }
+
+    auto DisconnectMaterialPropertyByName = [&](const FString& PropertyName)
+    {
+        if (!Material)
+        {
+            return false;
+        }
+
+        FExpressionInput* PropertyInput = GetMaterialPropertyInput(Material, PropertyName);
+        if (!PropertyInput)
+        {
+            return false;
+        }
+
+        DisconnectExpressionInput(PropertyInput);
+        return true;
+    };
+
+    auto DisconnectMatchingConnections = [&](UMaterialExpression* SourceExpression, UMaterialExpression* TargetExpression, const FString& TargetInputName)
+    {
+        if (!TargetExpression)
+        {
+            return false;
+        }
+
+        FExpressionInput* TargetInput = GetExpressionInputByName(TargetExpression, TargetInputName);
+        if (!TargetInput)
+        {
+            return false;
+        }
+
+        if (!SourceExpression || TargetInput->Expression == SourceExpression)
+        {
+            DisconnectExpressionInput(TargetInput);
+            return true;
+        }
+
+        return false;
+    };
+
+    const TArray<TSharedPtr<FJsonValue>>* DeleteNodesArray = nullptr;
+    if (Params->TryGetArrayField(TEXT("delete_nodes"), DeleteNodesArray) && DeleteNodesArray)
+    {
+        TArray<UMaterialExpression*> ExpressionsToDelete;
+        for (const TSharedPtr<FJsonValue>& DeleteNodeValue : *DeleteNodesArray)
+        {
+            if (!DeleteNodeValue.IsValid())
+            {
+                continue;
+            }
+
+            const FString DeleteNodeId = DeleteNodeValue->AsString();
+            if (UMaterialExpression** ExistingExpression = NodeIdToExpression.Find(DeleteNodeId))
+            {
+                if (*ExistingExpression)
+                {
+                    ExpressionsToDelete.AddUnique(*ExistingExpression);
+                }
+            }
+        }
+
+        for (UMaterialExpression* ExpressionToDelete : ExpressionsToDelete)
+        {
+            for (UMaterialExpression* ExistingExpression : ExistingExpressions)
+            {
+                if (!ExistingExpression || ExistingExpression == ExpressionToDelete)
+                {
+                    continue;
+                }
+
+                int32 InputIndex = 0;
+                FExpressionInput* Input = ExistingExpression->GetInput(InputIndex);
+                while (Input)
+                {
+                    if (Input->Expression == ExpressionToDelete)
+                    {
+                        DisconnectExpressionInput(Input);
+                    }
+                    ++InputIndex;
+                    Input = ExistingExpression->GetInput(InputIndex);
+                }
+            }
+
+            if (Material)
+            {
+                for (const TCHAR* PropertyName : { TEXT("BaseColor"), TEXT("Metallic"), TEXT("Specular"), TEXT("Roughness"), TEXT("Normal"), TEXT("EmissiveColor"), TEXT("Opacity"), TEXT("OpacityMask"), TEXT("AmbientOcclusion") })
+                {
+                    FExpressionInput* PropertyInput = GetMaterialPropertyInput(Material, PropertyName);
+                    if (PropertyInput && PropertyInput->Expression == ExpressionToDelete)
+                    {
+                        DisconnectExpressionInput(PropertyInput);
+                    }
+                }
+            }
+
+            NodeIdToExpression.Remove(BuildGraphNodeId(ExpressionToDelete));
+            RemoveExpressionFromOwner(ExpressionToDelete);
+        }
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* DisconnectConnectionsArray = nullptr;
+    if (Params->TryGetArrayField(TEXT("disconnect_connections"), DisconnectConnectionsArray) && DisconnectConnectionsArray)
+    {
+        for (const TSharedPtr<FJsonValue>& DisconnectValue : *DisconnectConnectionsArray)
+        {
+            if (!DisconnectValue.IsValid())
+            {
+                continue;
+            }
+
+            TSharedPtr<FJsonObject> DisconnectObj = DisconnectValue->AsObject();
+            if (!DisconnectObj.IsValid())
+            {
+                continue;
+            }
+
+            FString TargetId;
+            if (!DisconnectObj->TryGetStringField(TEXT("target"), TargetId))
+            {
+                DisconnectObj->TryGetStringField(TEXT("to"), TargetId);
+            }
+
+            FString SourceId;
+            if (!DisconnectObj->TryGetStringField(TEXT("source"), SourceId))
+            {
+                DisconnectObj->TryGetStringField(TEXT("from"), SourceId);
+            }
+
+            FString TargetInput;
+            if (!DisconnectObj->TryGetStringField(TEXT("target_input"), TargetInput))
+            {
+                DisconnectObj->TryGetStringField(TEXT("to_input"), TargetInput);
+            }
+
+            if (TargetId == TEXT("Material"))
+            {
+                DisconnectMaterialPropertyByName(TargetInput);
+                continue;
+            }
+
+            UMaterialExpression* SourceExpression = nullptr;
+            if (!SourceId.IsEmpty())
+            {
+                if (UMaterialExpression** ExistingSourceExpression = NodeIdToExpression.Find(SourceId))
+                {
+                    SourceExpression = *ExistingSourceExpression;
+                }
+            }
+
+            if (UMaterialExpression** ExistingTargetExpression = NodeIdToExpression.Find(TargetId))
+            {
+                DisconnectMatchingConnections(SourceExpression, *ExistingTargetExpression, TargetInput);
+            }
+        }
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* DisconnectPropertiesArray = nullptr;
+    if (Params->TryGetArrayField(TEXT("disconnect_properties"), DisconnectPropertiesArray) && DisconnectPropertiesArray)
+    {
+        for (const TSharedPtr<FJsonValue>& PropertyValue : *DisconnectPropertiesArray)
+        {
+            if (!PropertyValue.IsValid())
+            {
+                continue;
+            }
+            DisconnectMaterialPropertyByName(PropertyValue->AsString());
+        }
+    }
 
     // Process nodes array
     const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
@@ -2047,6 +2408,64 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
             {
                 NewExpression = NewObject<UMaterialExpressionDesaturation>(GraphOwner);
             }
+            else if (ExpressionType == TEXT("DDX"))
+            {
+                NewExpression = NewObject<UMaterialExpressionDDX>(GraphOwner);
+            }
+            else if (ExpressionType == TEXT("DDY"))
+            {
+                NewExpression = NewObject<UMaterialExpressionDDY>(GraphOwner);
+            }
+            else if (ExpressionType == TEXT("ConstantBiasScale"))
+            {
+                UMaterialExpressionConstantBiasScale* BiasScaleExpr = NewObject<UMaterialExpressionConstantBiasScale>(GraphOwner);
+                float Bias = BiasScaleExpr->Bias;
+                float Scale = BiasScaleExpr->Scale;
+                NodeObj->TryGetNumberField(TEXT("bias"), Bias);
+                NodeObj->TryGetNumberField(TEXT("scale"), Scale);
+                BiasScaleExpr->Bias = Bias;
+                BiasScaleExpr->Scale = Scale;
+                NewExpression = BiasScaleExpr;
+            }
+            else if (ExpressionType == TEXT("SphereMask"))
+            {
+                UMaterialExpressionSphereMask* SphereMaskExpr = NewObject<UMaterialExpressionSphereMask>(GraphOwner);
+                float AttenuationRadius = SphereMaskExpr->AttenuationRadius;
+                float HardnessPercent = SphereMaskExpr->HardnessPercent;
+                NodeObj->TryGetNumberField(TEXT("attenuation_radius"), AttenuationRadius);
+                NodeObj->TryGetNumberField(TEXT("hardness_percent"), HardnessPercent);
+                SphereMaskExpr->AttenuationRadius = AttenuationRadius;
+                SphereMaskExpr->HardnessPercent = HardnessPercent;
+                NewExpression = SphereMaskExpr;
+            }
+            else if (ExpressionType == TEXT("EyeAdaptation"))
+            {
+                NewExpression = NewObject<UMaterialExpressionEyeAdaptation>(GraphOwner);
+            }
+            else if (ExpressionType == TEXT("RayTracingQualitySwitch"))
+            {
+                NewExpression = NewObject<UMaterialExpressionRayTracingQualitySwitch>(GraphOwner);
+            }
+            else if (ExpressionType == TEXT("Arctangent2"))
+            {
+                NewExpression = NewObject<UMaterialExpressionArctangent2>(GraphOwner);
+            }
+            else if (ExpressionType == TEXT("Arctangent2Fast"))
+            {
+                NewExpression = NewObject<UMaterialExpressionArctangent2Fast>(GraphOwner);
+            }
+            else if (ExpressionType == TEXT("Length"))
+            {
+                NewExpression = NewObject<UMaterialExpressionLength>(GraphOwner);
+            }
+            else if (ExpressionType == TEXT("Distance"))
+            {
+                NewExpression = NewObject<UMaterialExpressionDistance>(GraphOwner);
+            }
+            else if (ExpressionType == TEXT("Fmod"))
+            {
+                NewExpression = NewObject<UMaterialExpressionFmod>(GraphOwner);
+            }
             else if (ExpressionType == TEXT("ReflectionVector"))
             {
                 NewExpression = NewObject<UMaterialExpressionReflectionVectorWS>(GraphOwner);
@@ -2239,7 +2658,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
                 TSharedPtr<FJsonObject> CreatedNodeObj = MakeShared<FJsonObject>();
                 CreatedNodeObj->SetStringField(TEXT("id"), NodeId);
                 CreatedNodeObj->SetStringField(TEXT("type"), ExpressionType);
-                FString ActualNodeId = FString::Printf(TEXT("Expr_%s_%d"), *ExpressionType, NewExpression->GetUniqueID());
+                FString ActualNodeId = BuildGraphNodeId(NewExpression);
                 CreatedNodeObj->SetStringField(TEXT("node_id"), ActualNodeId);
                 CreatedNodesArray.Add(MakeShared<FJsonValueObject>(CreatedNodeObj));
 
@@ -2260,17 +2679,30 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
             if (!ConnObj.IsValid()) continue;
 
             FString SourceId, TargetId;
-            if (!ConnObj->TryGetStringField(TEXT("source"), SourceId) || 
-                !ConnObj->TryGetStringField(TEXT("target"), TargetId))
+            if (!ConnObj->TryGetStringField(TEXT("source"), SourceId))
+            {
+                ConnObj->TryGetStringField(TEXT("from"), SourceId);
+            }
+            if (!ConnObj->TryGetStringField(TEXT("target"), TargetId))
+            {
+                ConnObj->TryGetStringField(TEXT("to"), TargetId);
+            }
+            if (SourceId.IsEmpty() || TargetId.IsEmpty())
             {
                 continue;
             }
 
             FString SourceOutput = TEXT("Output");
-            ConnObj->TryGetStringField(TEXT("source_output"), SourceOutput);
+            if (!ConnObj->TryGetStringField(TEXT("source_output"), SourceOutput))
+            {
+                ConnObj->TryGetStringField(TEXT("from_output"), SourceOutput);
+            }
 
             FString TargetInput;
-            ConnObj->TryGetStringField(TEXT("target_input"), TargetInput);
+            if (!ConnObj->TryGetStringField(TEXT("target_input"), TargetInput))
+            {
+                ConnObj->TryGetStringField(TEXT("to_input"), TargetInput);
+            }
 
             // Handle connection to material property
             if (TargetId == TEXT("Material"))
@@ -2313,6 +2745,70 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
                     ConnectionCount++;
                 }
             }
+        }
+    }
+
+    const TSharedPtr<FJsonObject>* PropertyConnectionsObj = nullptr;
+    if (Params->TryGetObjectField(TEXT("property_connections"), PropertyConnectionsObj) && PropertyConnectionsObj)
+    {
+        if (!Material)
+        {
+            return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("property_connections can only be applied to UMaterial targets"));
+        }
+
+        for (const TPair<FString, TSharedPtr<FJsonValue>>& PropertyPair : (*PropertyConnectionsObj)->Values)
+        {
+            const FString& PropertyName = PropertyPair.Key;
+            FExpressionInput* PropertyInput = GetMaterialPropertyInput(Material, PropertyName);
+            if (!PropertyInput)
+            {
+                return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown material property input: %s"), *PropertyName));
+            }
+
+            const TSharedPtr<FJsonObject> PropertyConnObj = PropertyPair.Value.IsValid()
+                ? PropertyPair.Value->AsObject()
+                : nullptr;
+            if (!PropertyConnObj.IsValid())
+            {
+                DisconnectExpressionInput(PropertyInput);
+                continue;
+            }
+
+            FString SourceId;
+            if (!PropertyConnObj->TryGetStringField(TEXT("source"), SourceId))
+            {
+                PropertyConnObj->TryGetStringField(TEXT("node_id"), SourceId);
+            }
+
+            FString SourceOutput = TEXT("Output_0");
+            if (!PropertyConnObj->TryGetStringField(TEXT("source_output"), SourceOutput))
+            {
+                PropertyConnObj->TryGetStringField(TEXT("from_output"), SourceOutput);
+                if (SourceOutput.IsEmpty())
+                {
+                    int32 OutputIndex = 0;
+                    if (PropertyConnObj->TryGetNumberField(TEXT("output_index"), OutputIndex))
+                    {
+                        SourceOutput = FString::Printf(TEXT("Output_%d"), OutputIndex);
+                    }
+                }
+            }
+
+            if (SourceId.IsEmpty())
+            {
+                DisconnectExpressionInput(PropertyInput);
+                continue;
+            }
+
+            UMaterialExpression** SourceExpr = NodeIdToExpression.Find(SourceId);
+            if (!SourceExpr || !*SourceExpr)
+            {
+                return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown property connection source node: %s"), *SourceId));
+            }
+
+            PropertyInput->Expression = *SourceExpr;
+            PropertyInput->OutputIndex = GetExpressionOutputIndexByName(*SourceExpr, SourceOutput);
+            ConnectionCount++;
         }
     }
 

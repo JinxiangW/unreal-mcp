@@ -32,6 +32,18 @@ from unreal_asset.tools import (
     update_asset_properties_batch as asset_update_asset_properties_batch,
     update_asset_properties as asset_update_asset_properties,
 )
+from unreal_blueprint.tools import (
+    add_blueprint_node as blueprint_add_blueprint_node,
+    add_point_light_component_node as blueprint_add_point_light_component_node,
+    analyze_blueprint_graph as blueprint_analyze_blueprint_graph,
+    connect_blueprint_nodes as blueprint_connect_blueprint_nodes,
+    find_blueprint_nodes as blueprint_find_blueprint_nodes,
+    get_blueprint_function_details as blueprint_get_blueprint_function_details,
+    get_blueprint_harness_info,
+    get_blueprint_variable_details as blueprint_get_blueprint_variable_details,
+    read_blueprint_content as blueprint_read_blueprint_content,
+    set_blueprint_node_property as blueprint_set_blueprint_node_property,
+)
 from unreal_diagnostics.tools import (
     dev_launch_editor_and_wait_ready,
     get_commandlet_runtime_status,
@@ -60,6 +72,8 @@ from unreal_material_graph.tools import (
     connect_material_nodes as material_graph_connect_material_nodes,
     create_material_graph_recipe as material_graph_create_material_graph_recipe,
     get_material_graph_harness_info,
+    patch_material_graph as material_graph_patch_material_graph,
+    set_material_graph_property_connections as material_graph_set_material_graph_property_connections,
 )
 from unreal_scene.tools import (
     apply_scene_actor_batch as scene_apply_scene_actor_batch,
@@ -752,6 +766,243 @@ def set_texture_srgb(
     )
 
 
+def read_blueprint_content(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    include_event_graph: bool = True,
+    include_functions: bool = True,
+    include_variables: bool = True,
+    include_components: bool = True,
+    include_interfaces: bool = True,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded blueprint asset inspection."""
+    return _guard_live_editor_call(
+        "blueprint.read_blueprint_content",
+        blueprint_read_blueprint_content,
+        blueprint_path,
+        blueprint_name,
+        include_event_graph,
+        include_functions,
+        include_variables,
+        include_components,
+        include_interfaces,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def analyze_blueprint_graph(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    graph_name: str = "EventGraph",
+    include_node_details: bool = True,
+    include_pin_connections: bool = True,
+    trace_execution_flow: bool = True,
+    include_full_graph: bool = True,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded blueprint graph analysis."""
+    return _guard_live_editor_call(
+        "blueprint.analyze_blueprint_graph",
+        blueprint_analyze_blueprint_graph,
+        blueprint_path,
+        blueprint_name,
+        graph_name,
+        include_node_details,
+        include_pin_connections,
+        trace_execution_flow,
+        include_full_graph,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def find_blueprint_nodes(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    graph_name: str = "EventGraph",
+    title_filter: str | None = None,
+    class_filter: str | None = None,
+    node_name_filter: str | None = None,
+    pin_name_filter: str | None = None,
+    pin_direction: str | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded blueprint node discovery."""
+    return _guard_live_editor_call(
+        "blueprint.find_blueprint_nodes",
+        blueprint_find_blueprint_nodes,
+        blueprint_path,
+        blueprint_name,
+        graph_name,
+        title_filter,
+        class_filter,
+        node_name_filter,
+        pin_name_filter,
+        pin_direction,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def add_blueprint_node(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    node_type: str = "",
+    node_params: Dict[str, Any] | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded blueprint node creation."""
+    return _guard_live_editor_call(
+        "blueprint.add_blueprint_node",
+        blueprint_add_blueprint_node,
+        blueprint_path,
+        blueprint_name,
+        node_type,
+        node_params,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def connect_blueprint_nodes(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    source_node_id: str = "",
+    source_pin_name: str = "",
+    target_node_id: str = "",
+    target_pin_name: str = "",
+    function_name: str | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded blueprint graph connection workflow."""
+    return _guard_live_editor_call(
+        "blueprint.connect_blueprint_nodes",
+        blueprint_connect_blueprint_nodes,
+        blueprint_path,
+        blueprint_name,
+        source_node_id,
+        source_pin_name,
+        target_node_id,
+        target_pin_name,
+        function_name,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def set_blueprint_node_property(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    node_id: str = "",
+    function_name: str | None = None,
+    property_name: str | None = None,
+    property_value: Any = None,
+    action: str | None = None,
+    extra: Dict[str, Any] | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded blueprint node property / pin-default update."""
+    return _guard_live_editor_call(
+        "blueprint.set_blueprint_node_property",
+        blueprint_set_blueprint_node_property,
+        blueprint_path,
+        blueprint_name,
+        node_id,
+        function_name,
+        property_name,
+        property_value,
+        action,
+        extra,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def get_blueprint_variable_details(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    variable_name: str | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded blueprint variable inspection."""
+    return _guard_live_editor_call(
+        "blueprint.get_blueprint_variable_details",
+        blueprint_get_blueprint_variable_details,
+        blueprint_path,
+        blueprint_name,
+        variable_name,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def get_blueprint_function_details(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    function_name: str | None = None,
+    include_graph: bool = True,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded blueprint function inspection."""
+    return _guard_live_editor_call(
+        "blueprint.get_blueprint_function_details",
+        blueprint_get_blueprint_function_details,
+        blueprint_path,
+        blueprint_name,
+        function_name,
+        include_graph,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def add_point_light_component_node(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    node_params: Dict[str, Any] | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded high-frequency Add PointLightComponent node template."""
+    return _guard_live_editor_call(
+        "blueprint.add_point_light_component_node",
+        blueprint_add_point_light_component_node,
+        blueprint_path,
+        blueprint_name,
+        node_params,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
 def inspect_particle_system(
     asset_path: str,
     emitter_names: list[str] | None = None,
@@ -954,6 +1205,7 @@ def update_material_instance_parameters_and_verify(
 
 def analyze_material_graph(
     asset_path: str,
+    include_full_graph: bool = False,
     wait_for_ready: bool = True,
     ready_timeout_seconds: int = 120,
     ready_poll_seconds: int = 5,
@@ -963,6 +1215,7 @@ def analyze_material_graph(
         "material_graph.analyze_material_graph",
         material_graph_analyze_material_graph,
         asset_path,
+        include_full_graph,
         wait_for_ready=wait_for_ready,
         ready_timeout_seconds=ready_timeout_seconds,
         ready_poll_seconds=ready_poll_seconds,
@@ -974,7 +1227,12 @@ def create_material_graph_recipe(
     nodes: list[Dict[str, Any]],
     connections: list[Dict[str, Any]] | None = None,
     properties: Dict[str, Any] | None = None,
+    property_connections: Dict[str, Any] | None = None,
+    delete_nodes: list[str] | None = None,
+    disconnect_connections: list[Dict[str, Any]] | None = None,
+    disconnect_properties: list[str] | None = None,
     compile: bool = True,
+    include_full_graph: bool = False,
     wait_for_ready: bool = True,
     ready_timeout_seconds: int = 120,
     ready_poll_seconds: int = 5,
@@ -987,7 +1245,12 @@ def create_material_graph_recipe(
         nodes,
         connections,
         properties,
+        property_connections,
+        delete_nodes,
+        disconnect_connections,
+        disconnect_properties,
         compile,
+        include_full_graph,
         wait_for_ready=wait_for_ready,
         ready_timeout_seconds=ready_timeout_seconds,
         ready_poll_seconds=ready_poll_seconds,
@@ -998,7 +1261,9 @@ def connect_material_nodes(
     material_name: str,
     connections: list[Dict[str, Any]],
     nodes: list[Dict[str, Any]] | None = None,
+    property_connections: Dict[str, Any] | None = None,
     compile: bool = True,
+    include_full_graph: bool = False,
     wait_for_ready: bool = True,
     ready_timeout_seconds: int = 120,
     ready_poll_seconds: int = 5,
@@ -1010,7 +1275,69 @@ def connect_material_nodes(
         material_name,
         connections,
         nodes,
+        property_connections,
         compile,
+        include_full_graph,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def set_material_graph_property_connections(
+    material_name: str,
+    property_connections: Dict[str, Any],
+    disconnect_properties: list[str] | None = None,
+    compile: bool = True,
+    include_full_graph: bool = False,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded material property-connection patch workflow."""
+    return _guard_live_editor_call(
+        "material_graph.set_material_graph_property_connections",
+        material_graph_set_material_graph_property_connections,
+        material_name,
+        property_connections,
+        disconnect_properties,
+        compile,
+        include_full_graph,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
+def patch_material_graph(
+    material_name: str,
+    add_nodes: list[Dict[str, Any]] | None = None,
+    add_connections: list[Dict[str, Any]] | None = None,
+    delete_nodes: list[str] | None = None,
+    disconnect_connections: list[Dict[str, Any]] | None = None,
+    property_connections: Dict[str, Any] | None = None,
+    disconnect_properties: list[str] | None = None,
+    properties: Dict[str, Any] | None = None,
+    compile: bool = True,
+    include_full_graph: bool = False,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded material graph patch workflow."""
+    return _guard_live_editor_call(
+        "material_graph.patch_material_graph",
+        material_graph_patch_material_graph,
+        material_name,
+        add_nodes,
+        add_connections,
+        delete_nodes,
+        disconnect_connections,
+        property_connections,
+        disconnect_properties,
+        properties,
+        compile,
+        include_full_graph,
         wait_for_ready=wait_for_ready,
         ready_timeout_seconds=ready_timeout_seconds,
         ready_poll_seconds=ready_poll_seconds,
@@ -1114,6 +1441,16 @@ DEFAULT_TOOLS = [
     delete_scene_actors_batch,
     query_scene_actors,
     query_scene_lights,
+    get_blueprint_harness_info,
+    read_blueprint_content,
+    analyze_blueprint_graph,
+    find_blueprint_nodes,
+    get_blueprint_variable_details,
+    get_blueprint_function_details,
+    add_blueprint_node,
+    connect_blueprint_nodes,
+    set_blueprint_node_property,
+    add_point_light_component_node,
     ensure_folder,
     ensure_asset_with_properties,
     duplicate_asset_with_overrides,
@@ -1150,6 +1487,8 @@ DEFAULT_TOOLS = [
     analyze_material_graph,
     create_material_graph_recipe,
     connect_material_nodes,
+    set_material_graph_property_connections,
+    patch_material_graph,
     get_material_graph_harness_info,
     get_harness_health,
     get_runtime_policy,

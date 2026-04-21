@@ -8,6 +8,7 @@
 #include "EdGraphSchema_K2.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "UObject/Class.h"
 
 UK2Node* FSpecializedNodeCreator::CreateGetDataTableRowNode(UEdGraph* Graph, const TSharedPtr<FJsonObject>& Params)
 {
@@ -56,6 +57,30 @@ UK2Node* FSpecializedNodeCreator::CreateAddComponentByClassNode(UEdGraph* Graph,
 
 	Graph->AddNode(AddComponentNode, true, false);
 	FNodeCreatorUtils::InitializeK2Node(AddComponentNode, Graph);
+
+	FString ComponentClassPath;
+	if (!Params->TryGetStringField(TEXT("component_class"), ComponentClassPath))
+	{
+		if (!Params->TryGetStringField(TEXT("component_class_path"), ComponentClassPath))
+		{
+			Params->TryGetStringField(TEXT("class_path"), ComponentClassPath);
+		}
+	}
+
+	if (!ComponentClassPath.IsEmpty())
+	{
+		if (UEdGraphPin* ClassPin = AddComponentNode->FindPin(TEXT("Class")))
+		{
+			const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+			if (Schema)
+			{
+				if (UClass* ComponentClass = LoadObject<UClass>(nullptr, *ComponentClassPath))
+				{
+					Schema->TrySetDefaultObject(*ClassPin, ComponentClass);
+				}
+			}
+		}
+	}
 
 	return AddComponentNode;
 }

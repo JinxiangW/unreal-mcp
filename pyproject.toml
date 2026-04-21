@@ -19,6 +19,7 @@ include = [
     "unreal_orchestrator*",
     "unreal_scene*",
     "unreal_asset*",
+    "unreal_blueprint*",
     "unreal_material*",
     "unreal_material_graph*",
     "unreal_diagnostics*",

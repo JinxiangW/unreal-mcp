@@ -97,7 +97,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         "domain": "blueprint_info",
         "backend": "internal_tcp_backend",
         "target_backend": "ue_python",
-        "status": "planned_split",
+        "status": "active_fallback",
         "summary": "Blueprint inspection, snapshots, and structural analysis.",
         "keywords": [
             "blueprint info",
@@ -105,13 +105,13 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
             "widget blueprint",
             "bp info",
         ],
-        "packages": [],
+        "packages": ["unreal_blueprint"],
     },
     "blueprint_graph": {
         "domain": "blueprint_graph",
         "backend": "internal_tcp_backend",
         "target_backend": "cpp_primary",
-        "status": "planned_split",
+        "status": "active_fallback",
         "summary": "Blueprint graph editing, node wiring, variables, and functions.",
         "keywords": [
             "blueprint graph",
@@ -119,7 +119,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
             "connect nodes",
             "create variable",
         ],
-        "packages": [],
+        "packages": ["unreal_blueprint"],
     },
     "diagnostics": {
         "domain": "diagnostics",

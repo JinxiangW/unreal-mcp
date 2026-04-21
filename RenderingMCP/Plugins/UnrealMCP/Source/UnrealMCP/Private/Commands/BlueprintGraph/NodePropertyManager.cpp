@@ -24,6 +24,8 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "EditorAssetLibrary.h"
+#include "UObject/Class.h"
+#include "Engine/BlueprintGeneratedClass.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -139,6 +141,12 @@ TSharedPtr<FJsonObject> FNodePropertyManager::SetNodeProperty(const TSharedPtr<F
 	if (!Success)
 	{
 		Success = SetGenericNodeProperty(Node, PropertyName, PropertyValue);
+	}
+
+	// Try pin default value write using property_name as pin_name
+	if (!Success)
+	{
+		Success = SetPinDefaultProperty(Node, PropertyName, PropertyValue);
 	}
 
 	if (!Success)
@@ -346,6 +354,41 @@ TSharedPtr<FJsonObject> FNodePropertyManager::DispatchEditAction(
 		}
 	}
 
+	// === Generic pin default write ===
+	if (Action.Equals(TEXT("set_pin_default"), ESearchCase::IgnoreCase))
+	{
+		FString PinName;
+		if (!Params->TryGetStringField(TEXT("pin_name"), PinName))
+		{
+			return CreateErrorResponse(TEXT("Missing 'pin_name' parameter"));
+		}
+
+		TSharedPtr<FJsonValue> PinValue = Params->Values.FindRef(TEXT("property_value"));
+		if (!PinValue.IsValid())
+		{
+			PinValue = Params->Values.FindRef(TEXT("value"));
+		}
+		if (!PinValue.IsValid())
+		{
+			PinValue = Params->Values.FindRef(TEXT("default_value"));
+		}
+		if (!PinValue.IsValid())
+		{
+			return CreateErrorResponse(TEXT("Missing 'property_value', 'value', or 'default_value' parameter"));
+		}
+
+		if (!SetPinDefaultProperty(Node, PinName, PinValue))
+		{
+			return CreateErrorResponse(FString::Printf(TEXT("Failed to set default value for pin: %s"), *PinName));
+		}
+
+		TSharedPtr<FJsonObject> Response = MakeShareable(new FJsonObject);
+		Response->SetBoolField(TEXT("success"), true);
+		Response->SetStringField(TEXT("action"), TEXT("set_pin_default"));
+		Response->SetStringField(TEXT("pin_name"), PinName);
+		return Response;
+	}
+
 	// Unknown action
 	return CreateErrorResponse(FString::Printf(TEXT("Unknown action: %s"), *Action));
 }
@@ -474,6 +517,233 @@ bool FNodePropertyManager::SetGenericNodeProperty(
 	}
 
 	return false;
+}
+
+bool FNodePropertyManager::SetPinDefaultProperty(
+	UEdGraphNode* Node,
+	const FString& PinName,
+	const TSharedPtr<FJsonValue>& Value)
+{
+	if (!Node || PinName.IsEmpty() || !Value.IsValid())
+	{
+		return false;
+	}
+
+	UEdGraphPin* Pin = Node->FindPin(FName(*PinName), EEdGraphPinDirection::EGPD_MAX);
+	if (!Pin)
+	{
+		for (UEdGraphPin* CandidatePin : Node->Pins)
+		{
+			if (CandidatePin && CandidatePin->PinName.ToString().Equals(PinName, ESearchCase::IgnoreCase))
+			{
+				Pin = CandidatePin;
+				break;
+			}
+		}
+	}
+
+	if (!Pin)
+	{
+		return false;
+	}
+
+	const UEdGraphSchema_K2* Schema = Cast<UEdGraphSchema_K2>(Node->GetSchema());
+	if (!Schema)
+	{
+		Schema = GetDefault<UEdGraphSchema_K2>();
+	}
+	if (!Schema)
+	{
+		return false;
+	}
+
+	return ApplyPinDefaultValue(Pin, Value, Schema);
+}
+
+bool FNodePropertyManager::ApplyPinDefaultValue(
+	UEdGraphPin* Pin,
+	const TSharedPtr<FJsonValue>& Value,
+	const UEdGraphSchema_K2* Schema)
+{
+	if (!Pin || !Value.IsValid() || !Schema)
+	{
+		return false;
+	}
+
+	const FString PinCategory = Pin->PinType.PinCategory.ToString();
+	if (PinCategory == UEdGraphSchema_K2::PC_Object ||
+		PinCategory == UEdGraphSchema_K2::PC_Class ||
+		PinCategory == UEdGraphSchema_K2::PC_SoftObject ||
+		PinCategory == UEdGraphSchema_K2::PC_SoftClass)
+	{
+		if (UObject* DefaultObject = ResolvePinDefaultObject(Pin, Value))
+		{
+			Schema->TrySetDefaultObject(*Pin, DefaultObject);
+			return true;
+		}
+		if (Value->Type == EJson::String)
+		{
+			Schema->TrySetDefaultValue(*Pin, Value->AsString());
+			return true;
+		}
+		return false;
+	}
+
+	if (PinCategory == UEdGraphSchema_K2::PC_Text)
+	{
+		if (Value->Type == EJson::String)
+		{
+			Schema->TrySetDefaultText(*Pin, FText::FromString(Value->AsString()));
+			return true;
+		}
+	}
+
+	Schema->TrySetDefaultValue(*Pin, SerializePinDefaultValue(Pin, Value));
+	return true;
+}
+
+FString FNodePropertyManager::SerializePinDefaultValue(
+	UEdGraphPin* Pin,
+	const TSharedPtr<FJsonValue>& Value)
+{
+	if (!Pin || !Value.IsValid())
+	{
+		return FString();
+	}
+
+	switch (Value->Type)
+	{
+	case EJson::Boolean:
+		return Value->AsBool() ? TEXT("true") : TEXT("false");
+	case EJson::Number:
+		return FString::SanitizeFloat(Value->AsNumber());
+	case EJson::String:
+		return Value->AsString();
+	case EJson::Object:
+		{
+			const TSharedPtr<FJsonObject> Obj = Value->AsObject();
+			if (!Obj.IsValid())
+			{
+				return FString();
+			}
+
+			const FString PinCategory = Pin->PinType.PinCategory.ToString();
+			const UObject* SubCategoryObject = Pin->PinType.PinSubCategoryObject.Get();
+			const FString StructName = SubCategoryObject ? SubCategoryObject->GetName() : FString();
+
+			if (PinCategory == UEdGraphSchema_K2::PC_Struct && StructName == TEXT("Vector"))
+			{
+				return FString::Printf(
+					TEXT("(X=%s,Y=%s,Z=%s)"),
+					*FString::SanitizeFloat(Obj->GetNumberField(TEXT("x"))),
+					*FString::SanitizeFloat(Obj->GetNumberField(TEXT("y"))),
+					*FString::SanitizeFloat(Obj->GetNumberField(TEXT("z")))
+				);
+			}
+			if (PinCategory == UEdGraphSchema_K2::PC_Struct && StructName == TEXT("Rotator"))
+			{
+				return FString::Printf(
+					TEXT("(Pitch=%s,Yaw=%s,Roll=%s)"),
+					*FString::SanitizeFloat(Obj->GetNumberField(TEXT("pitch"))),
+					*FString::SanitizeFloat(Obj->GetNumberField(TEXT("yaw"))),
+					*FString::SanitizeFloat(Obj->GetNumberField(TEXT("roll")))
+				);
+			}
+			if (PinCategory == UEdGraphSchema_K2::PC_Struct && StructName == TEXT("LinearColor"))
+			{
+				return FString::Printf(
+					TEXT("(R=%s,G=%s,B=%s,A=%s)"),
+					*FString::SanitizeFloat(Obj->GetNumberField(TEXT("r"))),
+					*FString::SanitizeFloat(Obj->GetNumberField(TEXT("g"))),
+					*FString::SanitizeFloat(Obj->GetNumberField(TEXT("b"))),
+					*FString::SanitizeFloat(Obj->GetNumberField(TEXT("a")))
+				);
+			}
+			if (Obj->HasField(TEXT("name")))
+			{
+				return Obj->GetStringField(TEXT("name"));
+			}
+			if (Obj->HasField(TEXT("path")))
+			{
+				return Obj->GetStringField(TEXT("path"));
+			}
+			return FString();
+		}
+	case EJson::Array:
+		{
+			TArray<FString> Parts;
+			for (const TSharedPtr<FJsonValue>& ArrayValue : Value->AsArray())
+			{
+				Parts.Add(SerializePinDefaultValue(Pin, ArrayValue));
+			}
+			return FString::Printf(TEXT("(%s)"), *FString::Join(Parts, TEXT(",")));
+		}
+	default:
+		return FString();
+	}
+}
+
+UObject* FNodePropertyManager::ResolvePinDefaultObject(
+	UEdGraphPin* Pin,
+	const TSharedPtr<FJsonValue>& Value)
+{
+	if (!Pin || !Value.IsValid())
+	{
+		return nullptr;
+	}
+
+	FString RawValue;
+	if (Value->Type == EJson::String)
+	{
+		RawValue = Value->AsString();
+	}
+	else if (Value->Type == EJson::Object)
+	{
+		const TSharedPtr<FJsonObject> Obj = Value->AsObject();
+		if (Obj.IsValid())
+		{
+			if (Obj->HasField(TEXT("path")))
+			{
+				RawValue = Obj->GetStringField(TEXT("path"));
+			}
+			else if (Obj->HasField(TEXT("class_path")))
+			{
+				RawValue = Obj->GetStringField(TEXT("class_path"));
+			}
+			else if (Obj->HasField(TEXT("name")))
+			{
+				RawValue = Obj->GetStringField(TEXT("name"));
+			}
+		}
+	}
+
+	if (RawValue.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Class ||
+		Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_SoftClass)
+	{
+		if (UClass* LoadedClass = LoadObject<UClass>(nullptr, *RawValue))
+		{
+			return LoadedClass;
+		}
+		if (!RawValue.StartsWith(TEXT("/Script/")))
+		{
+			if (UClass* FoundClass = FindFirstObject<UClass>(*RawValue, EFindFirstObjectOptions::NativeFirst))
+			{
+				return FoundClass;
+			}
+			if (UClass* FoundWithUPrefix = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *RawValue), EFindFirstObjectOptions::NativeFirst))
+			{
+				return FoundWithUPrefix;
+			}
+		}
+		return nullptr;
+	}
+
+	return UEditorAssetLibrary::LoadAsset(RawValue);
 }
 
 UEdGraph* FNodePropertyManager::GetGraph(UBlueprint* Blueprint, const FString& FunctionName)

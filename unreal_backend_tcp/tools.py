@@ -168,6 +168,21 @@ def _summarize_material_graph_response(response: Dict[str, Any]) -> Dict[str, An
     return _with_result_body(response, summary)
 
 
+def _summarize_blueprint_graph_response(response: Dict[str, Any]) -> Dict[str, Any]:
+    body = _response_body(response)
+    graph_data = body.get("graph_data") or {}
+    summary = {
+        "success": body.get("success", _response_success(response)),
+        "blueprint_path": body.get("blueprint_path"),
+        "graph_name": graph_data.get("graph_name"),
+        "node_count": graph_data.get("node_count", len(graph_data.get("nodes") or [])),
+        "connection_count": graph_data.get(
+            "connection_count", len(graph_data.get("connections") or [])
+        ),
+    }
+    return _with_result_body(response, summary)
+
+
 def read_result_handle(
     result_handle: str,
     fields: Optional[List[str]] = None,
@@ -223,6 +238,10 @@ def build_material_graph(
     nodes: List[Dict[str, Any]],
     connections: Optional[List[Dict[str, Any]]] = None,
     properties: Optional[Dict[str, Any]] = None,
+    property_connections: Optional[Dict[str, Any]] = None,
+    delete_nodes: Optional[List[str]] = None,
+    disconnect_connections: Optional[List[Dict[str, Any]]] = None,
+    disconnect_properties: Optional[List[str]] = None,
     compile: bool = True,
 ) -> Dict[str, Any]:
     """Build an entire material graph in one request."""
@@ -235,6 +254,14 @@ def build_material_graph(
         params["connections"] = connections
     if properties:
         params["properties"] = properties
+    if property_connections:
+        params["property_connections"] = property_connections
+    if delete_nodes:
+        params["delete_nodes"] = delete_nodes
+    if disconnect_connections:
+        params["disconnect_connections"] = disconnect_connections
+    if disconnect_properties:
+        params["disconnect_properties"] = disconnect_properties
     return send_command("build_material_graph", params)
 
 
@@ -259,3 +286,152 @@ def get_material_graph(
         summary_only=summary_only,
         result_handle=result_handle,
     )
+
+
+@with_unreal_connection
+def read_blueprint_content(
+    blueprint_path: str,
+    include_event_graph: bool = True,
+    include_functions: bool = True,
+    include_variables: bool = True,
+    include_components: bool = True,
+    include_interfaces: bool = True,
+) -> Dict[str, Any]:
+    """Read high-level blueprint content."""
+    return send_command(
+        "read_blueprint_content",
+        {
+            "blueprint_path": blueprint_path,
+            "include_event_graph": include_event_graph,
+            "include_functions": include_functions,
+            "include_variables": include_variables,
+            "include_components": include_components,
+            "include_interfaces": include_interfaces,
+        },
+    )
+
+
+@with_unreal_connection
+def analyze_blueprint_graph(
+    blueprint_path: str,
+    graph_name: str = "EventGraph",
+    include_node_details: bool = True,
+    include_pin_connections: bool = True,
+    trace_execution_flow: bool = True,
+    summary_only: bool = True,
+    result_handle: bool = False,
+) -> Dict[str, Any]:
+    """Inspect one blueprint graph."""
+    result = send_command(
+        "analyze_blueprint_graph",
+        {
+            "blueprint_path": blueprint_path,
+            "graph_name": graph_name,
+            "include_node_details": include_node_details,
+            "include_pin_connections": include_pin_connections,
+            "trace_execution_flow": trace_execution_flow,
+        },
+    )
+    return _finalize_large_result(
+        raw_response=result,
+        summary_payload=_summarize_blueprint_graph_response(result),
+        full_payload=result,
+        save_meta={},
+        operation="analyze_blueprint_graph",
+        summary_only=summary_only,
+        result_handle=result_handle,
+    )
+
+
+@with_unreal_connection
+def get_blueprint_variable_details(
+    blueprint_path: str,
+    variable_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Read blueprint variable metadata."""
+    params: Dict[str, Any] = {"blueprint_path": blueprint_path}
+    if variable_name:
+        params["variable_name"] = variable_name
+    return send_command("get_blueprint_variable_details", params)
+
+
+@with_unreal_connection
+def get_blueprint_function_details(
+    blueprint_path: str,
+    function_name: Optional[str] = None,
+    include_graph: bool = True,
+) -> Dict[str, Any]:
+    """Read blueprint function metadata."""
+    params: Dict[str, Any] = {
+        "blueprint_path": blueprint_path,
+        "include_graph": include_graph,
+    }
+    if function_name:
+        params["function_name"] = function_name
+    return send_command("get_blueprint_function_details", params)
+
+
+@with_unreal_connection
+def add_blueprint_node(
+    blueprint_name: str,
+    node_type: str,
+    node_params: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Create one blueprint graph node."""
+    params: Dict[str, Any] = {
+        "blueprint_name": blueprint_name,
+        "node_type": node_type,
+    }
+    if node_params:
+        params["node_params"] = node_params
+    return send_command("add_blueprint_node", params)
+
+
+@with_unreal_connection
+def connect_nodes(
+    blueprint_name: str,
+    source_node_id: str,
+    source_pin_name: str,
+    target_node_id: str,
+    target_pin_name: str,
+    function_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Connect two blueprint graph nodes."""
+    params: Dict[str, Any] = {
+        "blueprint_name": blueprint_name,
+        "source_node_id": source_node_id,
+        "source_pin_name": source_pin_name,
+        "target_node_id": target_node_id,
+        "target_pin_name": target_pin_name,
+    }
+    if function_name:
+        params["function_name"] = function_name
+    return send_command("connect_nodes", params)
+
+
+@with_unreal_connection
+def set_node_property(
+    blueprint_name: str,
+    node_id: str,
+    *,
+    function_name: Optional[str] = None,
+    property_name: Optional[str] = None,
+    property_value: Any = None,
+    action: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Modify one blueprint graph node."""
+    params: Dict[str, Any] = {
+        "blueprint_name": blueprint_name,
+        "node_id": node_id,
+    }
+    if function_name:
+        params["function_name"] = function_name
+    if property_name is not None:
+        params["property_name"] = property_name
+        params["property_value"] = property_value
+    if action:
+        params["action"] = action
+    if extra:
+        params.update(extra)
+    return send_command("set_node_property", params)

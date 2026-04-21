@@ -5,6 +5,7 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
+#include "EdGraph/EdGraphSchema.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "EditorAssetLibrary.h"
 
@@ -138,15 +139,45 @@ TSharedPtr<FJsonObject> FBPConnector::ConnectNodes(const TSharedPtr<FJsonObject>
     }
 
     // Validate compatibility
-    if (!ArePinsCompatible(SourcePin, TargetPin))
+    FString CompatibilityMessage;
+    if (!ArePinsCompatible(Graph, SourcePin, TargetPin, CompatibilityMessage))
     {
         Result->SetBoolField("success", false);
-        Result->SetStringField("error", "Pins not compatible");
+        Result->SetStringField(
+            "error",
+            CompatibilityMessage.IsEmpty() ? TEXT("Pins not compatible") : CompatibilityMessage
+        );
         return Result;
     }
 
-    // Create connection
-    SourcePin->MakeLinkTo(TargetPin);
+    // Create connection via K2 schema so wildcard / inheritance / auto-conversion follow editor rules
+    const UEdGraphSchema* GraphSchema = Graph->GetSchema();
+    bool bConnected = false;
+    if (const UEdGraphSchema_K2* K2Schema = Cast<UEdGraphSchema_K2>(GraphSchema))
+    {
+        bConnected = K2Schema->TryCreateConnection(SourcePin, TargetPin);
+    }
+    else if (GraphSchema)
+    {
+        bConnected = GraphSchema->TryCreateConnection(SourcePin, TargetPin);
+    }
+    else
+    {
+        SourcePin->MakeLinkTo(TargetPin);
+        bConnected = SourcePin->LinkedTo.Contains(TargetPin);
+    }
+
+    if (!bConnected)
+    {
+        Result->SetBoolField("success", false);
+        Result->SetStringField(
+            "error",
+            CompatibilityMessage.IsEmpty()
+                ? TEXT("Schema rejected connection")
+                : FString::Printf(TEXT("Schema rejected connection: %s"), *CompatibilityMessage)
+        );
+        return Result;
+    }
 
     // Recompile
     Blueprint->MarkPackageDirty();
@@ -211,12 +242,26 @@ UEdGraphPin* FBPConnector::FindPinByName(UK2Node* Node, const FString& PinName, 
     return nullptr;
 }
 
-bool FBPConnector::ArePinsCompatible(UEdGraphPin* SourcePin, UEdGraphPin* TargetPin)
+bool FBPConnector::ArePinsCompatible(UEdGraph* Graph, UEdGraphPin* SourcePin, UEdGraphPin* TargetPin, FString& OutMessage)
 {
+    OutMessage.Empty();
     if (SourcePin->Direction != EGPD_Output || TargetPin->Direction != EGPD_Input)
     {
+        OutMessage = TEXT("Source pin must be output and target pin must be input");
         return false;
     }
 
-    return SourcePin->PinType.PinCategory == TargetPin->PinType.PinCategory;
+    const UEdGraphSchema* GraphSchema = Graph ? Graph->GetSchema() : nullptr;
+    const FPinConnectionResponse Response = GraphSchema
+        ? GraphSchema->CanCreateConnection(SourcePin, TargetPin)
+        : FPinConnectionResponse(CONNECT_RESPONSE_DISALLOW, TEXT("Graph schema unavailable"));
+
+    if (Response.Response == CONNECT_RESPONSE_DISALLOW)
+    {
+        OutMessage = Response.Message.ToString();
+        return false;
+    }
+
+    OutMessage = Response.Message.ToString();
+    return true;
 }

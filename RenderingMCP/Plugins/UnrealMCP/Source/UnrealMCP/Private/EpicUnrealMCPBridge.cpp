@@ -338,6 +338,14 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
                 {
                     ErrorMessage = ResultJson->GetStringField(TEXT("error"));
                 }
+                if (!bSuccess && ErrorMessage.IsEmpty() && ResultJson->HasField(TEXT("message")))
+                {
+                    ErrorMessage = ResultJson->GetStringField(TEXT("message"));
+                }
+                if (!bSuccess && ErrorMessage.IsEmpty() && ResultJson->HasField(TEXT("command_result")))
+                {
+                    ErrorMessage = ResultJson->GetStringField(TEXT("command_result"));
+                }
             }
             
             if (bSuccess)
@@ -350,6 +358,10 @@ FString UEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
             {
                 // Set error status and include the error message
                 ResponseJson->SetStringField(TEXT("status"), TEXT("error"));
+                if (ErrorMessage.IsEmpty())
+                {
+                    ErrorMessage = TEXT("Command reported failure without error details");
+                }
                 ResponseJson->SetStringField(TEXT("error"), ErrorMessage);
             }
         }

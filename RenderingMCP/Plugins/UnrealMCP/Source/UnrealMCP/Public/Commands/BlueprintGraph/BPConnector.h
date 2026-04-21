@@ -37,5 +37,5 @@ private:
     /**
      * Checks compatibility between two pins
      */
-    static bool ArePinsCompatible(UEdGraphPin* SourcePin, UEdGraphPin* TargetPin);
+    static bool ArePinsCompatible(UEdGraph* Graph, UEdGraphPin* SourcePin, UEdGraphPin* TargetPin, FString& OutMessage);
 };

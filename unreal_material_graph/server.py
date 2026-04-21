@@ -12,6 +12,8 @@ from .tools import (
     connect_material_nodes,
     create_material_graph_recipe,
     get_material_graph_harness_info,
+    patch_material_graph,
+    set_material_graph_property_connections,
 )
 
 
@@ -27,6 +29,8 @@ for tool in [
     analyze_material_graph,
     create_material_graph_recipe,
     connect_material_nodes,
+    set_material_graph_property_connections,
+    patch_material_graph,
 ]:
     mcp.tool()(tool)
 

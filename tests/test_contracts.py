@@ -7,6 +7,7 @@ import tempfile
 import tomllib
 
 from unreal_asset import tools as asset_tools
+from unreal_blueprint import tools as blueprint_tools
 from unreal_diagnostics import tools as diagnostics_tools
 from unreal_harness_runtime import config as runtime_config
 from unreal_material import tools as material_tools
@@ -211,6 +212,93 @@ class AssetToolContractTests(unittest.TestCase):
         self.assertEqual(mock_run_editor_python.call_count, 2)
         self.assertEqual(result["summary"]["chunks"], 2)
         self.assertEqual(result["summary"]["succeeded"], 30)
+
+
+class BlueprintToolContractTests(unittest.TestCase):
+    @patch("unreal_blueprint.tools.raw_read_blueprint_content")
+    def test_read_blueprint_content_normalizes_simple_name_to_default_path(
+        self, mock_read_blueprint_content
+    ) -> None:
+        mock_read_blueprint_content.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "blueprint_path": "/Game/Blueprints/BP_Test.BP_Test",
+                "blueprint_name": "BP_Test",
+            },
+        }
+
+        result = blueprint_tools.read_blueprint_content(blueprint_name="BP_Test")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            mock_read_blueprint_content.call_args.kwargs["blueprint_path"],
+            "/Game/Blueprints/BP_Test.BP_Test",
+        )
+
+    @patch("unreal_blueprint.tools.analyze_blueprint_graph")
+    def test_find_blueprint_nodes_filters_by_title_and_pin(
+        self, mock_analyze_blueprint_graph
+    ) -> None:
+        mock_analyze_blueprint_graph.return_value = {
+            "success": True,
+            "blueprint_path": "/Game/Blueprints/BP_Test.BP_Test",
+            "graph_name": "EventGraph",
+            "graph_data": {
+                "nodes": [
+                    {
+                        "name": "K2Node_CallFunction_20",
+                        "class": "K2Node_CallFunction",
+                        "title": "Add Component by Class",
+                        "pins": [
+                            {"name": "Class", "direction": "Input"},
+                            {"name": "ReturnValue", "direction": "Output"},
+                        ],
+                    },
+                    {
+                        "name": "K2Node_CallFunction_21",
+                        "class": "K2Node_CallFunction",
+                        "title": "Print String",
+                        "pins": [{"name": "InString", "direction": "Input"}],
+                    },
+                ]
+            },
+        }
+
+        result = blueprint_tools.find_blueprint_nodes(
+            blueprint_path="/Game/Blueprints/BP_Test.BP_Test",
+            title_filter="Add Component",
+            pin_name_filter="Class",
+            pin_direction="input",
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["matched_count"], 1)
+        self.assertEqual(result["nodes"][0]["name"], "K2Node_CallFunction_20")
+        self.assertEqual(result["nodes"][0]["matched_pins"][0]["name"], "Class")
+
+    @patch("unreal_blueprint.tools.raw_add_blueprint_node")
+    def test_add_point_light_component_node_uses_add_component_by_class(
+        self, mock_add_blueprint_node
+    ) -> None:
+        mock_add_blueprint_node.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "node_id": "K2Node_AddComponentByClass_1",
+                "node_type": "AddComponentByClass",
+            },
+        }
+
+        result = blueprint_tools.add_point_light_component_node(
+            blueprint_path="/Game/Blueprints/BP_Test.BP_Test"
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            mock_add_blueprint_node.call_args.kwargs["node_params"]["component_class"],
+            "/Script/Engine.PointLightComponent",
+        )
 
     def test_upsert_texture_lod_group_lines_appends_missing_group(self) -> None:
         lines = [
@@ -858,6 +946,9 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertIn("create_material_asset", tool_names)
         self.assertIn("query_textures", tool_names)
         self.assertIn("get_asset_properties", tool_names)
+        self.assertIn("get_blueprint_harness_info", tool_names)
+        self.assertIn("read_blueprint_content", tool_names)
+        self.assertIn("connect_blueprint_nodes", tool_names)
 
 
 if __name__ == "__main__":

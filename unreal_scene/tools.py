@@ -313,6 +313,7 @@ def get_scene_harness_info() -> Dict[str, Any]:
             "high_level_light_recipes",
             "actor_placement",
             "actor_targeting",
+            "component_material_overrides",
             "post_process_overrides",
             "level_and_viewport_workflows",
         ],
@@ -325,6 +326,7 @@ def get_scene_harness_info() -> Dict[str, Any]:
             "query_scene_lights",
             "aim_actor_at",
             "set_post_process_overrides",
+            "set_actor_component_material",
             "spawn_actor_with_defaults",
         ],
     }
@@ -1058,6 +1060,208 @@ else:
     )
 
 
+def set_actor_component_material(
+    actor_name_or_label: str,
+    material_asset_path: str,
+    material_slot: int = 0,
+    component_name: Optional[str] = None,
+    save_level: bool = False,
+) -> Dict[str, Any]:
+    """Set a material override on an existing StaticMeshComponent with readback."""
+    operation_id = _new_operation_id("set_actor_component_material")
+    actor_name = (actor_name_or_label or "").strip()
+    material_path = (material_asset_path or "").strip()
+    try:
+        slot_index = int(material_slot)
+    except (TypeError, ValueError):
+        return _scene_input_error(
+            operation_id,
+            "material_slot must be an integer",
+            targets=[actor_name] if actor_name else [],
+        )
+    if not actor_name:
+        return _scene_input_error(operation_id, "actor_name_or_label is required")
+    if not material_path:
+        return _scene_input_error(
+            operation_id,
+            "material_asset_path is required",
+            targets=[actor_name],
+        )
+    if slot_index < 0:
+        return _scene_input_error(
+            operation_id,
+            "material_slot must be >= 0",
+            targets=[actor_name],
+        )
+
+    body = f"""
+operation_id = {_json_literal(operation_id)}
+actor_name = {_json_literal(actor_name)}
+component_name = {_json_literal(component_name)}
+material_path = {_json_literal(material_path)}
+material_slot = {slot_index}
+save_level = {_json_literal(bool(save_level))}
+
+def _mcp_object_path_variants(path):
+    if not path:
+        return set()
+    value = str(path)
+    variants = {{value}}
+    leaf = value.rsplit("/", 1)[-1]
+    if "." not in leaf:
+        variants.add(value + "." + leaf)
+    return variants
+
+def _mcp_object_path_matches(expected, actual):
+    expected_variants = _mcp_object_path_variants(expected)
+    actual_variants = _mcp_object_path_variants(actual)
+    return bool(expected_variants.intersection(actual_variants))
+
+actor = _mcp_find_actor(actor_name)
+if actor is None:
+    _mcp_emit({{
+        "success": False,
+        "operation_id": operation_id,
+        "domain": "scene",
+        "targets": [actor_name],
+        "applied_changes": [],
+        "failed_changes": [{{"target": actor_name, "field": "actor_name_or_label", "error": "Actor not found"}}],
+        "post_state": {{}},
+        "verification": {{"verified": False, "checks": []}},
+        "error": "Actor not found",
+    }})
+    return
+
+material = unreal.EditorAssetLibrary.load_asset(material_path)
+if material is None:
+    _mcp_emit({{
+        "success": False,
+        "operation_id": operation_id,
+        "domain": "scene",
+        "targets": [actor_name],
+        "applied_changes": [],
+        "failed_changes": [{{"target": actor_name, "field": "material_asset_path", "value": material_path, "error": "Material asset not found"}}],
+        "post_state": {{}},
+        "verification": {{"verified": False, "checks": []}},
+        "error": "Material asset not found",
+    }})
+    return
+
+static_mesh_type = getattr(unreal, "StaticMeshComponent", None)
+components = []
+if static_mesh_type is not None:
+    try:
+        components = list(actor.get_components_by_class(static_mesh_type))
+    except Exception:
+        components = []
+
+selected_component = None
+if component_name:
+    for component in components:
+        if component.get_name() == component_name:
+            selected_component = component
+            break
+else:
+    root_component = _mcp_get_root_component(actor)
+    if static_mesh_type is not None and isinstance(root_component, static_mesh_type):
+        selected_component = root_component
+    elif components:
+        selected_component = components[0]
+
+if selected_component is None:
+    field_name = "component_name" if component_name else "component"
+    error_message = "StaticMeshComponent not found"
+    _mcp_emit({{
+        "success": False,
+        "operation_id": operation_id,
+        "domain": "scene",
+        "targets": [actor_name],
+        "applied_changes": [],
+        "failed_changes": [{{"target": actor_name, "field": field_name, "value": component_name, "error": error_message}}],
+        "post_state": {{}},
+        "verification": {{"verified": False, "checks": []}},
+        "error": error_message,
+    }})
+    return
+
+target = actor_name + "." + selected_component.get_name()
+pre_material = selected_component.get_material(material_slot)
+pre_material_path = _mcp_to_simple(pre_material)
+
+try:
+    actor.modify()
+except Exception:
+    pass
+try:
+    selected_component.modify()
+except Exception:
+    pass
+selected_component.set_material(material_slot, material)
+try:
+    selected_component.post_edit_change()
+except Exception:
+    pass
+
+post_material = selected_component.get_material(material_slot)
+post_material_path = _mcp_to_simple(post_material)
+material_ok = _mcp_object_path_matches(material_path, post_material_path)
+checks = [{{
+    "target": target,
+    "field": f"material_slot_{{material_slot}}",
+    "expected": material_path,
+    "actual": post_material_path,
+    "ok": material_ok,
+}}]
+
+save_result = {{"save_requested": save_level, "saved": None}}
+if save_level:
+    try:
+        save_result["saved"] = bool(unreal.EditorLevelLibrary.save_current_level())
+    except Exception as exc:
+        save_result["saved"] = False
+        save_result["error"] = str(exc)
+
+verified = material_ok and (not save_level or bool(save_result.get("saved")))
+failed_changes = []
+if not material_ok:
+    failed_changes.append({{"target": target, "field": "material_asset_path", "value": material_path, "error": "Material readback mismatch"}})
+if save_level and not save_result.get("saved"):
+    failed_changes.append({{"target": target, "field": "save_level", "value": save_level, "error": save_result.get("error", "Level save failed")}})
+
+_mcp_emit({{
+    "success": verified,
+    "operation_id": operation_id,
+    "domain": "scene",
+    "targets": [actor_name],
+    "applied_changes": [{{
+        "target": target,
+        "field": "material_override",
+        "value": material_path,
+        "material_slot": material_slot,
+    }}],
+    "failed_changes": failed_changes,
+    "post_state": {{
+        actor_name: {{
+            "component": selected_component.get_name(),
+            "material_slot": material_slot,
+            "previous_material": pre_material_path,
+            "material": post_material_path,
+            "save_result": save_result,
+        }}
+    }},
+    "verification": {{"verified": verified, "checks": checks}},
+    "summary": {{
+        "actor": actor_name,
+        "component": selected_component.get_name(),
+        "material_slot": material_slot,
+        "material": post_material_path,
+        "save_result": save_result,
+    }},
+}})
+"""
+    return _run_editor_python(_wrap_scene_python(body))
+
+
 def apply_scene_actor_batch(actor_specs: list[Dict[str, Any]]) -> Dict[str, Any]:
     """Apply a reusable batch of actor spawn/update recipes."""
     operation_id = _new_operation_id("apply_scene_actor_batch")
@@ -1216,6 +1420,55 @@ def apply_scene_actor_batch(actor_specs: list[Dict[str, Any]]) -> Dict[str, Any]
                 "set_post_process_overrides",
                 overrides_result,
             ) and item_success
+
+        if spec.get("material_overrides") is not None:
+            material_overrides = spec["material_overrides"]
+            if isinstance(material_overrides, dict):
+                material_overrides = [material_overrides]
+            if not isinstance(material_overrides, list):
+                failed_changes.append(
+                    {
+                        "target": actor_target,
+                        "field": "material_overrides",
+                        "error": "material_overrides must be an object or array of objects",
+                    }
+                )
+                item_success = False
+            else:
+                for override_index, override in enumerate(material_overrides):
+                    if not isinstance(override, dict):
+                        failed_changes.append(
+                            {
+                                "target": actor_target,
+                                "field": f"material_overrides[{override_index}]",
+                                "error": "material override must be an object",
+                            }
+                        )
+                        item_success = False
+                        continue
+
+                    material_path = (
+                        override.get("material_asset_path")
+                        or override.get("material")
+                        or override.get("material_path")
+                    )
+                    material_result = set_actor_component_material(
+                        actor_name_or_label=actor_target,
+                        material_asset_path=str(material_path or ""),
+                        material_slot=override.get(
+                            "material_slot",
+                            override.get("slot_index", override.get("slot", 0)),
+                        ),
+                        component_name=override.get("component_name"),
+                        save_level=bool(override.get("save_level", False)),
+                    )
+                    item_success = _record_step(
+                        item_post_state,
+                        item_steps,
+                        item_checks,
+                        "set_actor_component_material",
+                        material_result,
+                    ) and item_success
 
         item_verified = item_success and all(check.get("ok", False) for check in item_checks)
         if actor_target not in targets:

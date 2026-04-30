@@ -239,6 +239,7 @@ def build_material_graph(
     connections: Optional[List[Dict[str, Any]]] = None,
     properties: Optional[Dict[str, Any]] = None,
     property_connections: Optional[Dict[str, Any]] = None,
+    update_nodes: Optional[List[Dict[str, Any]]] = None,
     delete_nodes: Optional[List[str]] = None,
     disconnect_connections: Optional[List[Dict[str, Any]]] = None,
     disconnect_properties: Optional[List[str]] = None,
@@ -256,6 +257,8 @@ def build_material_graph(
         params["properties"] = properties
     if property_connections:
         params["property_connections"] = property_connections
+    if update_nodes:
+        params["update_nodes"] = update_nodes
     if delete_nodes:
         params["delete_nodes"] = delete_nodes
     if disconnect_connections:

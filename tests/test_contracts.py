@@ -15,6 +15,7 @@ from unreal_material import tools as material_tools
 from unreal_material_graph import tools as material_graph_tools
 from unreal_orchestrator import server as orchestrator_server
 from unreal_renderdoc import tools as renderdoc_tools
+from unreal_scene import tools as scene_tools
 
 
 class AssetToolContractTests(unittest.TestCase):
@@ -786,6 +787,141 @@ class MaterialGraphContractTests(unittest.TestCase):
         )
         self.assertEqual(backend_kwargs["disconnect_properties"], ["EmissiveColor"])
 
+    @patch("unreal_material_graph.tools.analyze_material_graph")
+    @patch("unreal_material_graph.tools.build_material_graph")
+    def test_patch_material_graph_updates_existing_node_properties(
+        self, mock_build_material_graph, mock_analyze_material_graph
+    ) -> None:
+        mock_analyze_material_graph.side_effect = [
+            {
+                "success": True,
+                "node_count": 1,
+                "connection_count": 0,
+                "property_connections": {},
+                "asset_path": "/Game/Materials/M_Test",
+            },
+            {
+                "success": True,
+                "node_count": 1,
+                "connection_count": 0,
+                "property_connections": {},
+                "asset_path": "/Game/Materials/M_Test",
+                "nodes": [
+                    {
+                        "node_id": "Expr_TextureCoordinate_42",
+                        "name": "MaterialExpressionTextureCoordinate_1",
+                        "type": "TextureCoordinate",
+                        "coordinate_index": 2,
+                    }
+                ],
+            },
+        ]
+        mock_build_material_graph.return_value = {
+            "status": "success",
+            "result": {"success": True, "updated_node_count": 1},
+        }
+
+        result = material_graph_tools.patch_material_graph(
+            material_name="/Game/Materials/M_Test",
+            update_nodes=[
+                {
+                    "node_name": "MaterialExpressionTextureCoordinate_1",
+                    "properties": {"coordinate_index": 2},
+                }
+            ],
+        )
+
+        self.assertTrue(result["success"])
+        backend_kwargs = mock_build_material_graph.call_args.kwargs
+        self.assertEqual(
+            backend_kwargs["update_nodes"][0]["node_name"],
+            "MaterialExpressionTextureCoordinate_1",
+        )
+        self.assertEqual(
+            backend_kwargs["update_nodes"][0]["properties"]["coordinate_index"],
+            2,
+        )
+        readback_checks = [
+            check
+            for check in result["verification"]["checks"]
+            if check["field"].endswith(".coordinate_index")
+        ]
+        self.assertEqual(readback_checks[0]["actual"], 2)
+
+
+class SceneToolContractTests(unittest.TestCase):
+    @patch("unreal_scene.tools._run_editor_python")
+    def test_set_actor_component_material_runs_live_override_with_readback(
+        self, mock_run_editor_python
+    ) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "operation_id": "scene:set_actor_component_material:test",
+            "domain": "scene",
+            "targets": ["CubeActor"],
+            "applied_changes": [],
+            "failed_changes": [],
+            "post_state": {},
+            "verification": {"verified": True, "checks": []},
+        }
+
+        result = scene_tools.set_actor_component_material(
+            actor_name_or_label="CubeActor",
+            component_name="StaticMeshComponent0",
+            material_slot=0,
+            material_asset_path="/Game/Materials/MI_Test",
+        )
+
+        self.assertTrue(result["success"])
+        script = mock_run_editor_python.call_args.args[0]
+        self.assertIn("selected_component.set_material(material_slot, material)", script)
+        self.assertIn("selected_component.get_material(material_slot)", script)
+
+    @patch("unreal_scene.tools.set_actor_component_material")
+    def test_apply_scene_actor_batch_supports_material_overrides(
+        self, mock_set_actor_component_material
+    ) -> None:
+        mock_set_actor_component_material.return_value = {
+            "success": True,
+            "operation_id": "scene:set_actor_component_material:test",
+            "domain": "scene",
+            "targets": ["CubeActor"],
+            "applied_changes": [
+                {
+                    "target": "CubeActor.StaticMeshComponent0",
+                    "field": "material_override",
+                    "value": "/Game/Materials/MI_Test",
+                }
+            ],
+            "failed_changes": [],
+            "post_state": {"CubeActor": {"material": "/Game/Materials/MI_Test.MI_Test"}},
+            "verification": {"verified": True, "checks": [{"ok": True}]},
+        }
+
+        result = scene_tools.apply_scene_actor_batch(
+            [
+                {
+                    "actor_name": "CubeActor",
+                    "material_overrides": [
+                        {
+                            "component_name": "StaticMeshComponent0",
+                            "material_slot": 0,
+                            "material_asset_path": "/Game/Materials/MI_Test",
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertTrue(result["success"])
+        mock_set_actor_component_material.assert_called_once_with(
+            actor_name_or_label="CubeActor",
+            material_asset_path="/Game/Materials/MI_Test",
+            material_slot=0,
+            component_name="StaticMeshComponent0",
+            save_level=False,
+        )
+
 
 class DiagnosticsContractTests(unittest.TestCase):
     @patch.dict("os.environ", {}, clear=True)
@@ -1135,6 +1271,7 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertIn("get_blueprint_harness_info", tool_names)
         self.assertIn("read_blueprint_content", tool_names)
         self.assertIn("connect_blueprint_nodes", tool_names)
+        self.assertIn("set_actor_component_material", tool_names)
 
 
 if __name__ == "__main__":

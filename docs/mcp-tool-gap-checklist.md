@@ -4,11 +4,17 @@ Use this file for MCP capability gaps discovered while agents complete real Unre
 
 Append new items under `Open Items`. Keep each item concrete enough that another agent can implement and verify it later.
 
+When an item is implemented, mark `Status: done`, add verification notes, and move it to `Done Items`. Do not delete completed items.
+
 ## Open Items
+
+No open items.
+
+## Done Items
 
 ### GAP-0001: Patch existing material expression properties
 
-- Status: open
+- Status: done
 - Priority: P1
 - Domain: material_graph
 - Affected tool: `patch_material_graph`
@@ -19,11 +25,11 @@ Append new items under `Open Items`. Keep each item concrete enough that another
 - Proposed tool contract: Extend `patch_material_graph` with `update_nodes: [{ "node_id" | "node_name", "properties": { ... } }]`, or add `set_material_node_property(asset_path, node_selector, properties, compile, save)`.
 - Verification: Duplicate `/Game/PVFeature/TA/Materials/M_SPOM_Shell_UV1` to `M_SPOM_Shell_UV2`, update only `MaterialExpressionTextureCoordinate_1.coordinate_index` to `2`, then analyze/read back that UV0 remains coordinate 0 and metadata coordinate is 2.
 - Root cause: High-level material graph patch surface lacks existing-node editor-property mutation.
-- Notes: Discovered while fixing `/Game/PVFeature/TA/Meshes/TessellationTestCube_SPOMShell` whose SPOM metadata is in UV2.
+- Notes: Implemented via `patch_material_graph.update_nodes` and backend `build_material_graph.update_nodes`; verified with contract tests, Python compileall, and `RenderingMCPEditor` build. Live asset regression target remains `/Game/PVFeature/TA/Materials/M_SPOM_Shell_UV2` after reloading the updated plugin.
 
 ### GAP-0002: Set material override on existing scene StaticMeshComponent
 
-- Status: open
+- Status: done
 - Priority: P1
 - Domain: scene
 - Affected tool: `apply_scene_actor_batch`
@@ -34,7 +40,7 @@ Append new items under `Open Items`. Keep each item concrete enough that another
 - Proposed tool contract: Add `set_actor_component_material(actor_name_or_label, component_name?, material_slot, material_asset_path, save_level?)`, or extend `apply_scene_actor_batch` with a `material_overrides` operation for existing actors.
 - Verification: In `/Game/RCF/Maps/Test/Trace/DemoTest`, set `TessellationTestCube_SPOMShell2.StaticMeshComponent0` slot 0 to `/Game/PVFeature/TA/Materials/M_SPOM_Shell_UV2_Inst` and verify `get_material(0)` returns that instance.
 - Root cause: High-level scene harness lacks material override operation for existing components.
-- Notes: The task intentionally did not save the level after applying the live-editor material override.
+- Notes: Implemented via `set_actor_component_material` plus `apply_scene_actor_batch.material_overrides`; verified with contract tests, Python compileall, and `RenderingMCPEditor` build. Live level regression target remains `/Game/RCF/Maps/Test/Trace/DemoTest` after reloading the updated plugin.
 
 ## Item Template
 
@@ -65,7 +71,8 @@ Append new items under `Open Items`. Keep each item concrete enough that another
 ## Maintenance Rules
 
 - Use the next sequential `GAP-0000` id.
-- Do not delete completed items; mark them `done`.
+- Keep only `open` or `in_progress` items under `Open Items`.
+- Do not delete completed items; mark them `done` and move them to `Done Items`.
 - Link commits or tests in `Notes` after implementation.
 - Split unrelated capabilities into separate items.
 - Merge duplicates by adding evidence to the older item.

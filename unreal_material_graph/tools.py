@@ -142,6 +142,60 @@ def _canonical_property_connection_payload(
     return canonical
 
 
+_UPDATE_NODE_SELECTOR_KEYS = {"id", "node_id", "node_name", "name", "class", "type"}
+_UPDATE_NODE_PROPERTY_ALIASES = {
+    "coordinateIndex": "coordinate_index",
+    "uv_index": "coordinate_index",
+    "uv_channel": "coordinate_index",
+    "MaterialExpressionEditorX": "pos_x",
+    "MaterialExpressionEditorY": "pos_y",
+    "Desc": "desc",
+}
+
+
+def _normalize_update_node_schema(update: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(update)
+    raw_properties = normalized.get("properties")
+    if isinstance(raw_properties, dict):
+        properties = dict(raw_properties)
+    else:
+        properties = {
+            key: value
+            for key, value in normalized.items()
+            if key not in _UPDATE_NODE_SELECTOR_KEYS and key != "properties"
+        }
+    normalized["properties"] = properties
+    return normalized
+
+
+def _node_matches_selector(node: Dict[str, Any], selector: Dict[str, Any]) -> bool:
+    node_id = selector.get("node_id", selector.get("id"))
+    if node_id and node.get("node_id") != node_id:
+        return False
+
+    node_name = selector.get("node_name", selector.get("name"))
+    if node_name and node.get("name") != node_name:
+        return False
+
+    node_type = selector.get("class", selector.get("type"))
+    if node_type:
+        normalized_node_type = (
+            node_type[18:] if str(node_type).startswith("MaterialExpression") else node_type
+        )
+        if node.get("type") not in {node_type, normalized_node_type}:
+            return False
+
+    return bool(node_id or node_name or node_type)
+
+
+def _read_node_property(node: Dict[str, Any], property_name: str) -> Any:
+    aliases = [property_name, _UPDATE_NODE_PROPERTY_ALIASES.get(property_name)]
+    for alias in aliases:
+        if alias and alias in node:
+            return node.get(alias)
+    return None
+
+
 def _normalize_graph_payload(
     result: Dict[str, Any],
     *,
@@ -341,6 +395,7 @@ def _run_graph_patch(
     add_connections: Optional[List[Dict[str, Any]]] = None,
     properties: Optional[Dict[str, Any]] = None,
     property_connections: Optional[Dict[str, Any]] = None,
+    update_nodes: Optional[List[Dict[str, Any]]] = None,
     delete_nodes: Optional[List[str]] = None,
     disconnect_connections: Optional[List[Dict[str, Any]]] = None,
     disconnect_properties: Optional[List[str]] = None,
@@ -379,12 +434,18 @@ def _run_graph_patch(
     normalized_property_connections = _canonical_property_connection_payload(
         property_connections
     )
+    normalized_update_nodes = [
+        _normalize_update_node_schema(item)
+        for item in (update_nodes or [])
+        if isinstance(item, dict)
+    ]
     result = build_material_graph(
         material_name=material_name,
         nodes=add_nodes or [],
         connections=normalized_connections or None,
         properties=properties,
         property_connections=normalized_property_connections or None,
+        update_nodes=normalized_update_nodes or None,
         delete_nodes=delete_nodes or None,
         disconnect_connections=normalized_disconnect_connections or None,
         disconnect_properties=disconnect_properties or None,
@@ -399,7 +460,7 @@ def _run_graph_patch(
 
     post_graph = analyze_material_graph(
         material_name,
-        include_full_graph=include_full_graph,
+        include_full_graph=include_full_graph or bool(normalized_update_nodes),
         include_legacy_connection_keys=include_legacy_connection_keys,
     )
     if not post_graph.get("success"):
@@ -415,6 +476,7 @@ def _run_graph_patch(
     requested_node_count = len(add_nodes or [])
     requested_connection_count = len(normalized_connections)
     requested_property_connection_count = len(normalized_property_connections)
+    requested_update_count = len(normalized_update_nodes)
 
     checks = [
         _graph_check(material_name, "asset_path", requested_asset_path, _normalize_graph_asset_path(post_graph.get("asset_path", ""))),
@@ -426,6 +488,15 @@ def _run_graph_patch(
             created_connection_count,
         ),
     ]
+    if requested_update_count:
+        checks.append(
+            _graph_check(
+                material_name,
+                "updated_nodes",
+                requested_update_count,
+                builder_result.get("updated_node_count", requested_update_count),
+            )
+        )
 
     if pre_node_count is not None:
         expected_post_nodes = (
@@ -527,8 +598,71 @@ def _run_graph_patch(
         }
         for property_name in (disconnect_properties or [])
     )
+    for update in normalized_update_nodes:
+        selector = {
+            key: update.get(key)
+            for key in ("id", "node_id", "node_name", "name", "class", "type")
+            if update.get(key) is not None
+        }
+        applied_changes.extend(
+            {
+                "target": material_name,
+                "field": f"node_property.{property_name}",
+                "value": value,
+                "node_selector": selector,
+            }
+            for property_name, value in update.get("properties", {}).items()
+        )
+
+    post_nodes = post_graph.get("nodes") or []
+    if normalized_update_nodes and isinstance(post_nodes, list):
+        for update in normalized_update_nodes:
+            matches = [
+                node
+                for node in post_nodes
+                if isinstance(node, dict) and _node_matches_selector(node, update)
+            ]
+            selected_node = matches[0] if len(matches) == 1 else None
+            selector_label = (
+                update.get("node_id")
+                or update.get("id")
+                or update.get("node_name")
+                or update.get("name")
+                or update.get("class")
+                or update.get("type")
+                or "node"
+            )
+            checks.append(
+                _graph_check(
+                    material_name,
+                    f"update_node.{selector_label}.matched_count",
+                    1,
+                    len(matches),
+                )
+            )
+            for property_name, expected_value in update.get("properties", {}).items():
+                actual_value = (
+                    _read_node_property(selected_node, property_name)
+                    if selected_node is not None
+                    else None
+                )
+                checks.append(
+                    _graph_check(
+                        material_name,
+                        f"update_node.{selector_label}.{property_name}",
+                        expected_value,
+                        actual_value,
+                    )
+                )
 
     verified = all(item["ok"] for item in checks)
+    output_post_graph = post_graph
+    if not include_full_graph:
+        output_post_graph = {
+            key: value
+            for key, value in post_graph.items()
+            if key not in {"nodes", "connections", "graph"}
+        }
     return {
         "success": verified,
         "operation_id": operation_id,
@@ -536,9 +670,9 @@ def _run_graph_patch(
         "targets": [material_name],
         "applied_changes": applied_changes,
         "failed_changes": [],
-        "post_state": {material_name: post_graph},
+        "post_state": {material_name: output_post_graph},
         "verification": {"verified": verified, "checks": checks},
-        "summary": post_graph,
+        "summary": output_post_graph,
         "result": builder_result,
         "graph": post_graph.get("graph") if include_full_graph else None,
     }
@@ -556,6 +690,7 @@ def create_material_graph_recipe(
     compile: bool = True,
     include_full_graph: bool = False,
     include_legacy_connection_keys: bool = True,
+    update_nodes: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Build or patch a material graph from one recipe payload."""
     return _run_graph_patch(
@@ -565,6 +700,7 @@ def create_material_graph_recipe(
         add_connections=connections,
         properties=properties,
         property_connections=property_connections,
+        update_nodes=update_nodes,
         delete_nodes=delete_nodes,
         disconnect_connections=disconnect_connections,
         disconnect_properties=disconnect_properties,
@@ -630,8 +766,9 @@ def patch_material_graph(
     compile: bool = True,
     include_full_graph: bool = False,
     include_legacy_connection_keys: bool = True,
+    update_nodes: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Patch a material graph with add/delete/disconnect operations."""
+    """Patch a material graph with add/delete/disconnect/update operations."""
     return _run_graph_patch(
         operation_name="patch_material_graph",
         material_name=material_name,
@@ -640,6 +777,7 @@ def patch_material_graph(
         delete_nodes=delete_nodes,
         disconnect_connections=disconnect_connections,
         property_connections=property_connections,
+        update_nodes=update_nodes,
         disconnect_properties=disconnect_properties,
         properties=properties,
         compile=compile,

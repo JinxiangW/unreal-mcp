@@ -1908,7 +1908,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
     // Track created nodes for connection mapping
     TMap<FString, UMaterialExpression*> NodeIdToExpression;
     TArray<TSharedPtr<FJsonValue>> CreatedNodesArray;
+    TArray<TSharedPtr<FJsonValue>> UpdatedNodesArray;
     int32 NodeCount = 0;
+    int32 UpdatedNodeCount = 0;
     int32 ConnectionCount = 0;
 
     auto AddExpressionToOwner = [&](UMaterialExpression* Expression)
@@ -1952,6 +1954,80 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
         }
         NodeIdToExpression.Add(BuildGraphNodeId(ExistingExpression), ExistingExpression);
     }
+
+    auto GetExpressionTypeName = [](UMaterialExpression* Expression)
+    {
+        FString ExprType = Expression ? Expression->GetClass()->GetName() : FString();
+        if (ExprType.StartsWith(TEXT("MaterialExpression")))
+        {
+            ExprType = ExprType.Mid(18);
+        }
+        return ExprType;
+    };
+
+    auto FindExpressionForUpdate = [&](const TSharedPtr<FJsonObject>& UpdateObj, FString& OutSelector, FString& OutError) -> UMaterialExpression*
+    {
+        FString NodeId;
+        if (UpdateObj->TryGetStringField(TEXT("node_id"), NodeId) || UpdateObj->TryGetStringField(TEXT("id"), NodeId))
+        {
+            OutSelector = NodeId;
+            if (UMaterialExpression** ExistingExpression = NodeIdToExpression.Find(NodeId))
+            {
+                return *ExistingExpression;
+            }
+            OutError = FString::Printf(TEXT("Unknown material expression node id: %s"), *NodeId);
+            return nullptr;
+        }
+
+        FString NodeName;
+        const bool bHasNodeName = UpdateObj->TryGetStringField(TEXT("node_name"), NodeName) || UpdateObj->TryGetStringField(TEXT("name"), NodeName);
+
+        FString NodeType;
+        const bool bHasNodeType = UpdateObj->TryGetStringField(TEXT("class"), NodeType) || UpdateObj->TryGetStringField(TEXT("type"), NodeType);
+
+        if (!bHasNodeName && !bHasNodeType)
+        {
+            OutError = TEXT("update_nodes item requires one of node_id, id, node_name, name, class, or type");
+            return nullptr;
+        }
+
+        OutSelector = bHasNodeName ? NodeName : NodeType;
+        TArray<UMaterialExpression*> Matches;
+        for (UMaterialExpression* ExistingExpression : ExistingExpressions)
+        {
+            if (!ExistingExpression)
+            {
+                continue;
+            }
+
+            if (bHasNodeName && ExistingExpression->GetName() != NodeName)
+            {
+                continue;
+            }
+
+            if (bHasNodeType)
+            {
+                const FString ExprType = GetExpressionTypeName(ExistingExpression);
+                const FString ExprClass = ExistingExpression->GetClass()->GetName();
+                if (ExprType != NodeType && ExprClass != NodeType)
+                {
+                    continue;
+                }
+            }
+
+            Matches.Add(ExistingExpression);
+        }
+
+        if (Matches.Num() == 1)
+        {
+            return Matches[0];
+        }
+
+        OutError = Matches.Num() == 0
+            ? FString::Printf(TEXT("No material expression matched update selector: %s"), *OutSelector)
+            : FString::Printf(TEXT("Ambiguous material expression update selector '%s' matched %d nodes"), *OutSelector, Matches.Num());
+        return nullptr;
+    };
 
     auto DisconnectMaterialPropertyByName = [&](const FString& PropertyName)
     {
@@ -2819,6 +2895,81 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
         }
     }
 
+    const TArray<TSharedPtr<FJsonValue>>* UpdateNodesArray = nullptr;
+    if (Params->TryGetArrayField(TEXT("update_nodes"), UpdateNodesArray) && UpdateNodesArray)
+    {
+        for (const TSharedPtr<FJsonValue>& UpdateNodeValue : *UpdateNodesArray)
+        {
+            if (!UpdateNodeValue.IsValid())
+            {
+                continue;
+            }
+
+            TSharedPtr<FJsonObject> UpdateNodeObj = UpdateNodeValue->AsObject();
+            if (!UpdateNodeObj.IsValid())
+            {
+                continue;
+            }
+
+            const TSharedPtr<FJsonObject>* UpdatePropertiesObj = nullptr;
+            if (!UpdateNodeObj->TryGetObjectField(TEXT("properties"), UpdatePropertiesObj) || !UpdatePropertiesObj || !UpdatePropertiesObj->IsValid())
+            {
+                return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("update_nodes item is missing a 'properties' object"));
+            }
+
+            FString Selector;
+            FString SelectorError;
+            UMaterialExpression* ExpressionToUpdate = FindExpressionForUpdate(UpdateNodeObj, Selector, SelectorError);
+            if (!ExpressionToUpdate)
+            {
+                return FEpicUnrealMCPCommonUtils::CreateErrorResponse(SelectorError);
+            }
+
+            TArray<TSharedPtr<FJsonValue>> UpdatedFieldsArray;
+            for (const TPair<FString, TSharedPtr<FJsonValue>>& PropertyPair : (*UpdatePropertiesObj)->Values)
+            {
+                bool bPropertySet = false;
+                FString PropertyError;
+                if (PropertyPair.Key == TEXT("pos_x") || PropertyPair.Key == TEXT("MaterialExpressionEditorX"))
+                {
+                    ExpressionToUpdate->MaterialExpressionEditorX = static_cast<int32>(PropertyPair.Value->AsNumber());
+                    bPropertySet = true;
+                }
+                else if (PropertyPair.Key == TEXT("pos_y") || PropertyPair.Key == TEXT("MaterialExpressionEditorY"))
+                {
+                    ExpressionToUpdate->MaterialExpressionEditorY = static_cast<int32>(PropertyPair.Value->AsNumber());
+                    bPropertySet = true;
+                }
+                else
+                {
+                    bPropertySet = FEpicUnrealMCPCommonUtils::SetObjectProperty(
+                        ExpressionToUpdate,
+                        PropertyPair.Key,
+                        PropertyPair.Value,
+                        PropertyError);
+                }
+
+                if (!bPropertySet)
+                {
+                    return FEpicUnrealMCPCommonUtils::CreateErrorResponse(
+                        FString::Printf(TEXT("Failed to update node '%s' property '%s': %s"), *Selector, *PropertyPair.Key, *PropertyError));
+                }
+
+                UpdatedFieldsArray.Add(MakeShared<FJsonValueString>(PropertyPair.Key));
+            }
+
+            ExpressionToUpdate->PostEditChange();
+            TSharedPtr<FJsonObject> UpdatedNodeObj = MakeShared<FJsonObject>();
+            UpdatedNodeObj->SetStringField(TEXT("selector"), Selector);
+            UpdatedNodeObj->SetStringField(TEXT("node_id"), BuildGraphNodeId(ExpressionToUpdate));
+            UpdatedNodeObj->SetStringField(TEXT("name"), ExpressionToUpdate->GetName());
+            UpdatedNodeObj->SetStringField(TEXT("type"), GetExpressionTypeName(ExpressionToUpdate));
+            UpdatedNodeObj->SetArrayField(TEXT("updated_fields"), UpdatedFieldsArray);
+            UpdatedNodesArray.Add(MakeShared<FJsonValueObject>(UpdatedNodeObj));
+            UpdatedNodeCount++;
+        }
+    }
+
     // Process connections array
     const TArray<TSharedPtr<FJsonValue>>* ConnectionsArray = nullptr;
     if (Params->TryGetArrayField(TEXT("connections"), ConnectionsArray) && ConnectionsArray)
@@ -3067,8 +3218,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
     ResultObj->SetStringField(TEXT("material_name"), MaterialName);
     ResultObj->SetStringField(TEXT("asset_type"), Material ? TEXT("Material") : TEXT("MaterialFunction"));
     ResultObj->SetNumberField(TEXT("node_count"), NodeCount);
+    ResultObj->SetNumberField(TEXT("updated_node_count"), UpdatedNodeCount);
     ResultObj->SetNumberField(TEXT("connection_count"), ConnectionCount);
     ResultObj->SetArrayField(TEXT("nodes"), CreatedNodesArray);
+    ResultObj->SetArrayField(TEXT("updated_nodes"), UpdatedNodesArray);
     ResultObj->SetBoolField(TEXT("compiled"), bShouldCompile && Material);
     ResultObj->SetBoolField(TEXT("success"), true);
 

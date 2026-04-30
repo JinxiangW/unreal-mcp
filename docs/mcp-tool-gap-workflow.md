@@ -36,6 +36,14 @@ Do not record a gap for these cases:
 5. Complete the user task if the fallback is safe and verifiable.
 6. Append a new item to `docs/mcp-tool-gap-checklist.md`.
 
+## Item Lifecycle
+
+- New repeatable gaps go under `Open Items` with `Status: open`.
+- When implementation starts, change the item to `Status: in_progress` only if the work is actively being done.
+- After implementation and verification, change it to `Status: done`, add concise verification notes, and move it to `Done Items`.
+- Do not delete completed items; they are retained as implementation history and regression context.
+- `Open Items` should contain only gaps that still need work.
+
 ## Required Evidence
 
 Each checklist item must include:

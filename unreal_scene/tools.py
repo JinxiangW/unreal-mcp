@@ -246,11 +246,15 @@ def _normalize_mobility(mobility: Optional[str]) -> Optional[str]:
 
 def _wrap_scene_python(body: str, helpers: str = _SCENE_PYTHON_HELPERS) -> str:
     marker = _json_literal(PYTHON_RESULT_MARKER)
-    indented_body = "\n".join(
-        f"    {line}" if line else "" for line in body.splitlines()
+    indented_body = (
+        "\n".join(f"    {line}" if line else "" for line in body.splitlines())
+        if body.strip()
+        else "    pass"
     )
     return f"""
+import gc
 import json
+import sys
 import traceback
 import unreal
 
@@ -259,10 +263,43 @@ def _mcp_emit(payload):
 
 {helpers}
 
-try:
+def _mcp_collect_unreal_garbage():
+    try:
+        gc.collect()
+    except Exception:
+        pass
+    try:
+        unreal.SystemLibrary.collect_garbage()
+    except Exception:
+        pass
+
+def _mcp_run():
 {indented_body}
-except Exception as exc:
-    _mcp_emit({{"success": False, "error": str(exc), "traceback": traceback.format_exc()}})
+
+try:
+    _mcp_run()
+except Exception:
+    _mcp_exc_type, _mcp_exc_value, _mcp_exc_tb = sys.exc_info()
+    try:
+        _mcp_emit({{
+            "success": False,
+            "error": str(_mcp_exc_value),
+            "traceback": "".join(traceback.format_exception(_mcp_exc_type, _mcp_exc_value, _mcp_exc_tb)),
+        }})
+    finally:
+        try:
+            traceback.clear_frames(_mcp_exc_tb)
+        except Exception:
+            pass
+        del _mcp_exc_type
+        del _mcp_exc_value
+        del _mcp_exc_tb
+finally:
+    try:
+        del _mcp_run
+    except Exception:
+        pass
+    _mcp_collect_unreal_garbage()
 """.strip()
 
 

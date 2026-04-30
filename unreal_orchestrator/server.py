@@ -58,6 +58,7 @@ from unreal_diagnostics.tools import (
 )
 from unreal_material.tools import (
     create_material_asset as material_create_material_asset,
+    create_material_function_asset as material_create_material_function_asset,
     create_material_instance_asset as material_create_material_instance_asset,
     get_material_harness_info,
     get_material_instance_parameter_names as material_get_material_instance_parameter_names,
@@ -1060,6 +1061,27 @@ def create_material_asset(
     )
 
 
+def create_material_function_asset(
+    name: str,
+    path: str = "/Game/MaterialFunctions/",
+    description: str | None = None,
+    wait_for_ready: bool = True,
+    ready_timeout_seconds: int = 120,
+    ready_poll_seconds: int = 5,
+) -> Dict[str, Any]:
+    """Guarded MaterialFunction asset creation."""
+    return _guard_live_editor_call(
+        "material.create_material_function_asset",
+        material_create_material_function_asset,
+        name,
+        path,
+        description,
+        wait_for_ready=wait_for_ready,
+        ready_timeout_seconds=ready_timeout_seconds,
+        ready_poll_seconds=ready_poll_seconds,
+    )
+
+
 def create_material_instance_asset(
     name: str,
     parent_material: str,
@@ -1477,6 +1499,7 @@ DEFAULT_TOOLS = [
     get_asset_harness_info,
     get_material_harness_info,
     create_material_asset,
+    create_material_function_asset,
     create_material_instance_asset,
     update_material_instance_properties,
     get_material_instance_parameter_names,

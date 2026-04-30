@@ -261,6 +261,108 @@ namespace
         }
     }
 
+    EMaterialVectorCoordTransformSource ResolveTransformSourceType(const FString& RequestedType)
+    {
+        const FString Normalized = RequestedType.TrimStartAndEnd().ToLower().Replace(TEXT(" "), TEXT(""));
+        if (Normalized == TEXT("world") || Normalized == TEXT("worldspace") || Normalized == TEXT("transformsource_world") || Normalized == TEXT("transformsourcetype_world"))
+        {
+            return TRANSFORMSOURCE_World;
+        }
+        if (Normalized == TEXT("tangent") || Normalized == TEXT("tangentspace") || Normalized == TEXT("transformsource_tangent") || Normalized == TEXT("transformsourcetype_tangent"))
+        {
+            return TRANSFORMSOURCE_Tangent;
+        }
+        if (Normalized == TEXT("local") || Normalized == TEXT("object") || Normalized == TEXT("objectspace") || Normalized == TEXT("transformsource_local") || Normalized == TEXT("transformsourcetype_local"))
+        {
+            return TRANSFORMSOURCE_Local;
+        }
+        if (Normalized == TEXT("view") || Normalized == TEXT("viewspace") || Normalized == TEXT("transformsource_view") || Normalized == TEXT("transformsourcetype_view"))
+        {
+            return TRANSFORMSOURCE_View;
+        }
+        if (Normalized == TEXT("camera") || Normalized == TEXT("cameraspace") || Normalized == TEXT("transformsource_camera") || Normalized == TEXT("transformsourcetype_camera"))
+        {
+            return TRANSFORMSOURCE_Camera;
+        }
+        if (Normalized == TEXT("instance") || Normalized == TEXT("particle") || Normalized == TEXT("particles") || Normalized == TEXT("transformsource_instance") || Normalized == TEXT("transformsourcetype_instance"))
+        {
+            return TRANSFORMSOURCE_Instance;
+        }
+        return TRANSFORMSOURCE_Tangent;
+    }
+
+    EMaterialVectorCoordTransform ResolveTransformType(const FString& RequestedType)
+    {
+        const FString Normalized = RequestedType.TrimStartAndEnd().ToLower().Replace(TEXT(" "), TEXT(""));
+        if (Normalized == TEXT("world") || Normalized == TEXT("worldspace") || Normalized == TEXT("transform_world") || Normalized == TEXT("transformtype_world"))
+        {
+            return TRANSFORM_World;
+        }
+        if (Normalized == TEXT("tangent") || Normalized == TEXT("tangentspace") || Normalized == TEXT("transform_tangent") || Normalized == TEXT("transformtype_tangent"))
+        {
+            return TRANSFORM_Tangent;
+        }
+        if (Normalized == TEXT("local") || Normalized == TEXT("object") || Normalized == TEXT("objectspace") || Normalized == TEXT("transform_local") || Normalized == TEXT("transformtype_local"))
+        {
+            return TRANSFORM_Local;
+        }
+        if (Normalized == TEXT("view") || Normalized == TEXT("viewspace") || Normalized == TEXT("transform_view") || Normalized == TEXT("transformtype_view"))
+        {
+            return TRANSFORM_View;
+        }
+        if (Normalized == TEXT("camera") || Normalized == TEXT("cameraspace") || Normalized == TEXT("transform_camera") || Normalized == TEXT("transformtype_camera"))
+        {
+            return TRANSFORM_Camera;
+        }
+        if (Normalized == TEXT("instance") || Normalized == TEXT("particle") || Normalized == TEXT("particles") || Normalized == TEXT("transform_instance") || Normalized == TEXT("transformtype_instance"))
+        {
+            return TRANSFORM_Instance;
+        }
+        return TRANSFORM_World;
+    }
+
+    FString TransformSourceTypeToString(EMaterialVectorCoordTransformSource TransformSourceType)
+    {
+        switch (TransformSourceType)
+        {
+        case TRANSFORMSOURCE_World:
+            return TEXT("World");
+        case TRANSFORMSOURCE_Tangent:
+            return TEXT("Tangent");
+        case TRANSFORMSOURCE_Local:
+            return TEXT("Local");
+        case TRANSFORMSOURCE_View:
+            return TEXT("View");
+        case TRANSFORMSOURCE_Camera:
+            return TEXT("Camera");
+        case TRANSFORMSOURCE_Instance:
+            return TEXT("Instance");
+        default:
+            return TEXT("Unknown");
+        }
+    }
+
+    FString TransformTypeToString(EMaterialVectorCoordTransform TransformType)
+    {
+        switch (TransformType)
+        {
+        case TRANSFORM_World:
+            return TEXT("World");
+        case TRANSFORM_Tangent:
+            return TEXT("Tangent");
+        case TRANSFORM_Local:
+            return TEXT("Local");
+        case TRANSFORM_View:
+            return TEXT("View");
+        case TRANSFORM_Camera:
+            return TEXT("Camera");
+        case TRANSFORM_Instance:
+            return TEXT("Instance");
+        default:
+            return TEXT("Unknown");
+        }
+    }
+
     int32 ParseExplicitOutputIndex(const FString& OutputName)
     {
         if (OutputName.StartsWith(TEXT("Output_")))
@@ -1020,6 +1122,10 @@ FExpressionInput* FEpicUnrealMCPMaterialCommands::GetExpressionInputByName(UMate
     {
         if (LowerInputName == TEXT("coordinates")) return &TexSample->Coordinates;
     }
+    else if (UMaterialExpressionTransform* TransformExpr = Cast<UMaterialExpressionTransform>(Expression))
+    {
+        if (LowerInputName == TEXT("input") || LowerInputName == TEXT("value") || LowerInputName == TEXT("vector")) return &TransformExpr->Input;
+    }
     else if (UMaterialExpressionDDX* DDXExpr = Cast<UMaterialExpressionDDX>(Expression))
     {
         if (LowerInputName == TEXT("value") || LowerInputName == TEXT("input")) return &DDXExpr->Value;
@@ -1451,6 +1557,19 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
                 NodeObj->SetStringField(TEXT("texture_path"), TexSample->Texture->GetPathName());
             }
             NodeObj->SetStringField(TEXT("sampler_type"), SamplerTypeToString(TexSample->SamplerType));
+        }
+        else if (UMaterialExpressionTextureCoordinate* TexCoord = Cast<UMaterialExpressionTextureCoordinate>(Expr))
+        {
+            NodeObj->SetNumberField(TEXT("coordinate_index"), TexCoord->CoordinateIndex);
+        }
+        else if (UMaterialExpressionTransform* TransformExpr = Cast<UMaterialExpressionTransform>(Expr))
+        {
+            const FString SourceSpace = TransformSourceTypeToString(TransformExpr->TransformSourceType);
+            const FString TargetSpace = TransformTypeToString(TransformExpr->TransformType);
+            NodeObj->SetStringField(TEXT("source_space"), SourceSpace);
+            NodeObj->SetStringField(TEXT("target_space"), TargetSpace);
+            NodeObj->SetStringField(TEXT("transform_source"), SourceSpace);
+            NodeObj->SetStringField(TEXT("transform_type"), TargetSpace);
         }
         else if (UMaterialExpressionConstantBiasScale* BiasScaleExpr = Cast<UMaterialExpressionConstantBiasScale>(Expr))
         {
@@ -2250,7 +2369,40 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleBuildMaterialGraph
             }
             else if (ExpressionType == TEXT("TextureCoordinate"))
             {
-                NewExpression = NewObject<UMaterialExpressionTextureCoordinate>(GraphOwner);
+                UMaterialExpressionTextureCoordinate* TexCoord = NewObject<UMaterialExpressionTextureCoordinate>(GraphOwner);
+                double CoordinateIndex = 0.0;
+                if (NodeObj->TryGetNumberField(TEXT("coordinate_index"), CoordinateIndex) ||
+                    NodeObj->TryGetNumberField(TEXT("coordinateIndex"), CoordinateIndex) ||
+                    NodeObj->TryGetNumberField(TEXT("uv_index"), CoordinateIndex) ||
+                    NodeObj->TryGetNumberField(TEXT("uv_channel"), CoordinateIndex))
+                {
+                    TexCoord->CoordinateIndex = FMath::Max(0, static_cast<int32>(CoordinateIndex));
+                }
+                NewExpression = TexCoord;
+            }
+            else if (ExpressionType == TEXT("Transform") || ExpressionType == TEXT("TransformVector"))
+            {
+                UMaterialExpressionTransform* TransformExpr = NewObject<UMaterialExpressionTransform>(GraphOwner);
+                FString SourceSpace;
+                if (NodeObj->TryGetStringField(TEXT("source_space"), SourceSpace) ||
+                    NodeObj->TryGetStringField(TEXT("from_space"), SourceSpace) ||
+                    NodeObj->TryGetStringField(TEXT("transform_source"), SourceSpace) ||
+                    NodeObj->TryGetStringField(TEXT("transform_source_type"), SourceSpace) ||
+                    NodeObj->TryGetStringField(TEXT("source"), SourceSpace))
+                {
+                    TransformExpr->TransformSourceType = ResolveTransformSourceType(SourceSpace);
+                }
+
+                FString TargetSpace;
+                if (NodeObj->TryGetStringField(TEXT("target_space"), TargetSpace) ||
+                    NodeObj->TryGetStringField(TEXT("to_space"), TargetSpace) ||
+                    NodeObj->TryGetStringField(TEXT("destination_space"), TargetSpace) ||
+                    NodeObj->TryGetStringField(TEXT("transform_type"), TargetSpace) ||
+                    NodeObj->TryGetStringField(TEXT("target"), TargetSpace))
+                {
+                    TransformExpr->TransformType = ResolveTransformType(TargetSpace);
+                }
+                NewExpression = TransformExpr;
             }
             else if (ExpressionType == TEXT("Time"))
             {

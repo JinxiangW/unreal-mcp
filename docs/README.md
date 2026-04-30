@@ -7,4 +7,6 @@
 - `verification.md`: 结果结构与校验要求
 - `test-plan.md`: 功能与稳健性测试方案
 - `workflow.md`: 静默启动与自动化工作流
+- `mcp-tool-gap-workflow.md`: MCP 能力缺口判断与登记流程
+- `mcp-tool-gap-checklist.md`: MCP 能力缺口待实现清单
 - `migrations/`: Unity -> UE 迁移案例

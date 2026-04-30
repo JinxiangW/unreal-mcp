@@ -266,6 +266,19 @@ def build_material_graph(
 
 
 @with_unreal_connection
+def create_material_function(
+    name: str,
+    path: str = "/Game/MaterialFunctions/",
+    description: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a MaterialFunction asset through the Unreal C++ material command."""
+    params: Dict[str, Any] = {"name": name, "path": path}
+    if description:
+        params["description"] = description
+    return send_command("create_material_function", params)
+
+
+@with_unreal_connection
 def get_material_graph(
     asset_path: str,
     save_to: Optional[str] = None,

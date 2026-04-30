@@ -33,6 +33,7 @@ Read these only when needed:
 5. `docs/test-plan.md`
 6. `docs/verification.md`
 7. `docs/workflow.md`
+8. `docs/mcp-tool-gap-workflow.md`
 
 ## Default Entry
 
@@ -62,6 +63,44 @@ Read these only when needed:
 - Prefer high-level tools over ad hoc property writes
 - Do not mix `material` responsibilities with `material_graph` responsibilities
 - Treat `python_exec.py`, `commandlet_exec.py`, `unreal_orchestrator/server.py`, `unreal_orchestrator/catalog.py`, and `pyproject.toml` as shared core files; change them only when necessary
+
+## MCP Tool Gap Workflow
+
+Use this whenever a real user workflow needs `run_python`, raw backend commands, local Python imports, or manual editor/source inspection because the high-level MCP surface is missing, incomplete, unstable, or unverifiable.
+
+1. Finish the user task with a safe fallback when possible.
+2. Decide whether the fallback is a repeatable MCP gap using `docs/mcp-tool-gap-workflow.md`.
+3. If it is a gap, append a concrete item to `docs/mcp-tool-gap-checklist.md`.
+4. Include domain, affected tool, current behavior, fallback used, expected behavior, proposed tool contract, and verification target.
+5. Do not record one-off grep/source reading/build/test operations as MCP gaps.
+
+## Engine Source Resolution
+
+Use these rules before reading Unreal Engine source to explain a node, pin, asset type, shader path, or editor behavior.
+
+1. Resolve the active engine first:
+   - Run `python scripts/resolve_unreal_engine.py` from the repo root, or read `unreal_harness_runtime.config.get_runtime_paths()`
+   - Prefer `UE_ENGINE_ROOT` when explicitly set
+   - Then prefer the engine derived from `UE_EDITOR_EXE` or `UE_EDITOR_CMD`
+   - Then resolve `UE_PROJECT_PATH` -> `.uproject` `EngineAssociation` via registered Unreal builds
+   - Fall back only to candidates in `unreal_harness_runtime/config.py`
+2. Treat the resolved `engine_root` as the directory named `Engine`, not the install parent.
+3. Verify `engine_source` exists before citing source. If `engine_root_source_available=false`, state that engine source is not available locally.
+4. Do not use generated `.sln` paths as the primary authority; they can be stale after switching engines. Use them only as a last-resort clue.
+5. Search source in this order:
+   - project `Source/` and project `Plugins/`
+   - repo plugin `RenderingMCP/Plugins/UnrealMCP/Source/`
+   - resolved engine `Source/`
+   - resolved engine `Plugins/`
+   - resolved engine `Content/Functions/` for material functions
+6. When behavior depends on engine code, include the engine path used in the answer or notes.
+
+Useful source targets:
+
+- Material nodes: search `UMaterialExpression<Name>` under `Engine/Source/Runtime/Engine`
+- Blueprint nodes: search `UK2Node_<Name>` and `K2Node_<Name>` under `Engine/Source/Editor` and `Engine/Source/Runtime`
+- Niagara nodes: search `UNiagaraNode<Name>` under `Engine/Plugins/FX/Niagara`
+- Material functions: search `.uasset` names under `Engine/Content/Functions`
 
 ## Material Execution
 

@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 
 from .tools import (
     create_material_asset,
+    create_material_function_asset,
     create_material_instance_asset,
     get_material_harness_info,
     get_material_instance_parameter_names,
@@ -30,6 +31,7 @@ mcp = FastMCP("UnrealMaterialHarness", lifespan=server_lifespan)
 for tool in [
     get_material_harness_info,
     create_material_asset,
+    create_material_function_asset,
     create_material_instance_asset,
     update_material_instance_properties,
     update_material_instance_parameters_and_verify,

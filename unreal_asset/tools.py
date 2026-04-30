@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import re
 import os
+import textwrap
 import time
 from pathlib import Path
-import re
 from typing import Any, Dict, Optional
 
 from unreal_backend_tcp.common import send_command
-from unreal_backend_tcp.tools import get_assets as raw_get_assets
+from unreal_backend_tcp.tools import (
+    create_material_function as raw_create_material_function,
+    get_assets as raw_get_assets,
+)
 from unreal_harness_runtime.python_exec import (
     json_literal,
     python_literal,
@@ -332,6 +336,7 @@ def get_asset_harness_info() -> Dict[str, Any]:
         ],
         "supported_create_types": [
             "Material",
+            "MaterialFunction",
             "MaterialInstanceConstant",
             "World",
         ],
@@ -1711,6 +1716,72 @@ def create_asset_with_properties(
 ) -> Dict[str, Any]:
     """Create a supported asset and optionally set initial properties."""
     operation_id = _new_operation_id("create_asset_with_properties")
+    if asset_type == "MaterialFunction":
+        properties = properties or {}
+        description = properties.get("description")
+        result = raw_create_material_function(
+            name=name,
+            path=path,
+            description=description if isinstance(description, str) else None,
+        )
+        body = result.get("result") or {}
+        if result.get("status") == "error" or not body.get("success", False):
+            return _structured_asset_failure(
+                operation_id,
+                f"{path.rstrip('/')}/{name}",
+                result.get("error")
+                or body.get("error")
+                or "material function creation failed",
+            )
+
+        asset_path_name = body.get("path") or f"{path.rstrip('/')}/{name}"
+        checks = [
+            _asset_check(asset_path_name, "asset_class", asset_type, "MaterialFunction"),
+            _asset_check(asset_path_name, "asset_name", name, body.get("name")),
+        ]
+        applied_changes = [
+            {"target": asset_path_name, "field": "asset", "value": "MaterialFunction"}
+        ]
+        if description is not None:
+            applied_changes.append(
+                {"target": asset_path_name, "field": "description", "value": description}
+            )
+        unsupported_properties = [
+            key for key in properties.keys() if key != "description"
+        ]
+        failed_changes = [
+            {
+                "target": asset_path_name,
+                "field": key,
+                "error": "MaterialFunction creation currently supports only the description property",
+            }
+            for key in unsupported_properties
+        ]
+        verified = all(item["ok"] for item in checks) and not failed_changes
+        return {
+            "success": verified,
+            "operation_id": operation_id,
+            "domain": "asset",
+            "targets": [asset_path_name],
+            "applied_changes": applied_changes,
+            "failed_changes": failed_changes,
+            "post_state": {
+                asset_path_name: {
+                    "asset_name": body.get("name"),
+                    "asset_class": "MaterialFunction",
+                    "description": description,
+                }
+            },
+            "verification": {"verified": verified, "checks": checks},
+            "asset_name": body.get("name"),
+            "asset_path": asset_path_name,
+            "asset_class": "MaterialFunction",
+            "failed_properties": [
+                failure["error"] for failure in failed_changes
+            ],
+            "save_result": {"saved": True, "save_requested": True},
+        }
+
     body = f"""
 asset_type = {python_literal(asset_type)}
 asset_name = {python_literal(name)}
@@ -1735,7 +1806,7 @@ else:
     if created_asset is None:
         _mcp_emit({{"success": False, "error": f"Failed to create asset {{asset_name}}"}})
     else:
-        {_ASSET_COERCE_PYTHON_HELPERS}
+{textwrap.indent(_ASSET_COERCE_PYTHON_HELPERS.strip(), "        ")}
 
         failed = []
         post_state = {{}}

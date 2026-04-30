@@ -6,6 +6,7 @@ import time
 from typing import Any, Dict
 
 from unreal_asset.tools import create_asset_with_properties, update_asset_properties
+from unreal_backend_tcp.tools import create_material_function
 from unreal_harness_runtime.python_exec import (
     json_literal,
     python_literal,
@@ -63,10 +64,11 @@ def get_material_harness_info() -> Dict[str, Any]:
     """Describe the current material asset harness backend and scope."""
     payload = {
         "domain": "material",
-        "backend": "ue_python_via_asset_harness",
-        "target_backend": "ue_python",
+        "backend": "mixed",
+        "target_backend": "ue_python_and_cpp_material_backend",
         "supports": [
             "material_assets",
+            "material_function_assets",
             "material_instances",
             "material_instance_property_updates",
             "material_instance_parameters",
@@ -91,6 +93,59 @@ def create_material_asset(name: str, path: str = "/Game/") -> Dict[str, Any]:
     result["operation_id"] = _new_operation_id("create_material_asset")
     result["domain"] = "material"
     return result
+
+
+def create_material_function_asset(
+    name: str,
+    path: str = "/Game/MaterialFunctions/",
+    description: str | None = None,
+) -> Dict[str, Any]:
+    """Create a MaterialFunction asset through the material graph backend."""
+    operation_id = _new_operation_id("create_material_function_asset")
+    result = create_material_function(name=name, path=path, description=description)
+    body = result.get("result") or {}
+    if result.get("status") == "error" or not body.get("success", False):
+        return _structured_material_failure(
+            operation_id,
+            f"{path.rstrip('/')}/{name}",
+            result.get("error")
+            or body.get("error")
+            or "material function creation failed",
+        )
+
+    asset_path = body.get("path") or f"{path.rstrip('/')}/{name}"
+    checks = [
+        _material_check(asset_path, "asset_type", "MaterialFunction", "MaterialFunction"),
+        _material_check(asset_path, "name", name, body.get("name")),
+    ]
+    verified = all(item["ok"] for item in checks)
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "material",
+        "targets": [asset_path],
+        "applied_changes": [
+            {
+                "target": asset_path,
+                "field": "asset",
+                "value": "MaterialFunction",
+            }
+        ],
+        "failed_changes": [],
+        "post_state": {
+            asset_path: {
+                "asset_name": body.get("name"),
+                "asset_class": "MaterialFunction",
+                "description": description,
+            }
+        },
+        "verification": {"verified": verified, "checks": checks},
+        "asset_name": body.get("name"),
+        "asset_path": asset_path,
+        "asset_class": "MaterialFunction",
+        "description": description,
+        "result": body,
+    }
 
 
 def create_material_instance_asset(

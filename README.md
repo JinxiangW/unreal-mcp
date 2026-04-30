@@ -45,8 +45,15 @@ python -m unreal_material_graph.server
 - `UE_HOST=127.0.0.1`
 - `UE_PORT=55557`
 - `UE_PROJECT_PATH=<.uproject>`
+- `UE_ENGINE_ROOT=<Engine directory, optional>`
 - `UE_EDITOR_EXE=<UnrealEditor.exe>`
 - `UE_EDITOR_CMD=<UnrealEditor-Cmd.exe>`
+
+解析当前项目对应引擎源码路径：
+
+```bash
+python scripts/resolve_unreal_engine.py
+```
 
 ## 当前结构
 
@@ -64,6 +71,8 @@ python -m unreal_material_graph.server
 - `docs/verification.md`
 - `docs/test-plan.md`
 - `docs/workflow.md`
+- `docs/mcp-tool-gap-workflow.md`
+- `docs/mcp-tool-gap-checklist.md`
 ## 提交约定
 
 - 提交信息统一使用中文

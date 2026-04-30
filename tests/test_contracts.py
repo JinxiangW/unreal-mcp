@@ -7,6 +7,7 @@ import tempfile
 import tomllib
 
 from unreal_asset import tools as asset_tools
+from unreal_backend_tcp import tools as backend_tools
 from unreal_blueprint import tools as blueprint_tools
 from unreal_diagnostics import tools as diagnostics_tools
 from unreal_harness_runtime import config as runtime_config
@@ -55,6 +56,73 @@ class AssetToolContractTests(unittest.TestCase):
         self.assertEqual(props["compression_settings"]["name"], "TC_NORMALMAP")
         self.assertEqual(props["compression_settings"]["value"], 1)
         self.assertFalse(props["srgb"])
+
+    def test_asset_harness_advertises_material_function_creation(self) -> None:
+        result = asset_tools.get_asset_harness_info()
+
+        self.assertIn("MaterialFunction", result["supported_create_types"])
+
+    @patch("unreal_asset.tools.raw_create_material_function")
+    def test_create_asset_with_properties_supports_material_function(
+        self, mock_create_material_function
+    ) -> None:
+        mock_create_material_function.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "name": "MF_Test",
+                "path": "/Game/MaterialFunctions/MF_Test",
+            },
+        }
+
+        result = asset_tools.create_asset_with_properties(
+            "MaterialFunction",
+            "MF_Test",
+            path="/Game/MaterialFunctions/",
+            properties={"description": "Test function"},
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["asset_class"], "MaterialFunction")
+        self.assertEqual(result["failed_properties"], [])
+        mock_create_material_function.assert_called_once_with(
+            name="MF_Test",
+            path="/Game/MaterialFunctions/",
+            description="Test function",
+        )
+
+    @patch("unreal_asset.tools.create_asset_with_properties")
+    @patch("unreal_asset.tools.run_editor_python")
+    def test_ensure_asset_with_properties_supports_material_function(
+        self, mock_run_editor_python, mock_create_asset
+    ) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "asset_path": "/Game/MaterialFunctions/MF_Test.MF_Test",
+            "exists": False,
+        }
+        mock_create_asset.return_value = {
+            "success": True,
+            "operation_id": "asset:create_asset_with_properties:123",
+            "domain": "asset",
+            "asset_class": "MaterialFunction",
+        }
+
+        result = asset_tools.ensure_asset_with_properties(
+            "MaterialFunction",
+            "MF_Test",
+            path="/Game/MaterialFunctions/",
+            properties={"description": "Test function"},
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["action"], "created")
+        mock_create_asset.assert_called_once_with(
+            asset_type="MaterialFunction",
+            name="MF_Test",
+            path="/Game/MaterialFunctions/",
+            properties={"description": "Test function"},
+        )
 
     @patch("unreal_asset.tools.run_editor_python")
     def test_set_asset_properties_reports_save_result(self, mock_run_editor_python) -> None:
@@ -461,8 +529,77 @@ class MaterialToolContractTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertTrue(result["verification"]["verified"])
 
+    @patch("unreal_material.tools.create_material_function")
+    def test_create_material_function_asset_wraps_backend_command(
+        self, mock_create_material_function
+    ) -> None:
+        mock_create_material_function.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "name": "MF_Test",
+                "path": "/Game/MaterialFunctions/MF_Test",
+            },
+        }
+
+        result = material_tools.create_material_function_asset(
+            "MF_Test",
+            path="/Game/MaterialFunctions/",
+            description="Test function",
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["asset_class"], "MaterialFunction")
+        mock_create_material_function.assert_called_once_with(
+            name="MF_Test",
+            path="/Game/MaterialFunctions/",
+            description="Test function",
+        )
+
+    @patch("unreal_backend_tcp.tools.send_command")
+    def test_backend_create_material_function_uses_raw_command(
+        self, mock_send_command
+    ) -> None:
+        mock_send_command.return_value = {"status": "success", "result": {"success": True}}
+
+        backend_tools.create_material_function(
+            name="MF_Test",
+            path="/Game/MaterialFunctions/",
+            description="Test function",
+        )
+
+        mock_send_command.assert_called_once_with(
+            "create_material_function",
+            {
+                "name": "MF_Test",
+                "path": "/Game/MaterialFunctions/",
+                "description": "Test function",
+            },
+        )
+
 
 class MaterialGraphContractTests(unittest.TestCase):
+    def test_cpp_material_graph_supports_texcoord_index_and_transform(self) -> None:
+        source_path = (
+            Path(__file__).resolve().parents[1]
+            / "RenderingMCP"
+            / "Plugins"
+            / "UnrealMCP"
+            / "Source"
+            / "UnrealMCP"
+            / "Private"
+            / "Commands"
+            / "EpicUnrealMCPMaterialCommands.cpp"
+        )
+        source = source_path.read_text(encoding="utf-8")
+
+        self.assertIn('TryGetNumberField(TEXT("coordinate_index")', source)
+        self.assertIn("TexCoord->CoordinateIndex", source)
+        self.assertIn("UMaterialExpressionTransform", source)
+        self.assertIn("ResolveTransformSourceType", source)
+        self.assertIn("TransformExpr->TransformType", source)
+        self.assertIn("TransformSourceTypeToString", source)
+
     @patch("unreal_material_graph.tools._load_full_graph")
     def test_analyze_material_graph_can_return_full_graph_with_normalized_connections(
         self, mock_load_full_graph
@@ -662,6 +799,54 @@ class DiagnosticsContractTests(unittest.TestCase):
 
         self.assertEqual(runtime_paths["project_path"], "")
         self.assertEqual(runtime_paths["project_path_configured"], "false")
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_runtime_paths_resolves_engine_root_from_explicit_env(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            engine_root = Path(temp_dir) / "UE" / "Engine"
+            (engine_root / "Source").mkdir(parents=True)
+            (engine_root / "Binaries").mkdir(parents=True)
+
+            with patch.dict("os.environ", {"UE_ENGINE_ROOT": str(engine_root)}, clear=True):
+                runtime_paths = runtime_config.get_runtime_paths()
+
+        self.assertEqual(Path(runtime_paths["engine_root"]), engine_root)
+        self.assertEqual(Path(runtime_paths["engine_source"]), engine_root / "Source")
+        self.assertEqual(runtime_paths["engine_root_source_available"], "true")
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_engine_root_resolves_from_editor_exe(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            engine_root = Path(temp_dir) / "UE" / "Engine"
+            editor_exe = engine_root / "Binaries" / "Win64" / "UnrealEditor.exe"
+            (engine_root / "Source").mkdir(parents=True)
+            editor_exe.parent.mkdir(parents=True)
+            editor_exe.write_text("", encoding="utf-8")
+
+            with patch.dict("os.environ", {"UE_EDITOR_EXE": str(editor_exe)}, clear=True):
+                resolved = runtime_config.get_engine_root_path()
+
+        self.assertEqual(resolved, engine_root)
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_engine_root_resolves_from_project_engine_association_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            engine_parent = temp_root / "UE"
+            engine_root = engine_parent / "Engine"
+            project_path = temp_root / "Project" / "Project.uproject"
+            (engine_root / "Source").mkdir(parents=True)
+            (engine_root / "Binaries").mkdir(parents=True)
+            project_path.parent.mkdir(parents=True)
+            project_path.write_text(
+                json.dumps({"EngineAssociation": str(engine_parent)}),
+                encoding="utf-8",
+            )
+
+            with patch.dict("os.environ", {"UE_PROJECT_PATH": str(project_path)}, clear=True):
+                resolved = runtime_config.get_engine_root_path()
+
+        self.assertEqual(resolved, engine_root)
 
     @patch("unreal_diagnostics.tools.get_project_path_optional")
     @patch("unreal_diagnostics.tools.get_editor_exe_path")
@@ -944,6 +1129,7 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertIn("update_asset_properties", tool_names)
         self.assertIn("import_texture_asset", tool_names)
         self.assertIn("create_material_asset", tool_names)
+        self.assertIn("create_material_function_asset", tool_names)
         self.assertIn("query_textures", tool_names)
         self.assertIn("get_asset_properties", tool_names)
         self.assertIn("get_blueprint_harness_info", tool_names)

@@ -8,6 +8,7 @@
         "UE_HOST": "127.0.0.1",
         "UE_PORT": "55557",
         "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject",
+        "UE_ENGINE_ROOT": "D:/UnrealEngines/UnrealEngine5_6/Engine",
         "UE_EDITOR_EXE": "D:/UnrealEngines/UnrealEngine5_6/Engine/Binaries/Win64/UnrealEditor.exe",
         "UE_EDITOR_CMD": "D:/UnrealEngines/UnrealEngine5_6/Engine/Binaries/Win64/UnrealEditor-Cmd.exe"
       }

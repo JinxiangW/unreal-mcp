@@ -1257,21 +1257,50 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         includes = pyproject["tool"]["setuptools"]["packages"]["find"]["include"]
         self.assertIn("unreal_renderdoc*", includes)
 
-    def test_orchestrator_default_tools_include_asset_and_material_workflows(self) -> None:
+    def test_orchestrator_exposes_only_routing_tools(self) -> None:
         importlib.reload(orchestrator_server)
-        tool_names = {tool.__name__ for tool in orchestrator_server.DEFAULT_TOOLS}
 
-        self.assertIn("create_asset_with_properties", tool_names)
-        self.assertIn("update_asset_properties", tool_names)
-        self.assertIn("import_texture_asset", tool_names)
-        self.assertIn("create_material_asset", tool_names)
-        self.assertIn("create_material_function_asset", tool_names)
-        self.assertIn("query_textures", tool_names)
-        self.assertIn("get_asset_properties", tool_names)
-        self.assertIn("get_blueprint_harness_info", tool_names)
-        self.assertIn("read_blueprint_content", tool_names)
-        self.assertIn("connect_blueprint_nodes", tool_names)
-        self.assertIn("set_actor_component_material", tool_names)
+        self.assertTrue(callable(orchestrator_server.get_harness_domains))
+        self.assertTrue(callable(orchestrator_server.get_domain_design))
+        self.assertTrue(callable(orchestrator_server.route_harness_task))
+        self.assertFalse(hasattr(orchestrator_server, "DEFAULT_TOOLS"))
+        # Verify orchestrator does NOT import domain TOOLS
+        self.assertFalse(hasattr(orchestrator_server, "SCENE_TOOLS"))
+        self.assertFalse(hasattr(orchestrator_server, "ASSET_TOOLS"))
+
+    def test_make_guarded_tool_preserves_signature(self) -> None:
+        import inspect
+        from unreal_harness_runtime.editor_guard import make_guarded_tool
+        from unreal_scene.tools import create_spot_light_ring
+
+        guarded = make_guarded_tool("scene.create_spot_light_ring", create_spot_light_ring)
+        sig = inspect.signature(guarded)
+        params = list(sig.parameters.keys())
+
+        self.assertEqual(guarded.__name__, "create_spot_light_ring")
+        self.assertIn("center", params)
+        self.assertIn("wait_for_ready", params)
+        self.assertIn("ready_timeout_seconds", params)
+        self.assertIn("ready_poll_seconds", params)
+        self.assertTrue(params.index("wait_for_ready") > params.index("replace_existing"))
+
+    def test_domain_servers_export_tools_list(self) -> None:
+        from unreal_scene import server as scene_server
+        from unreal_asset import server as asset_server
+        from unreal_blueprint import server as blueprint_server
+        from unreal_material import server as material_server
+        from unreal_material_graph import server as material_graph_server
+        from unreal_renderdoc import server as renderdoc_server
+        from unreal_diagnostics import server as diagnostics_server
+
+        self.assertEqual(len(scene_server.TOOLS), 12)
+        self.assertEqual(len(asset_server.TOOLS), 19)
+        self.assertEqual(len(blueprint_server.TOOLS), 10)
+        self.assertEqual(len(material_server.TOOLS), 10)
+        self.assertEqual(len(material_graph_server.TOOLS), 6)
+        self.assertEqual(len(renderdoc_server.TOOLS), 12)
+        self.assertEqual(len(diagnostics_server.TOOLS), 10)
+
 
 
 if __name__ == "__main__":

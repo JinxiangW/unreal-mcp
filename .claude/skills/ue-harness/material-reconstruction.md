@@ -1,9 +1,4 @@
----
-name: material-reconstruction-planner
-description: Use when turning an exported material package such as a Unity `manifest.json` plus optional `shadergraph.json` into a `material-reconstruction-plan/0.1`. Use for package inspection, reconstruction-mode selection, plan JSON structure, approximations, unresolved branches, and readable graph layout. Do not use this skill for direct Unreal execution; pair it with `ue-harness` when applying the plan.
----
-
-# Material Reconstruction Planner
+# Material Reconstruction Planning
 
 ## Purpose
 
@@ -11,7 +6,7 @@ Use this skill to plan a reconstruction.
 
 This skill plans only. It does not replace Unreal execution tools.
 
-When execution is about to begin, also read `../ue-harness/SKILL.md`.
+When execution is about to begin, also read `SKILL.md`.
 
 ## Read First
 
@@ -109,7 +104,7 @@ Planning rules:
 - if the source subgraph depends on external source files or runtime arrays, record those dependencies as required evidence before the branch can be claimed complete
 - do not silently replace a source custom subgraph with a guessed scalar or constant
 
-The detailed execution rules for function reuse, custom-node constraints, and stop conditions live in `../ue-harness/SKILL.md`.
+The detailed execution rules for function reuse, custom-node constraints, and stop conditions live in `SKILL.md`.
 
 ### 4. Apply Layout Rules
 
@@ -145,7 +140,7 @@ Recommended placement rules:
 
 ### 5. Hand Off to UE Execution
 
-When execution begins, follow the material execution order, stop conditions, and validation rules in `../ue-harness/SKILL.md`.
+When execution begins, follow the material execution order, stop conditions, and validation rules in `SKILL.md`.
 
 This planner should not duplicate those execution instructions.
 
@@ -207,6 +202,6 @@ Do not claim reconstruction alignment until all of the following are true:
 
 - the source package contains the graph evidence required by the chosen plan
 - runtime evidence exists for every runtime-dependent branch that is claimed reconstructed
-- UE material compilation and readback validation pass according to `../ue-harness/SKILL.md`
+- UE material compilation and readback validation pass according to `SKILL.md`
 - parameter grouping is readable and aligned
 - a machine-readable verification report exists and passes

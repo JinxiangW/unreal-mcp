@@ -30,7 +30,7 @@ Do not record a gap for these cases:
 ## Detection Steps
 
 1. Classify the domain: `scene / asset / material / material_graph / blueprint / niagara / diagnostics / renderdoc`.
-2. Check `unreal_orchestrator` first, then the domain harness.
+2. Check the relevant domain server first, then `unreal_orchestrator` for routing/discovery if the domain is unclear.
 3. Check `docs/inventory.md`, `docs/commands.md`, and the domain tool module before falling back.
 4. If a fallback is used, identify whether it was for missing capability, missing fields, incorrect behavior, stability, performance, or poor error reporting.
 5. Complete the user task if the fallback is safe and verifiable.

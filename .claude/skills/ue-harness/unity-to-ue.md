@@ -1,9 +1,4 @@
----
-name: unity-to-ue
-description: Use only for Unity-to-Unreal scene or lighting migration work. Covers Unity scene and lighting transfer, coordinate and orientation conversion, intensity-unit and attenuation mapping, exposure baseline migration, and writing results into the correct UE level or sublevel. Do not use for material graph, blueprint graph, Niagara, or general Unreal-only editing tasks.
----
-
-# Unity to UE
+# Unity to UE Migration
 
 ## Purpose
 
@@ -37,7 +32,7 @@ Do not use it for:
 1. `docs/migrations/README.md`
 2. The migration case doc for the current scene, if one exists
 3. `docs/migrations/unity-lighting-playbook.md`
-4. `../ue-harness/SKILL.md`
+4. `SKILL.md`
 
 If the task is `CharacterModelScene_zhengbeishi`, also read:
 

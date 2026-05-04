@@ -1,4 +1,5 @@
 {
+  "_comment": "This single-server config exposes only the orchestrator's 3 routing/discovery tools. For domain tools (scene, asset, material, etc.), use mcp_config.multi-server.example.json or connect to individual domain servers directly.",
   "mcpServers": {
     "unreal-orchestrator": {
       "command": "python",

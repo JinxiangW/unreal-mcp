@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Dict
-
-from fastmcp import FastMCP
-
 from .tools import (
     capture_current_selection,
     capture_current_viewport_issue,
@@ -22,15 +17,8 @@ from .tools import (
     set_renderdoc_debug_workflow,
 )
 
-
-@asynccontextmanager
-async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
-    yield {}
-
-
-mcp = FastMCP("UnrealRenderDocHarness", lifespan=server_lifespan)
-
-for tool in [
+# RenderDoc tools are all Python/filesystem/external-process — no editor guard needed.
+TOOLS = [
     get_renderdoc_harness_info,
     get_renderdoc_runtime_status,
     get_renderdoc_capture_context,
@@ -43,9 +31,18 @@ for tool in [
     capture_current_selection,
     capture_current_viewport_issue,
     capture_renderdoc_diff_pair,
-]:
-    mcp.tool()(tool)
-
+]
 
 if __name__ == "__main__":
+    from contextlib import asynccontextmanager
+    from typing import Any, AsyncIterator, Dict
+    from fastmcp import FastMCP
+
+    @asynccontextmanager
+    async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
+        yield {}
+
+    mcp = FastMCP("UnrealRenderDocHarness", lifespan=server_lifespan)
+    for tool in TOOLS:
+        mcp.tool()(tool)
     mcp.run()

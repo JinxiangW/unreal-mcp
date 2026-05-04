@@ -5,8 +5,8 @@
 ## 目录
 
 - `unreal_orchestrator/`
-  - 默认对外入口
-  - 负责域路由、ready preflight、结果包装
+  - 路由与发现入口（3 个工具：`get_harness_domains` / `get_domain_design` / `route_harness_task`）
+  - 不承载域业务工具，域工具由各自 server 独立暴露
 - `unreal_backend_tcp/`
   - 唯一内部 TCP backend
   - 负责连接 Unreal 插件、raw command、result handle
@@ -25,19 +25,22 @@
 
 ## 启动
 
-默认入口：
+多服务器模式（推荐，各域独立）：
+
+```bash
+python -m unreal_scene.server       # 场景编辑
+python -m unreal_asset.server       # 资产管理
+python -m unreal_blueprint.server   # 蓝图编辑
+python -m unreal_material.server    # 材质工作流
+python -m unreal_material_graph.server  # 材质图编辑
+python -m unreal_renderdoc.server   # RenderDoc 捕获
+python -m unreal_diagnostics.server # 诊断
+```
+
+单入口模式（仅路由/发现，不含域工具）：
 
 ```bash
 python -m unreal_orchestrator.server
-```
-
-按域启动：
-
-```bash
-python -m unreal_scene.server
-python -m unreal_asset.server
-python -m unreal_material.server
-python -m unreal_material_graph.server
 ```
 
 ## 环境变量
@@ -57,22 +60,16 @@ python scripts/resolve_unreal_engine.py
 
 ## 当前结构
 
-- 默认业务入口：`unreal_orchestrator`
+- 路由/发现入口：`unreal_orchestrator`（仅 3 个路由工具）
+- 域业务入口：各 `unreal_<domain>/server.py`（独立 FastMCP server，自带 editor guard）
 - 内部 backend：`unreal_backend_tcp`
-- scene / asset / material 优先走高层 harness
-- material graph 当前仍保留内部 backend 支撑
+- scene / asset / material / blueprint / material_graph 优先走对应域 server
+- 多服务器 MCP 配置见 `config/mcp_config.multi-server.example.json`
 
 ## 文档
 
 - `docs/architecture.html`
-- `docs/inventory.md`
-- `docs/categories.md`
-- `docs/commands.md`
-- `docs/verification.md`
-- `docs/test-plan.md`
-- `docs/workflow.md`
-- `docs/mcp-tool-gap-workflow.md`
-- `docs/mcp-tool-gap-checklist.md`
+- `.claude/skills/ue-harness/` — skill 主入口及全部参考文档
 ## 提交约定
 
 - 提交信息统一使用中文

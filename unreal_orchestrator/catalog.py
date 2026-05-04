@@ -26,6 +26,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
             "directional light",
         ],
         "packages": ["unreal_scene"],
+        "server_module": "unreal_scene.server",
     },
     "asset": {
         "domain": "asset",
@@ -35,6 +36,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         "summary": "Generic asset CRUD, import, and batch asset workflows.",
         "keywords": ["asset", "import", "texture", "fbx", "folder", "content browser"],
         "packages": ["unreal_asset"],
+        "server_module": "unreal_asset.server",
     },
     "material": {
         "domain": "material",
@@ -50,6 +52,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
             "m_",
         ],
         "packages": ["unreal_material"],
+        "server_module": "unreal_material.server",
     },
     "material_graph": {
         "domain": "material_graph",
@@ -65,6 +68,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
             "roughness",
         ],
         "packages": ["unreal_material_graph"],
+        "server_module": "unreal_material_graph.server",
     },
     "renderdoc": {
         "domain": "renderdoc",
@@ -83,6 +87,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
             "rdg pass",
         ],
         "packages": ["unreal_renderdoc"],
+        "server_module": "unreal_renderdoc.server",
     },
     "niagara": {
         "domain": "niagara",
@@ -106,6 +111,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
             "bp info",
         ],
         "packages": ["unreal_blueprint"],
+        "server_module": "unreal_blueprint.server",
     },
     "blueprint_graph": {
         "domain": "blueprint_graph",
@@ -120,6 +126,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
             "create variable",
         ],
         "packages": ["unreal_blueprint"],
+        "server_module": "unreal_blueprint.server",
     },
     "diagnostics": {
         "domain": "diagnostics",
@@ -135,6 +142,7 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
             "route",
         ],
         "packages": ["unreal_diagnostics"],
+        "server_module": "unreal_diagnostics.server",
     },
 }
 

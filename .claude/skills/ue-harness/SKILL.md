@@ -1,6 +1,6 @@
 ---
 name: ue-harness
-description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP tool behavior, orchestrator or domain backends, diagnostics, or the `RenderingMCP/Plugins/UnrealMCP` plugin. Covers domain selection, default MCP entrypoints, backend boundaries, and the required execution and validation order for material and material-graph tasks.
+description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP tool behavior, orchestrator or domain backends, diagnostics, material reconstruction planning, Unity-to-UE migration, or the `RenderingMCP/Plugins/UnrealMCP` plugin. Covers domain selection, default MCP entrypoints, backend boundaries, material execution rules, and migration workflows.
 ---
 
 # UE Harness
@@ -23,27 +23,29 @@ Default scope:
 
 Read in this order:
 
-1. `docs/inventory.md`
-2. `docs/categories.md`
+1. `inventory.md`
+2. `categories.md`
 3. The domain files for the current task
 
 Read these only when needed:
 
-4. `docs/commands.md`
-5. `docs/test-plan.md`
-6. `docs/verification.md`
-7. `docs/workflow.md`
-8. `docs/mcp-tool-gap-workflow.md`
+4. `commands.md`
+5. `test-plan.md`
+6. `verification.md`
+7. `workflow.md`
+8. `mcp-tool-gap-workflow.md`
 
 ## Default Entry
 
 1. Classify the task domain first: `scene / asset / material / material_graph / diagnostics`
-2. Prefer `unreal_orchestrator` as the default MCP entry
-3. Before high-risk live-editor operations, check:
+2. Each domain server (`unreal_<domain>/server.py`) now exports a `TOOLS` list with editor-guarded tools and can run standalone
+3. For multi-server clients, prefer connecting to domain servers directly (see `config/mcp_config.multi-server.example.json`)
+4. The `unreal_orchestrator` exposes only 3 routing/discovery tools — connect to domain servers directly for domain-specific work
+5. Before high-risk live-editor operations, check:
    - `get_editor_ready_state`
    - `wait_for_editor_ready` when needed
-4. Enter a domain harness directly only when orchestrator does not already cover the task
-5. Treat `unreal_backend_tcp` as internal backend or fallback, not as the default business entrypoint
+6. Enter a domain harness directly when you need only one domain's tools and want to reduce the MCP tool list size
+7. Treat `unreal_backend_tcp` as internal backend or fallback, not as the default business entrypoint
 
 ## Backend Boundaries
 
@@ -62,15 +64,15 @@ Read these only when needed:
 
 - Prefer high-level tools over ad hoc property writes
 - Do not mix `material` responsibilities with `material_graph` responsibilities
-- Treat `python_exec.py`, `commandlet_exec.py`, `unreal_orchestrator/server.py`, `unreal_orchestrator/catalog.py`, and `pyproject.toml` as shared core files; change them only when necessary
+- Treat `python_exec.py`, `commandlet_exec.py`, `unreal_harness_runtime/editor_guard.py`, `unreal_orchestrator/server.py`, `unreal_orchestrator/catalog.py`, and `pyproject.toml` as shared core files; change them only when necessary
 
 ## MCP Tool Gap Workflow
 
 Use this whenever a real user workflow needs `run_python`, raw backend commands, local Python imports, or manual editor/source inspection because the high-level MCP surface is missing, incomplete, unstable, or unverifiable.
 
 1. Finish the user task with a safe fallback when possible.
-2. Decide whether the fallback is a repeatable MCP gap using `docs/mcp-tool-gap-workflow.md`.
-3. If it is a gap, append a concrete item to `docs/mcp-tool-gap-checklist.md`.
+2. Decide whether the fallback is a repeatable MCP gap using `mcp-tool-gap-workflow.md`.
+3. If it is a gap, append a concrete item to `mcp-tool-gap-checklist.md`.
 4. Include domain, affected tool, current behavior, fallback used, expected behavior, proposed tool contract, and verification target.
 5. Do not record one-off grep/source reading/build/test operations as MCP gaps.
 
@@ -177,3 +179,8 @@ Do not claim "aligned with source" without a machine-readable verification artif
 - State whether the editor or plugin must be restarted or rebuilt
 - Record known limitations
 - Complete at least one real regression, or state clearly why it was not completed
+
+## Additional Resources
+
+- For material reconstruction planning from exported packages: [material-reconstruction.md](material-reconstruction.md)
+- For Unity-to-UE scene and lighting migration: [unity-to-ue.md](unity-to-ue.md)

@@ -5,20 +5,17 @@
 ## 仓库定位
 
 - 这是独立 Unreal Editor MCP 仓库。
-- 默认对外入口是 `unreal_orchestrator`。
+- 域业务入口是各 `unreal_<domain>/server.py`（独立 FastMCP server）。
+- `unreal_orchestrator` 仅暴露 3 个路由/发现工具，不再聚合域业务工具。
 - `unreal_backend_tcp` 是内部 TCP backend，只负责 raw command、连接 Unreal 插件、result handle 和大结果处理。
 - `RenderingMCP/Plugins/UnrealMCP` 是 UE 侧 C++ 插件。
 - 不要把内部 raw backend 当成默认业务入口；只有高层工具缺能力或调试时才使用。
 
 ## 接手前阅读顺序
 
-1. `skills/ue-harness/SKILL.md`
-2. `docs/inventory.md`
-3. `docs/categories.md`
-4. 当前任务对应 domain 的 Python/C++ 文件
-5. 必要时读 `docs/commands.md`
-6. 必要时读 `docs/verification.md`
-7. 必要时读 `docs/mcp-tool-gap-workflow.md`
+1. `.claude/skills/ue-harness/SKILL.md`（内部列出了详细阅读顺序）
+2. 当前任务对应 domain 的 Python/C++ 文件
+3. 必要时读 `.claude/skills/ue-harness/` 下的对应参考文件
 
 ## 域边界
 
@@ -34,10 +31,10 @@
 
 ## 默认调用策略
 
-- 优先使用 `unreal_orchestrator` 暴露的高层工具。
-- orchestrator 不覆盖时，再进入 domain harness。
+- 域业务工具优先连接对应域 server（`python -m unreal_<domain>.server`）。
+- `unreal_orchestrator` 仅用于路由/发现（`get_harness_domains` / `get_domain_design` / `route_harness_task`）。
 - `unreal_backend_tcp` raw command 和 `run_python` 只能作为 fallback。
-- 如果同类 fallback 重复出现，按 `docs/mcp-tool-gap-workflow.md` 判断是否登记到 `docs/mcp-tool-gap-checklist.md`。
+- 如果同类 fallback 重复出现，按 `.claude/skills/ue-harness/mcp-tool-gap-workflow.md` 判断是否登记到 `mcp-tool-gap-checklist.md`。
 - 高风险 live-editor 操作前先确认 editor ready，必要时调用 `wait_for_editor_ready`。
 - 普通工具调用不要隐式启动或重启编辑器；自动启动只用于显式 dev/debug 流程。
 
@@ -95,8 +92,11 @@ python scripts\resolve_unreal_engine.py
 
 ## Git 规则
 
-- 提交信息使用中文。
-- 不要提交 `.vs/`、`.sln`、zip、外部 repo、IDE 生成文件、临时目录。
+- 提交信息使用中文，格式：`<类型>: <简短描述>`。
+  - 类型：`feat` 新功能 / `fix` 修复 / `refactor` 重构 / `docs` 文档 / `test` 测试 / `chore` 杂项
+  - 示例：`重构MCP工具架构，拆分为独立域服务器`
+- 一个 commit 只做一件事，避免混合无关改动。
+- 不要提交 `.vs/`、`.sln`、zip、外部 repo、IDE 生成文件、临时目录、`.egg-info/`。
 - 不要回滚用户未授权改动。
 - 工作区有无关脏文件时，只 stage 本次任务相关文件。
 - 推送前确认：

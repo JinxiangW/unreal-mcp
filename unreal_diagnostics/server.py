@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Dict
-
-from fastmcp import FastMCP
-
 from .tools import (
     dev_launch_editor_and_wait_ready,
     get_commandlet_runtime_status,
@@ -20,15 +15,8 @@ from .tools import (
     wait_for_editor_ready,
 )
 
-
-@asynccontextmanager
-async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
-    yield {}
-
-
-mcp = FastMCP("UnrealDiagnosticsHarness", lifespan=server_lifespan)
-
-for tool in [
+# Diagnostics tools are all self-check / process-status — no editor guard needed.
+TOOLS = [
     get_harness_health,
     get_runtime_policy,
     get_token_usage_summary,
@@ -39,9 +27,18 @@ for tool in [
     get_editor_ready_state,
     wait_for_editor_ready,
     dev_launch_editor_and_wait_ready,
-]:
-    mcp.tool()(tool)
-
+]
 
 if __name__ == "__main__":
+    from contextlib import asynccontextmanager
+    from typing import Any, AsyncIterator, Dict
+    from fastmcp import FastMCP
+
+    @asynccontextmanager
+    async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
+        yield {}
+
+    mcp = FastMCP("UnrealDiagnosticsHarness", lifespan=server_lifespan)
+    for tool in TOOLS:
+        mcp.tool()(tool)
     mcp.run()

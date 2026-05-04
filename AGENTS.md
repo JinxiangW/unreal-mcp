@@ -43,7 +43,7 @@
 读 UE 源码前先解析当前项目对应引擎：
 
 ```powershell
-python scripts\resolve_unreal_engine.py
+python .claude\skills\ue-harness\scripts\resolve_unreal_engine.py
 ```
 
 - 优先使用输出里的 `engine_root` 和 `engine_source`。

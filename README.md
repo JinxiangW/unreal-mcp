@@ -47,7 +47,7 @@ python -m unreal_asset.server         # 仅资产工具
 解析当前项目对应引擎源码路径：
 
 ```bash
-python scripts/resolve_unreal_engine.py
+python .claude/skills/ue-harness/scripts/resolve_unreal_engine.py
 ```
 
 ## 当前结构

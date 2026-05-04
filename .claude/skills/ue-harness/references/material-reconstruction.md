@@ -6,7 +6,7 @@
 
 将导出的材质包（如 Unity `manifest.json` 加可选的 `shadergraph.json`）转换为 `material-reconstruction-plan/0.1` 重建方案。
 
-本文件仅负责规划（planning only），不替代 Unreal 执行工具。开始执行时请同时阅读 `SKILL.md`。
+本文件仅负责规划（planning only），不替代 Unreal 执行工具。开始执行时请同时阅读 `../SKILL.md`。
 
 ## 阅读顺序
 
@@ -14,7 +14,7 @@
 2. `material-reconstruction-plan.md` — 重建方案格式
 3. 包中的 `manifest.json`（如果有）
 4. 包中的 `shadergraph.json`（如果有）
-5. `../docs/examples/` 下的对应包示例（如果有）
+5. `../../../docs/examples/` 下的对应包示例（如果有）
 
 ## 工作流
 
@@ -105,7 +105,7 @@ Planning rules:
 - if the source subgraph depends on external source files or runtime arrays, record those dependencies as required evidence before the branch can be claimed complete
 - do not silently replace a source custom subgraph with a guessed scalar or constant
 
-Detailed execution rules for function reuse, custom-node constraints, and stop conditions live in `SKILL.md`.
+Detailed execution rules for function reuse, custom-node constraints, and stop conditions live in `../SKILL.md`.
 
 ### 4. 应用布局规则（Apply Layout Rules）
 
@@ -141,7 +141,7 @@ Recommended placement rules:
 
 ### 5. 交付给 UE 执行（Hand Off to UE Execution）
 
-When execution begins, follow the material execution order, stop conditions, and validation rules in `SKILL.md`. This planner should not duplicate those execution instructions.
+When execution begins, follow the material execution order, stop conditions, and validation rules in `../SKILL.md`. This planner should not duplicate those execution instructions.
 
 ### 6. 记录近似替换和未解决项（Record Approximations and Unresolved Logic）
 
@@ -185,6 +185,6 @@ Do not claim reconstruction alignment until all of the following are true:
 
 - the source package contains the graph evidence required by the chosen plan
 - runtime evidence exists for every runtime-dependent branch that is claimed reconstructed
-- UE material compilation and readback validation pass according to `SKILL.md`
+- UE material compilation and readback validation pass according to `../SKILL.md`
 - parameter grouping is readable and aligned
 - a machine-readable verification report exists and passes

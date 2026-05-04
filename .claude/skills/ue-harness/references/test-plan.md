@@ -190,7 +190,7 @@
 
 详细设计见：
 
-- `docs/verification.md`
+- `../../docs/verification.md`
 
 #### Recovery
 

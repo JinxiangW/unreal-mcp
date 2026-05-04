@@ -92,8 +92,8 @@
 
 收敛示例见：
 
-- [material-reconstruction-plan-wing_l.json](/D:/unreal-mcp/docs/examples/material-reconstruction-plan-wing_l.json)
-- [material-reconstruction-plan-wing_l-layout-v2.json](/D:/unreal-mcp/docs/examples/material-reconstruction-plan-wing_l-layout-v2.json) — 此变体保持相同的首轮语义策略，但使用更清晰的分通道节点布局
+- [material-reconstruction-plan-wing_l.json](/D:/unreal-mcp/../../docs/examples/material-reconstruction-plan-wing_l.json)
+- [material-reconstruction-plan-wing_l-layout-v2.json](/D:/unreal-mcp/../../docs/examples/material-reconstruction-plan-wing_l-layout-v2.json) — 此变体保持相同的首轮语义策略，但使用更清晰的分通道节点布局
 
 ## `strategy.mode`
 

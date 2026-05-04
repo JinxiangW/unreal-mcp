@@ -34,7 +34,7 @@
 1. `migrations/README.md`
 2. 当前场景的迁移案例文档（如果有）
 3. `migrations/unity-lighting-playbook.md`
-4. `SKILL.md`
+4. `../SKILL.md`
 
 如果任务是 `CharacterModelScene_zhengbeishi`，还需阅读 `migrations/character-model-scene-zhengbeishi.md`。
 

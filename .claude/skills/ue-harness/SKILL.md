@@ -23,11 +23,11 @@ description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP
 
 ## 阅读顺序
 
-1. `inventory.md` — 功能清单与状态矩阵
-2. `categories.md` — 分层分域索引与故障路由
+1. `references/inventory.md` — 功能清单与状态矩阵
+2. `references/categories.md` — 分层分域索引与故障路由
 3. 当前任务对应域的文件
-4. （需要时）`commands.md` `test-plan.md` `verification.md` `workflow.md`
-5. （需要时）`mcp-tool-gap-workflow.md`
+4. （需要时）`references/commands.md` `references/test-plan.md` `references/verification.md` `references/workflow.md`
+5. （需要时）`references/mcp-tool-gap-workflow.md`
 
 ## 默认入口
 
@@ -59,8 +59,8 @@ description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP
 真实用户工作流因高层 MCP 能力缺失、不完整或不可验证而需要走 fallback 时使用。
 
 1. Finish the user task with a safe fallback when possible
-2. Use `mcp-tool-gap-workflow.md` to decide whether the fallback is a repeatable MCP gap
-3. If it is a gap, append a concrete item to `mcp-tool-gap-checklist.md`
+2. Use `references/mcp-tool-gap-workflow.md` to decide whether the fallback is a repeatable MCP gap
+3. If it is a gap, append a concrete item to `references/mcp-tool-gap-checklist.md`
 4. 条目需包含：domain, affected tool, current behavior, fallback used, expected behavior, proposed tool contract, verification target
 5. Do not record one-off grep/source reading/build/test operations as MCP gaps
 
@@ -177,5 +177,5 @@ Do not claim "aligned with source" without a machine-readable verification artif
 
 ## 附加资源（Additional Resources）
 
-- 材质重建规划（Material Reconstruction Planning）：[material-reconstruction.md](material-reconstruction.md)
-- Unity 到 UE 场景与灯光迁移：[unity-to-ue.md](unity-to-ue.md)
+- 材质重建规划（Material Reconstruction Planning）：[material-reconstruction.md](references/material-reconstruction.md)
+- Unity 到 UE 场景与灯光迁移：[unity-to-ue.md](references/unity-to-ue.md)

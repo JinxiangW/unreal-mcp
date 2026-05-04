@@ -370,7 +370,7 @@ AI 遇到这些任务时只看：
 后续如果新增命令，至少同步更新两处：
 
 1. `unreal_backend_tcp/tools.py`
-2. `docs/categories.md`
+2. `../../docs/categories.md`
 
 如果是 UE 侧新增命令，还要同步确认：
 

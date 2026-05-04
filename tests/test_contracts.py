@@ -1301,6 +1301,20 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertEqual(len(renderdoc_server.TOOLS), 12)
         self.assertEqual(len(diagnostics_server.TOOLS), 10)
 
+    def test_unified_mcp_server_includes_all_domain_tools(self) -> None:
+        from unreal_mcp import server as mcp_server
+
+        domain_names = {
+            t.__name__ for t in mcp_server.TOOLS
+        }
+        self.assertIn("create_asset_with_properties", domain_names)
+        self.assertIn("create_material_asset", domain_names)
+        self.assertIn("set_scene_light_intensity", domain_names)
+        self.assertIn("add_blueprint_node", domain_names)
+        self.assertIn("patch_material_graph", domain_names)
+        self.assertIn("request_renderdoc_capture", domain_names)
+        self.assertIn("get_editor_ready_state", domain_names)
+        self.assertEqual(len(mcp_server.TOOLS), 78)
 
 
 if __name__ == "__main__":

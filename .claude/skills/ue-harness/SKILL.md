@@ -32,14 +32,13 @@ description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP
 ## 默认入口
 
 1. 先判断任务所属域（domain）：`scene / asset / material / material_graph / diagnostics`
-2. 每个域 server（`unreal_<domain>/server.py`）导出 `TOOLS` 列表，自带 editor guard，可独立运行
-3. Multi-server clients should connect to domain servers directly (see `config/mcp_config.multi-server.example.json`)
-4. `unreal_orchestrator` exposes only 3 routing/discovery tools — connect to domain servers for domain-specific work
+2. Default entry: `unreal_mcp/server.py` — 统一聚合所有域工具（~80 tools），自带 editor guard
+3. 各域 `server.py` 可独立运行（仅按需调试时使用）
+4. `unreal_orchestrator` exposes only 3 routing/discovery tools — optional, for task routing
 5. Before high-risk live-editor operations, check:
    - `get_editor_ready_state`
    - `wait_for_editor_ready` when needed
-6. 只需要一个域的工具时，直接连域 server，避免 MCP 工具列表过大
-7. `unreal_backend_tcp` is an internal backend / fallback — not a default business entrypoint
+6. `unreal_backend_tcp` is an internal backend / fallback — not a default business entrypoint
 
 ## Backend 边界
 

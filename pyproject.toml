@@ -26,4 +26,5 @@ include = [
     "unreal_renderdoc*",
     "unreal_harness_runtime*",
     "unreal_observability*",
+    "unreal_mcp*",
 ]

@@ -1,8 +1,9 @@
 {
+  "_comment": "Recommended: unreal-mcp (all UE domain tools) + renderdoc-mcp (external RenderDoc analysis). The orchestrator is included for optional routing/discovery.",
   "mcpServers": {
-    "unreal-orchestrator": {
+    "unreal-mcp": {
       "command": "python",
-      "args": ["-m", "unreal_orchestrator.server"],
+      "args": ["-m", "unreal_mcp.server"],
       "cwd": "D:/unreal-mcp",
       "env": {
         "UE_HOST": "127.0.0.1",
@@ -10,75 +11,10 @@
         "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
       }
     },
-    "unreal-scene": {
-      "command": "python",
-      "args": ["-m", "unreal_scene.server"],
-      "cwd": "D:/unreal-mcp",
-      "env": {
-        "UE_HOST": "127.0.0.1",
-        "UE_PORT": "55557",
-        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
-      }
-    },
-    "unreal-asset": {
-      "command": "python",
-      "args": ["-m", "unreal_asset.server"],
-      "cwd": "D:/unreal-mcp",
-      "env": {
-        "UE_HOST": "127.0.0.1",
-        "UE_PORT": "55557",
-        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
-      }
-    },
-    "unreal-blueprint": {
-      "command": "python",
-      "args": ["-m", "unreal_blueprint.server"],
-      "cwd": "D:/unreal-mcp",
-      "env": {
-        "UE_HOST": "127.0.0.1",
-        "UE_PORT": "55557",
-        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
-      }
-    },
-    "unreal-material": {
-      "command": "python",
-      "args": ["-m", "unreal_material.server"],
-      "cwd": "D:/unreal-mcp",
-      "env": {
-        "UE_HOST": "127.0.0.1",
-        "UE_PORT": "55557",
-        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
-      }
-    },
-    "unreal-material-graph": {
-      "command": "python",
-      "args": ["-m", "unreal_material_graph.server"],
-      "cwd": "D:/unreal-mcp",
-      "env": {
-        "UE_HOST": "127.0.0.1",
-        "UE_PORT": "55557",
-        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
-      }
-    },
-    "unreal-renderdoc": {
-      "command": "python",
-      "args": ["-m", "unreal_renderdoc.server"],
-      "cwd": "D:/unreal-mcp",
-      "env": {
-        "UE_HOST": "127.0.0.1",
-        "UE_PORT": "55557",
-        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
-      }
-    },
-    "unreal-diagnostics": {
-      "command": "python",
-      "args": ["-m", "unreal_diagnostics.server"],
-      "cwd": "D:/unreal-mcp",
-      "env": {
-        "UE_HOST": "127.0.0.1",
-        "UE_PORT": "55557",
-        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
-      }
+    "renderdoc-mcp": {
+      "command": "uv",
+      "args": ["--directory", "D:/renderdoc/renderdoc-mcp", "run", "renderdoc-mcp", "run-mcp"],
+      "env": {}
     }
   }
 }

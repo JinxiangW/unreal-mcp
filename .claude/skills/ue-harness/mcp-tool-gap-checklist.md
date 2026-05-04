@@ -1,16 +1,18 @@
-# MCP Tool Gap Checklist
+# MCP 工具缺口检查清单（Tool Gap Checklist）
 
-Use this file for MCP capability gaps discovered while agents complete real Unreal tasks.
+> **Language convention**: gap entries use English fields to match MCP tool names and code identifiers. Framework instructions are in Chinese.
 
-Append new items under `Open Items`. Keep each item concrete enough that another agent can implement and verify it later.
+Agent 在完成真实 Unreal 任务时发现的 MCP 能力缺口记录在此文件。
 
-When an item is implemented, mark `Status: done`, add verification notes, and move it to `Done Items`. Do not delete completed items.
+在"待处理条目"下追加新条目。保持每条足够具体，使其他 agent 可以稍后实现和验证。
 
-## Open Items
+条目实现后标记 `Status: done`，添加验证说明，移至"已完成条目"。不要删除已完成条目。
 
-No open items.
+## 待处理条目
 
-## Done Items
+暂无待处理条目。
+
+## 已完成条目
 
 ### GAP-0001: Patch existing material expression properties
 
@@ -42,37 +44,37 @@ No open items.
 - Root cause: High-level scene harness lacks material override operation for existing components.
 - Notes: Implemented via `set_actor_component_material` plus `apply_scene_actor_batch.material_overrides`; verified with contract tests, Python compileall, and `RenderingMCPEditor` build. Live level regression target remains `/Game/RCF/Maps/Test/Trace/DemoTest` after reloading the updated plugin.
 
-## Item Template
+## 条目模板
 
 ```markdown
-### GAP-0000: Short title
+### GAP-0000: 简短标题
 
 - Status: open
 - Priority: P1
 - Domain: asset / material_graph / blueprint / scene / niagara / diagnostics / renderdoc
 - Affected tool: `tool_name`
-- Workflow: What the user was trying to do
-- Current behavior: What MCP did or failed to expose
-- Fallback used: `run_python` / raw command / local import / manual editor/source inspection
-- Expected behavior: What the MCP tool should provide
-- Proposed tool contract: New tool or parameter/result changes
-- Verification: Concrete test, asset path, graph operation, or live regression
-- Root cause: known detail, or `unknown`
-- Notes: optional
+- Workflow: 用户试图完成什么工作
+- Current behavior: MCP 做了什么或缺少什么能力
+- Fallback used: `run_python` / raw command / 本地导入 / 手动编辑器或源码检查
+- Expected behavior: MCP 工具应提供什么
+- Proposed tool contract: 新工具或参数/结果变更
+- Verification: 具体测试、资产路径、图操作或真实回归
+- Root cause: 已知详情，或写 `unknown`
+- Notes: 可选
 ```
 
-## Status Values
+## 状态值
 
-- `open`: Needs implementation.
-- `in_progress`: Being implemented.
-- `done`: Implemented and verified.
-- `wontfix`: Intentionally not implemented; include reason.
+- `open`：需要实现
+- `in_progress`：正在实现中
+- `done`：已实现并验证
+- `wontfix`：有意不实现，需注明原因
 
-## Maintenance Rules
+## 维护规则
 
-- Use the next sequential `GAP-0000` id.
-- Keep only `open` or `in_progress` items under `Open Items`.
-- Do not delete completed items; mark them `done` and move them to `Done Items`.
-- Link commits or tests in `Notes` after implementation.
-- Split unrelated capabilities into separate items.
-- Merge duplicates by adding evidence to the older item.
+- 使用下一个顺序 `GAP-0000` 编号
+- 待处理条目下只保留 `open` 或 `in_progress` 的条目
+- 不要删除已完成条目；标记 `done` 并移至已完成条目
+- 实现后在 Notes 中链接 commit 或测试
+- 不相关的能力拆分为独立条目
+- 重复条目通过向旧条目追加证据来合并

@@ -1,67 +1,62 @@
-# Material Package
+# 材质包
 
-## Purpose
+## 用途
 
-`material package` is the source-side delivery format for the agent.
+`material package` 是给 agent 阅读的源侧交付格式。
 
-It is not required to be a strict cross-engine IR.
-It should optimize for:
+不要求是严格的跨引擎 IR。优化目标为：
 
-- readability by an LLM agent
-- retention of source evidence
-- enough semantic information to plan a UE reconstruction
-- enough raw structure to diagnose complex custom graphs
+- LLM agent 可读性
+- 保留源证据
+- 提供足够的语义信息来规划 UE 重建
+- 提供足够的原始结构来诊断复杂自定义图
 
-The package should preserve source truth, not prematurely force a rigid
-cross-engine graph model.
+包应保留源真相，不应过早强制套用僵硬的跨引擎图模型。
 
-## Workflow Role
+## 工作流角色
 
-The intended pipeline is:
+预期流水线：
 
-1. Unity or another source exporter writes a `material package`.
-2. Agent reads the package and infers a UE reconstruction strategy.
-3. Agent emits a `reconstruction plan`.
-4. Unreal MCP executes the plan.
+1. Unity 或其他源导出工具输出 `material package`
+2. Agent 读取包并推断 UE 重建策略
+3. Agent 输出 `reconstruction plan`
+4. Unreal MCP 执行方案
 
-## Package Directory
+## 包目录
 
-Recommended directory layout:
+推荐目录布局：
 
 ```text
 <MaterialName>/
   manifest.json
-  shadergraph.json                # optional
+  shadergraph.json                # 可选
   subgraphs/
-    index.json                    # optional
-    *.json                        # optional
+    index.json                    # 可选
+    *.json                        # 可选
   textures/
-    <exported texture files>      # optional but recommended
+    <exported texture files>      # 可选但推荐
 ```
 
-Notes:
+注意：
 
-- `manifest.json` is required.
-- `shadergraph.json` is optional, but should be present when the source material
-  is driven by a graph and the exporter can inspect it.
-- `subgraphs/` is optional.
-- Texture binaries may live at package root for backward compatibility, but
-  `textures/` is the preferred target for new exports.
+- `manifest.json` 必需
+- `shadergraph.json` 可选，但当源材质由图驱动且导出器可检查时应该存在
+- `subgraphs/` 可选
+- 贴图二进制文件可放在包根目录以保持向后兼容，但 `textures/` 是新导出的首选目标
 
-## Manifest Goals
+## Manifest 目标
 
-`manifest.json` should answer these questions directly:
+`manifest.json` 应直接回答以下问题：
 
-- what material was exported
-- what shader/pipeline it came from
-- whether the material is suitable for semantic reconstruction, graph-aware
-  reconstruction, or only partial transfer
-- what textures and non-texture parameters exist
-- what surface settings matter in UE
-- what warnings or ambiguities the agent must consider
-- where the optional graph evidence files are
+- 导出了什么材质
+- 来自哪个 shader/管线
+- 材质适合语义重建、图感知重建还是仅部分迁移
+- 存在哪些贴图和非贴图参数
+- 哪些表面设置在 UE 中重要
+- agent 必须考虑的警告或模糊点
+- 可选的图证据文件在哪里
 
-## Recommended Manifest Shape
+## 推荐 Manifest 结构
 
 ```json
 {
@@ -120,7 +115,7 @@ Notes:
 }
 ```
 
-## Required Top-Level Fields
+## 必需顶层字段
 
 - `schemaVersion`
 - `source`
@@ -134,29 +129,25 @@ Notes:
 
 ## `classification.reconstructionMode`
 
-Recommended values:
+推荐值：
 
 - `semantic_surface`
-  Use when the exporter can provide reliable surface semantics and graph details
-  are missing or not useful.
+  当导出器能提供可靠的表面语义且图细节缺失或无用。
 
 - `semantic_surface_with_graph_evidence`
-  Use when surface semantics are the main reconstruction path, but graph files
-  are available as supporting evidence.
+  当表面语义是主重建路径，但图文件可作为支持证据。
 
 - `graph_snapshot`
-  Use when the exporter can only provide graph structure and very limited
-  transfer semantics.
+  当导出器只能提供图结构且迁移语义非常有限。
 
 - `partial_transfer_only`
-  Use when only some textures/parameters are reliable and full graph rebuilding
-  is not realistic.
+  仅部分贴图/参数可靠，完整图重建不现实。
 
 ## `semantics`
 
-This section should be agent-friendly and source-agnostic where possible.
+此部分应尽量 agent 友好且与源无关。
 
-Recommended standard keys:
+推荐标准键：
 
 - `baseColor`
 - `normal`
@@ -168,7 +159,7 @@ Recommended standard keys:
 - `uvTransform`
 - `custom`
 
-Each semantic entry may carry:
+每个语义条目可携带：
 
 - `value`
 - `textureId`
@@ -177,13 +168,13 @@ Each semantic entry may carry:
 - `rawPropertyNames`
 - `conversion`
 - `enabled`
-- source-specific extra fields when needed
+- 需要时的源特定额外字段
 
 ## `textures`
 
-Each texture entry should be a reusable evidence record, not just a filename.
+每个贴图条目应为可复用的证据记录，而不只是文件名。
 
-Recommended fields:
+推荐字段：
 
 ```json
 {
@@ -215,10 +206,9 @@ Recommended fields:
 
 ## `graphEvidence`
 
-This section should point to optional graph files and summarize their trust
-level.
+此部分指向可选的图文件并总结其可信度。
 
-Recommended fields:
+推荐字段：
 
 - `available`
 - `mainGraphFile`
@@ -228,28 +218,25 @@ Recommended fields:
 - `edgeCount`
 - `limitations`
 
-## Evidence Preservation Rule
+## 证据保留规则
 
-The package should preserve source evidence even when it is not yet fully
-usable by Unreal.
+包应保留源证据，即使 Unreal 尚未能完全使用。
 
-Examples:
+示例：
 
-- keep Unity keywords
-- keep raw property names
-- keep graph node types and slot ids
-- keep warnings and confidence notes
+- 保留 Unity keywords
+- 保留原始属性名
+- 保留图节点类型和 slot id
+- 保留警告和置信度说明
 
-The agent can ignore some of this data when planning, but should not lose it at
-export time.
+Agent 在规划时可忽略部分数据，但不应在导出时丢失。
 
-## First Exporter Target
+## 首个导出器目标
 
-For the current Unity exporter, the near-term target should be:
+对于当前 Unity 导出器，近期目标应为：
 
-- retain the current `manifest.json` strengths
-- rename or wrap it as a `material package`
-- make graph evidence references explicit
-- move copied textures under `textures/`
-- preserve Unity-specific data under clearly named source fields instead of
-  pretending it is already canonical
+- 保留当前 `manifest.json` 的优势
+- 重命名或包装为 `material package`
+- 显式标明图证据引用
+- 将复制的贴图移到 `textures/` 下
+- 将 Unity 特定数据保存在明确命名的源字段下，而非假装已是规范格式

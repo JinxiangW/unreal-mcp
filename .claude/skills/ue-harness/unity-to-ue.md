@@ -1,44 +1,44 @@
-# Unity to UE Migration
+# Unity 到 UE 迁移（Unity-to-UE Migration）
 
-## Purpose
+> **Language convention**: conversion formulas, coordinate math, and operational steps are in English. Context, scope decisions, and conceptual notes are in Chinese.
 
-Use this skill only when the task is explicitly about migrating content from Unity to Unreal.
+## 用途
 
-Current focus:
+仅在任务明确涉及从 Unity 迁移内容到 Unreal 时使用。
 
-- Unity light migration
-- coordinate and orientation conversion
-- intensity unit and attenuation strategy
-- exposure baseline migration
-- writing into the correct level or sublevel
+当前范围（Current focus）：
 
-## Use This Skill When
+- Unity light migration（Unity 灯光迁移）
+- coordinate and orientation conversion（坐标系与朝向转换）
+- intensity unit and attenuation strategy（强度单位与衰减策略）
+- exposure baseline migration（曝光基线迁移）
+- writing into the correct level or sublevel（写入正确的关卡或子关卡）
 
-Use it when at least one of these is true:
+## 适用场景
 
-- the user explicitly says `Unity -> UE`
-- the task includes Unity scene files, Light YAML, Quaternion data, or Euler data
-- the goal is to recreate a Unity scene or lighting setup inside Unreal
+至少满足以下一项时使用：
 
-Do not use it for:
+- 用户明确说 `Unity -> UE`
+- 任务包含 Unity scene files, Light YAML, Quaternion data, or Euler data
+- 目标是在 Unreal 内重建 Unity 场景或灯光
+
+不用于（Do not use for）：
 
 - pure UE scene editing
 - pure UE lighting adjustments
 - pure asset import
 - material graph, blueprint graph, or Niagara graph editing
 
-## Read First
+## 阅读顺序
 
-1. `docs/migrations/README.md`
-2. The migration case doc for the current scene, if one exists
-3. `docs/migrations/unity-lighting-playbook.md`
+1. `migrations/README.md`
+2. 当前场景的迁移案例文档（如果有）
+3. `migrations/unity-lighting-playbook.md`
 4. `SKILL.md`
 
-If the task is `CharacterModelScene_zhengbeishi`, also read:
+如果任务是 `CharacterModelScene_zhengbeishi`，还需阅读 `migrations/character-model-scene-zhengbeishi.md`。
 
-- `docs/migrations/character-model-scene-zhengbeishi.md`
-
-## Default Execution Order
+## 默认执行顺序
 
 1. Start from `unreal_orchestrator`
 2. Check:
@@ -47,15 +47,15 @@ If the task is `CharacterModelScene_zhengbeishi`, also read:
 3. Execute scene-domain commands
 4. Do not default to legacy raw tools
 
-## Migration Flow
+## 迁移流程（Migration Flow）
 
-### 1. Fix Source and Target
+### 1. 确定源和目标（Fix Source and Target）
 
 - identify the Unity source scene
 - identify the UE target level or sublevel
 - state exactly which objects are in scope
 
-### 2. Extract Unity Truth
+### 2. 提取 Unity 数据（Extract Unity Truth）
 
 Capture:
 
@@ -69,20 +69,22 @@ Capture:
 - quaternion or `forward/up`
 - post-process exposure data
 
-### 3. Convert
+### 3. 转换（Convert）
 
-- position: `P_ue_cm = (Z_u, X_u, Y_u) * 100`
-- orientation: prefer `forward/up`; do not blindly copy Unity Euler values
-- point and spot lights: prefer interpreting source intensity as `Candelas`; do not default to UE `Unitless`
-- radius: `AttenuationRadius_cm = UnityRange_m * 100`
+核心转换公式（Key conversion formulas）：
 
-### 4. Apply
+- **position**: `P_ue_cm = (Z_u, X_u, Y_u) * 100`
+- **orientation**: prefer `forward/up`; do not blindly copy Unity Euler values
+- **point and spot lights**: prefer interpreting source intensity as `Candelas`; do not default to UE `Unitless`
+- **radius**: `AttenuationRadius_cm = UnityRange_m * 100`
+
+### 4. 应用（Apply）
 
 - if exact sublevel placement matters, load that sublevel as the current editing level first
 - prefer high-level scene workflows
 - avoid giant whole-object property blobs such as `LightComponent: {...}`
 
-### 5. Verify
+### 5. 验证（Verify）
 
 At minimum verify:
 
@@ -95,7 +97,7 @@ At minimum verify:
 - correct target sublevel
 - viewport screenshot when applicable
 
-### 6. Report
+### 6. 报告（Report）
 
 State clearly:
 
@@ -104,7 +106,7 @@ State clearly:
 - which values are initial guesses or approximations
 - which values remain unverified
 
-## Notes
+## 注意事项（Notes）
 
 - Do not auto-launch the editor for ordinary usage tasks
 - If the editor is not ready, return the status and `recommended_action` first

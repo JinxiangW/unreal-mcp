@@ -1,34 +1,35 @@
-# Material Reconstruction Planning
+# 材质重建规划（Material Reconstruction Planning）
 
-## Purpose
+> **Language convention**: conceptual strategy, decision rules, and explanations are in Chinese. Operational workflows, checklists, and verification gates are in English to match MCP tool names and code identifiers.
 
-Use this skill to plan a reconstruction.
+## 用途
 
-This skill plans only. It does not replace Unreal execution tools.
+将导出的材质包（如 Unity `manifest.json` 加可选的 `shadergraph.json`）转换为 `material-reconstruction-plan/0.1` 重建方案。
 
-When execution is about to begin, also read `SKILL.md`.
+本文件仅负责规划（planning only），不替代 Unreal 执行工具。开始执行时请同时阅读 `SKILL.md`。
 
-## Read First
+## 阅读顺序
 
-Read these in order:
+1. `material-package.md` — 材质包格式
+2. `material-reconstruction-plan.md` — 重建方案格式
+3. 包中的 `manifest.json`（如果有）
+4. 包中的 `shadergraph.json`（如果有）
+5. `../docs/examples/` 下的对应包示例（如果有）
 
-1. `../../docs/material-package.md`
-2. `../../docs/material-reconstruction-plan.md`
-3. The package `manifest.json`, if present
-4. The package `shadergraph.json`, if present
-5. One package-specific example under `../../docs/examples/`, if present
+## 工作流
 
-## Workflow
+核心纪律（Core discipline）：
 
 - Do not skip stages
 - Do not jump from package inspection straight to arbitrary UE graph edits
 - Do not claim alignment from visual impression alone
 - Do not treat `success: true` from one MCP call as proof of correctness
 
-### 1. Inspect the Package
+### 1. 检查包（Inspect the Package）
 
-Extract at least these facts:
+提取以下信息（中文标注类别，英文匹配字段名）：
 
+**基础信息：**
 - source engine and shader family
 - surface settings: blend, alpha clip, two-sided, domain
 - transferable semantics: baseColor, normal, metallic, roughness, emission, opacity, occlusion
@@ -36,7 +37,7 @@ Extract at least these facts:
 - graph evidence availability
 - warnings, missing subgraphs, and confidence notes
 
-For Unity Shader Graph packages, also check:
+**对于 Unity Shader Graph 包，还需检查：**
 
 - whether `shadergraph.json` exists
 - whether subgraph exports exist
@@ -44,28 +45,28 @@ For Unity Shader Graph packages, also check:
 - whether copied shader sources exist under `shader_sources/`
 - whether runtime-only graph inputs exist and whether matching runtime state was exported
 
-If a custom function exists but its source evidence is missing, stop and fix export first.
+约束（中文）：
 
-If a branch depends on runtime state such as world-space arrays, scene-driven masks, or global shader values, stop and export that runtime state before planning that branch as reconstructable.
+- 如果存在自定义函数但缺少其源码证据，先停下来修复导出（fix export first）
+- 如果某分支依赖运行时状态（世界空间数组、场景驱动遮罩或全局 shader 值），先导出该运行时状态再将此分支标记为可重建
 
-### 2. Choose a Reconstruction Mode
+### 2. 选择重建模式（Choose a Reconstruction Mode）
 
-Prefer one of these:
+优先选择以下模式之一：
 
 - `semantic_surface`
 - `graph_guided_semantic_surface`
 - `manual_custom_graph`
 - `partial_reconstruction`
 
-Decision rule:
+决策规则（Decision rule）：
 
 - if semantics are sufficient and runtime-only graph logic is missing, stay in `semantic_surface`
 - if graph evidence is useful but only part of it is safely reconstructable, use `graph_guided_semantic_surface`
 - if a branch depends on missing runtime evidence, mark that branch unresolved instead of guessing
+- Do not default to exact graph replay when the source exposes opaque slot ids, missing subgraph bodies, or source-specific node types
 
-Do not default to exact graph replay when the source exposes opaque slot ids, missing subgraph bodies, or source-specific node types.
-
-### 3. Build the Plan
+### 3. 构建方案（Build the Plan）
 
 Always emit these sections:
 
@@ -76,21 +77,21 @@ Always emit these sections:
 - `unresolved`
 - `verificationGoals`
 
-Also emit these when execution is expected in the same task:
+When execution is expected in the same task, also emit:
 
 - `executionOrder`
 - `stopConditions`
 - `validationGate`
 - `verificationArtifacts`
 
-Keep the boundary clear:
+保持边界清晰：
 
 - `strategy`, `approximations`, and `unresolved` explain planning decisions
 - `resourceBindings`, `execution`, and `verificationGoals` are execution-facing
 
-### 3.1 Function Strategy
+#### 3.1 函数策略（Function Strategy）
 
-When the source graph already has meaningful subgraph boundaries, preserve those boundaries in the plan.
+当源图已有有意义的子图边界时，在方案中保留这些边界。
 
 Planning rules:
 
@@ -104,9 +105,9 @@ Planning rules:
 - if the source subgraph depends on external source files or runtime arrays, record those dependencies as required evidence before the branch can be claimed complete
 - do not silently replace a source custom subgraph with a guessed scalar or constant
 
-The detailed execution rules for function reuse, custom-node constraints, and stop conditions live in `SKILL.md`.
+Detailed execution rules for function reuse, custom-node constraints, and stop conditions live in `SKILL.md`.
 
-### 4. Apply Layout Rules
+### 4. 应用布局规则（Apply Layout Rules）
 
 When generating `execution.graph.recipe.nodes`, choose readable coordinates.
 
@@ -138,15 +139,13 @@ Recommended placement rules:
 - avoid crossings when a simple lane layout can remove them
 - add reroute nodes in the plan when a branch requires a long shared route
 
-### 5. Hand Off to UE Execution
+### 5. 交付给 UE 执行（Hand Off to UE Execution）
 
-When execution begins, follow the material execution order, stop conditions, and validation rules in `SKILL.md`.
+When execution begins, follow the material execution order, stop conditions, and validation rules in `SKILL.md`. This planner should not duplicate those execution instructions.
 
-This planner should not duplicate those execution instructions.
+### 6. 记录近似替换和未解决项（Record Approximations and Unresolved Logic）
 
-### 6. Record Approximations and Unresolved Logic
-
-Be explicit when simplifying source behavior.
+概念说明（中文）：简化源码行为时要明确说明。
 
 Common approximations:
 
@@ -167,7 +166,7 @@ Common unresolved items:
 - source-side object references not stored in the material asset itself
 - keyword-controlled branch families without active runtime state
 
-## Output Standard
+## 输出标准（Output Standard）
 
 Output one converged `material-reconstruction-plan/0.1` JSON object.
 
@@ -178,25 +177,9 @@ Prefer:
 - long-form reasoning only in `strategy.reason`
 - specific `verificationGoals` for properties, output connections, and resource bindings
 
-Recommended `verificationArtifacts`:
+Recommended `verificationArtifacts`: exported package path, UE material path, UE function paths, verification script path, verification report path.
 
-- exported package path
-- UE material path
-- UE function paths
-- verification script path
-- verification report path
-
-## Package-Specific Patterns
-
-Do not hardcode task-specific package knowledge into this skill.
-
-- Package-specific strategies belong in:
-  - the package-level reconstruction plan
-  - task-specific examples
-  - task-specific validation scripts
-- Keep this skill generic across materials and source projects
-
-## Validation Gate
+## 验证门槛（Validation Gate）
 
 Do not claim reconstruction alignment until all of the following are true:
 

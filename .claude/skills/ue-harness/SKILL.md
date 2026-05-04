@@ -5,110 +5,109 @@ description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP
 
 # UE Harness
 
-## Purpose
+> **Language convention**: conceptual overviews and background are in Chinese. Operational instructions (build orders, stop conditions, validation rules, checklists) are in English to match code identifiers and MCP tool names. Key bilingual terms are noted on first use.
 
-Use this skill for Unreal-side work in this repo.
+## 用途
 
-Default scope:
+在 `D:\unreal-mcp` 仓库内处理 Unreal 相关工作时的默认 skill。
 
-- `unreal_orchestrator`
-- `unreal_scene`
-- `unreal_asset`
-- `unreal_material`
-- `unreal_material_graph`
-- `unreal_diagnostics`
-- `RenderingMCP/Plugins/UnrealMCP`
+覆盖范围（Scope）：
 
-## Read First
+- `unreal_orchestrator` — 路由与发现
+- `unreal_scene` — 场景与关卡编辑
+- `unreal_asset` — 资产管理
+- `unreal_material` — 材质资产工作流
+- `unreal_material_graph` — 材质图（Material Graph）编辑
+- `unreal_diagnostics` — 诊断
+- `RenderingMCP/Plugins/UnrealMCP` — UE 侧 C++ 插件
 
-Read in this order:
+## 阅读顺序
 
-1. `inventory.md`
-2. `categories.md`
-3. The domain files for the current task
+1. `inventory.md` — 功能清单与状态矩阵
+2. `categories.md` — 分层分域索引与故障路由
+3. 当前任务对应域的文件
+4. （需要时）`commands.md` `test-plan.md` `verification.md` `workflow.md`
+5. （需要时）`mcp-tool-gap-workflow.md`
 
-Read these only when needed:
+## 默认入口
 
-4. `commands.md`
-5. `test-plan.md`
-6. `verification.md`
-7. `workflow.md`
-8. `mcp-tool-gap-workflow.md`
-
-## Default Entry
-
-1. Classify the task domain first: `scene / asset / material / material_graph / diagnostics`
-2. Each domain server (`unreal_<domain>/server.py`) now exports a `TOOLS` list with editor-guarded tools and can run standalone
-3. For multi-server clients, prefer connecting to domain servers directly (see `config/mcp_config.multi-server.example.json`)
-4. The `unreal_orchestrator` exposes only 3 routing/discovery tools — connect to domain servers directly for domain-specific work
+1. 先判断任务所属域（domain）：`scene / asset / material / material_graph / diagnostics`
+2. 每个域 server（`unreal_<domain>/server.py`）导出 `TOOLS` 列表，自带 editor guard，可独立运行
+3. Multi-server clients should connect to domain servers directly (see `config/mcp_config.multi-server.example.json`)
+4. `unreal_orchestrator` exposes only 3 routing/discovery tools — connect to domain servers for domain-specific work
 5. Before high-risk live-editor operations, check:
    - `get_editor_ready_state`
    - `wait_for_editor_ready` when needed
-6. Enter a domain harness directly when you need only one domain's tools and want to reduce the MCP tool list size
-7. Treat `unreal_backend_tcp` as internal backend or fallback, not as the default business entrypoint
+6. 只需要一个域的工具时，直接连域 server，避免 MCP 工具列表过大
+7. `unreal_backend_tcp` is an internal backend / fallback — not a default business entrypoint
 
-## Backend Boundaries
+## Backend 边界
 
-- `scene`
-  - prefer live-editor Python
-- `asset create/update`
-  - prefer live-editor Python
-- `asset import`
-  - prefer commandlet
-- `material_graph`
-  - currently still depends on the internal backend and UE plugin C++ commands
-- `unreal_backend_tcp`
-  - owns TCP transport, raw command dispatch, and large-result handles
+- **scene**：prefer live-editor Python
+- **asset create/update**：prefer live-editor Python
+- **asset import**：prefer commandlet（命令行导入）
+- **material_graph**：currently depends on internal backend and UE plugin C++ commands
+- **unreal_backend_tcp**：owns TCP transport, raw command dispatch, and large-result handles
 
-## General Rules
+## 通用规则
 
 - Prefer high-level tools over ad hoc property writes
 - Do not mix `material` responsibilities with `material_graph` responsibilities
-- Treat `python_exec.py`, `commandlet_exec.py`, `unreal_harness_runtime/editor_guard.py`, `unreal_orchestrator/server.py`, `unreal_orchestrator/catalog.py`, and `pyproject.toml` as shared core files; change them only when necessary
+- 共享核心文件（shared core files，只在必要时修改）：`python_exec.py` `commandlet_exec.py` `unreal_harness_runtime/editor_guard.py` `unreal_orchestrator/server.py` `unreal_orchestrator/catalog.py` `pyproject.toml`
 
-## MCP Tool Gap Workflow
+## MCP 工具缺口流程（Tool Gap Workflow）
 
-Use this whenever a real user workflow needs `run_python`, raw backend commands, local Python imports, or manual editor/source inspection because the high-level MCP surface is missing, incomplete, unstable, or unverifiable.
+真实用户工作流因高层 MCP 能力缺失、不完整或不可验证而需要走 fallback 时使用。
 
-1. Finish the user task with a safe fallback when possible.
-2. Decide whether the fallback is a repeatable MCP gap using `mcp-tool-gap-workflow.md`.
-3. If it is a gap, append a concrete item to `mcp-tool-gap-checklist.md`.
-4. Include domain, affected tool, current behavior, fallback used, expected behavior, proposed tool contract, and verification target.
-5. Do not record one-off grep/source reading/build/test operations as MCP gaps.
+1. Finish the user task with a safe fallback when possible
+2. Use `mcp-tool-gap-workflow.md` to decide whether the fallback is a repeatable MCP gap
+3. If it is a gap, append a concrete item to `mcp-tool-gap-checklist.md`
+4. 条目需包含：domain, affected tool, current behavior, fallback used, expected behavior, proposed tool contract, verification target
+5. Do not record one-off grep/source reading/build/test operations as MCP gaps
 
-## Engine Source Resolution
+## 引擎源码定位（Engine Source Resolution）
 
-Use these rules before reading Unreal Engine source to explain a node, pin, asset type, shader path, or editor behavior.
+在阅读 Unreal Engine 源码来解释节点、引脚、资产类型、shader 路径或编辑器行为时使用。
 
 1. Resolve the active engine first:
-   - Run `python scripts/resolve_unreal_engine.py` from the repo root, or read `unreal_harness_runtime.config.get_runtime_paths()`
+   - Run `python scripts/resolve_unreal_engine.py` from repo root, or read `unreal_harness_runtime.config.get_runtime_paths()`
    - Prefer `UE_ENGINE_ROOT` when explicitly set
-   - Then prefer the engine derived from `UE_EDITOR_EXE` or `UE_EDITOR_CMD`
-   - Then resolve `UE_PROJECT_PATH` -> `.uproject` `EngineAssociation` via registered Unreal builds
+   - Then prefer engine derived from `UE_EDITOR_EXE` or `UE_EDITOR_CMD`
+   - Then resolve `UE_PROJECT_PATH` → `.uproject` `EngineAssociation` via registered Unreal builds
    - Fall back only to candidates in `unreal_harness_runtime/config.py`
-2. Treat the resolved `engine_root` as the directory named `Engine`, not the install parent.
-3. Verify `engine_source` exists before citing source. If `engine_root_source_available=false`, state that engine source is not available locally.
-4. Do not use generated `.sln` paths as the primary authority; they can be stale after switching engines. Use them only as a last-resort clue.
+2. Treat resolved `engine_root` as the directory named `Engine`, not the install parent
+3. Verify `engine_source` exists before citing source. If `engine_root_source_available=false`, state that engine source is not available locally
+4. Do not use generated `.sln` paths as primary authority — they can be stale after switching engines
 5. Search source in this order:
    - project `Source/` and project `Plugins/`
    - repo plugin `RenderingMCP/Plugins/UnrealMCP/Source/`
    - resolved engine `Source/`
    - resolved engine `Plugins/`
-   - resolved engine `Content/Functions/` for material functions
-6. When behavior depends on engine code, include the engine path used in the answer or notes.
+   - resolved engine `Content/Functions/` (for material functions)
+6. When behavior depends on engine code, include the engine path used in the answer or notes
 
-Useful source targets:
+常用源码目标（Useful source targets）：
 
 - Material nodes: search `UMaterialExpression<Name>` under `Engine/Source/Runtime/Engine`
 - Blueprint nodes: search `UK2Node_<Name>` and `K2Node_<Name>` under `Engine/Source/Editor` and `Engine/Source/Runtime`
 - Niagara nodes: search `UNiagaraNode<Name>` under `Engine/Plugins/FX/Niagara`
 - Material functions: search `.uasset` names under `Engine/Content/Functions`
 
-## Material Execution
+## 材质执行（Material Execution）
 
-Use these rules whenever the task touches `material` or `material_graph`.
+涉及 `material` 或 `material_graph` 时使用以下规则。操作性指令（build order, validation, stop conditions）使用英文以匹配 MCP 工具名和代码标识符。
 
-### Function Strategy
+### 函数策略（Function Strategy）
+
+概念指引（中文）：
+
+- 新建 `MaterialFunction` 前先检查是否已有项目本地版本，再检查引擎提供的材质函数或标准 UE 节点模式
+- 按语义边界或源码子图拆分，不要按细碎的算术步骤
+- 不要为 `OneMinus` `Multiply` `Lerp` 或简单直连创建微函数
+- 函数内部优先使用原生 UE material node
+- `Custom` 仅用于确实缺原生节点或源码本来就是自定义逻辑的场景
+
+Operational rules:
 
 - Check for an existing project-local `MaterialFunction` before creating a new one
 - Then check engine-provided material functions or a standard UE node pattern
@@ -117,10 +116,7 @@ Use these rules whenever the task touches `material` or `material_graph`.
 - Do not create micro-functions for `OneMinus`, `Multiply`, `Lerp`, or simple pass-through wiring
 - Prefer native UE material nodes inside a function
 - Use `Custom` only when the source already uses a custom function or UE node coverage is clearly insufficient
-- Keep `Custom` inline
-- Do not write `.ush`
-- Do not use `include`
-- Do not define local helper functions inside the `Custom` snippet
+- Keep `Custom` inline — do not write `.ush`, do not use `include`, do not define local helper functions inside the `Custom` snippet
 
 ### Build Order
 
@@ -140,14 +136,14 @@ Use these rules whenever the task touches `material` or `material_graph`.
 - If a `MaterialFunction` is deleted and recreated, rebuild the parent material or at least rebuild the affected `MaterialFunctionCall`
 - Do not keep appending nodes onto a dirty half-finished parent material; rebuild high-risk branches cleanly
 - Add an explicit switch parameter for runtime-dependent branches
-  - example: `UseDissolve`
-  - default values should keep the material visible and debuggable in UE preview
+  - Example: `UseDissolve`
+  - Default values should keep the material visible and debuggable in UE preview
 - Write UE parameter `group` values and verify them on readback
 - For functions with internal texture sampling or runtime-space dependencies, require a minimal closed loop:
   - function readback is correct
   - parent material compiles
   - structure readback matches expectation
-- After graph edits, do not trust `success: true` alone
+- After graph edits, do not trust `success: true` alone:
   - re-read the graph
   - inspect key `property_connections`
   - inspect logs for `Missing Material Function`, shader asserts, or compile fallback
@@ -173,14 +169,14 @@ Do not claim "aligned with source" without a machine-readable verification artif
 - key material property alignment
 - parameter group alignment
 
-## Delivery Check
+## 交付检查（Delivery Check）
 
 - Confirm the touched files stay within the intended domain
 - State whether the editor or plugin must be restarted or rebuilt
 - Record known limitations
 - Complete at least one real regression, or state clearly why it was not completed
 
-## Additional Resources
+## 附加资源（Additional Resources）
 
-- For material reconstruction planning from exported packages: [material-reconstruction.md](material-reconstruction.md)
-- For Unity-to-UE scene and lighting migration: [unity-to-ue.md](unity-to-ue.md)
+- 材质重建规划（Material Reconstruction Planning）：[material-reconstruction.md](material-reconstruction.md)
+- Unity 到 UE 场景与灯光迁移：[unity-to-ue.md](unity-to-ue.md)

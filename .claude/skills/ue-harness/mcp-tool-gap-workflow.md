@@ -1,83 +1,83 @@
-# MCP Tool Gap Workflow
+# MCP 工具缺口检测流程（Tool Gap Workflow）
 
-This workflow defines when an agent should treat a workaround as an MCP capability gap and record it for later implementation.
+> **Language convention**: detection steps, priority scale, and output rules are in English. Goal descriptions and lifecycle explanations are in Chinese.
 
-## Goal
+## 目标
 
-Keep normal task execution moving, while collecting repeatable MCP tool needs in one place.
+在保证正常任务推进的同时，将可复现的 MCP 能力缺口集中记录，用于后续实现。
 
-Agents should not stop every time a fallback is needed. They should finish the user task when it is safe, then record the missing or weak MCP capability with enough evidence for implementation.
+Agent 不应每次遇到 fallback 就停下来。应在安全完成用户任务后，将有足够证据的缺失或薄弱 MCP 能力记录下来。
 
-## What Counts As A Gap
+## 什么算缺口
 
-Record a gap when any of these are true:
+满足以下任一条件时记录缺口：
 
-- A high-level MCP tool for the user intent does not exist.
-- A high-level MCP tool exists but omits fields required for the task.
-- A high-level MCP tool returns mixed, ambiguous, or poorly normalized data that forces extra filtering.
-- A high-level MCP tool reports failure when the UE operation actually succeeded, or reports success without enough verification.
-- The agent must use `run_python`, raw backend commands, local Python imports, or editor reflection to perform a normal user-facing workflow.
-- The same Python workaround or manual inspection would likely be reused for another asset, graph, blueprint, scene, or render-debug task.
-- The MCP operation works only for a small case but fails for normal batch size, timeout, save, compile, or transaction needs.
+- 针对用户意图的高层 MCP 工具不存在
+- 高层 MCP 工具存在但缺少任务所需字段
+- 高层 MCP 工具返回混乱、模糊或未规范化的数据，强制额外过滤
+- 高层 MCP 工具报告失败但 UE 操作实际已成功，或报告成功但缺乏足够验证
+- Agent 必须使用 `run_python`、raw backend 命令、本地 Python 导入或编辑器反射来完成正常的用户工作流
+- 同一个 Python workaround 或手动检查可能被复用于其他资产、图、蓝图、场景或渲染调试任务
+- MCP 操作仅对小规模用例有效，但无法处理正常批处理大小、超时、保存、编译或事务需求
 
-Do not record a gap for these cases:
+以下情况不记录：
 
-- One-off source reading, grep, build, test, or local file inspection.
-- User explicitly asks for arbitrary Python execution.
-- The task is exploratory and no stable user-facing workflow is clear yet.
-- The MCP tool already supports the workflow and the agent only used Python out of convenience.
+- 一次性源码阅读、grep、构建、测试或本地文件检查
+- 用户明确要求执行任意 Python
+- 任务为探索性，尚无明确的稳定用户工作流
+- MCP 工具已支持该工作流，Agent 仅因便利而使用 Python
 
-## Detection Steps
+## 检测步骤
 
-1. Classify the domain: `scene / asset / material / material_graph / blueprint / niagara / diagnostics / renderdoc`.
-2. Check the relevant domain server first, then `unreal_orchestrator` for routing/discovery if the domain is unclear.
-3. Check `docs/inventory.md`, `docs/commands.md`, and the domain tool module before falling back.
-4. If a fallback is used, identify whether it was for missing capability, missing fields, incorrect behavior, stability, performance, or poor error reporting.
-5. Complete the user task if the fallback is safe and verifiable.
-6. Append a new item to `docs/mcp-tool-gap-checklist.md`.
+1. Classify the domain: `scene / asset / material / material_graph / blueprint / niagara / diagnostics / renderdoc`
+2. Check the relevant domain server first, then `unreal_orchestrator` for routing/discovery if the domain is unclear
+3. Check `inventory.md`, `commands.md`, and the domain tool module before falling back
+4. If a fallback is used, identify whether it was for missing capability, missing fields, incorrect behavior, stability, performance, or poor error reporting
+5. Complete the user task if the fallback is safe and verifiable
+6. Append a new item to `mcp-tool-gap-checklist.md`
 
-## Item Lifecycle
+## 条目生命周期（Item Lifecycle）
 
-- New repeatable gaps go under `Open Items` with `Status: open`.
-- When implementation starts, change the item to `Status: in_progress` only if the work is actively being done.
-- After implementation and verification, change it to `Status: done`, add concise verification notes, and move it to `Done Items`.
-- Do not delete completed items; they are retained as implementation history and regression context.
-- `Open Items` should contain only gaps that still need work.
+- New repeatable gaps go under "待处理条目" (Open Items) with `Status: open`
+- When implementation starts, change to `Status: in_progress` only if actively being worked on
+- After implementation and verification, change to `Status: done`, add concise verification notes, and move to "已完成条目" (Done Items)
+- Do not delete completed items — retained as implementation history and regression context
+- 待处理条目中只应包含仍需解决的缺口
 
-## Required Evidence
+## 必要证据
 
-Each checklist item must include:
+每个检查清单条目必须包含：
 
-- Domain and affected tool.
-- User-facing workflow that failed or required fallback.
-- Exact fallback used, for example `run_python`, raw command, local import, or manual source read.
-- Expected MCP behavior.
-- Minimum proposed tool or parameter change.
-- Verification scenario that should pass after implementation.
+- 域和受影响工具
+- 失败或需要 fallback 的用户工作流
+- 使用的具体 fallback，如 `run_python`、raw command、本地导入或手动源码阅读
+- 预期的 MCP 行为
+- 最小建议的工具或参数变更
+- 实现后应通过的验证场景
 
-## Priority
+## 优先级
 
-Use this priority scale:
+使用以下优先级：
 
-- `P0`: Blocks common workflow or can corrupt assets/graphs.
-- `P1`: Common workflow requires fallback or returns wrong success/failure.
-- `P2`: Missing fields, weak error details, or awkward but workable API.
-- `P3`: Convenience wrapper or documentation-only improvement.
+- `P0`：阻塞常见工作流或可能破坏资产/图
+- `P1`：常见工作流需要 fallback 或返回错误的成功/失败
+- `P2`：缺少字段、错误详情不足或 API 可用但别扭
+- `P3`：便利封装或纯文档改进
 
-## Output Rules
+## 输出规则
 
-When the repo is writable, append the item to `docs/mcp-tool-gap-checklist.md`.
+当仓库可写时，将条目追加到 `mcp-tool-gap-checklist.md`。
 
-When the repo is not writable, include the same checklist item in the final response under `MCP Tool Gap`.
+当仓库不可写时，在最终回复的 `MCP Tool Gap` 下包含相同的检查清单条目。
 
-Do not mix implementation details with speculation. If root cause is unknown, write `Root cause: unknown` and keep the evidence concrete.
+不要将实现细节与推测混在一起。如果根因未知，写"根因未知"并保持证据具体。
 
-## Implementation Readiness
+## 实现就绪条件
 
-A gap is ready for implementation when it includes:
+缺口在包含以下内容后即具备实现条件：
 
-- A reproducible task or asset path pattern.
-- The current tool behavior.
-- The fallback that succeeded or partially succeeded.
-- The expected stable MCP contract.
-- At least one acceptance test or live regression target.
+- 可复现的任务或资产路径模式
+- 当前工具行为
+- 成功或部分成功的 fallback
+- 期望的稳定 MCP 契约
+- 至少一个验收测试或真实回归目标

@@ -1,38 +1,38 @@
-# Material Reconstruction Plan
+# 材质重建方案
 
-## Purpose
+## 用途
 
-`reconstruction plan` is the agent-authored execution contract for Unreal MCP.
+`reconstruction plan` 是 agent 为 Unreal MCP 编写的执行契约。
 
-It should describe:
+应描述：
 
-- what the agent decided to build in UE
-- which source evidence informed that decision
-- which parts are exact versus approximate
-- what Unreal operations must be executed
-- what must be verified afterward
+- agent 决定在 UE 中构建什么
+- 哪些源证据支持该决策
+- 哪些部分是精确的、哪些是近似的
+- 必须执行哪些 Unreal 操作
+- 执行后必须验证什么
 
-This is the right place for agent reasoning output.
+这是 agent 推理输出的正确位置。
 
-## Workflow Role
+## 工作流角色
 
-The intended pipeline is:
+预期流水线：
 
-1. Source exporter writes a `material package`.
-2. Agent reads the package and decides on a reconstruction strategy.
-3. Agent emits a `reconstruction plan`.
-4. Unreal MCP executes the plan.
-5. Unreal MCP verifies the result and returns machine-readable evidence.
+1. 源导出工具输出 `material package`
+2. Agent 读取包并决定重建策略
+3. Agent 输出 `reconstruction plan`
+4. Unreal MCP 执行方案
+5. Unreal MCP 验证结果并返回机器可读的证据
 
-## Design Principles
+## 设计原则
 
-- readable by both agents and deterministic tooling
-- explicit about approximations
-- explicit about unresolved items
-- explicit about resource binding
-- explicit about verification expectations
+- agent 和确定性工具均可读
+- 近似替换要明确标注
+- 未解决项要明确标注
+- 资源绑定要明确
+- 验证期望要明确
 
-## Recommended Top-Level Shape
+## 推荐顶层结构
 
 ```json
 {
@@ -60,7 +60,7 @@ The intended pipeline is:
 }
 ```
 
-## Required Top-Level Fields
+## 必需顶层字段
 
 - `schemaVersion`
 - `planId`
@@ -73,63 +73,43 @@ The intended pipeline is:
 - `unresolved`
 - `verificationGoals`
 
-## Convergence Rules
+## 收敛规则
 
-To keep plans reusable across agents and execution flows, the plan should be
-split conceptually into two layers:
+为使方案可跨 agent 和执行流程复用，应在概念上分为两层：
 
-- `decision layer`
-  Includes `strategy`, `approximations`, and `unresolved`.
-  This is where the agent explains intent, confidence, tradeoffs, and gaps.
+- **决策层**：包含 `strategy`、`approximations` 和 `unresolved`。agent 在此解释意图、置信度、权衡和缺口。
+- **执行层**：包含 `resourceBindings`、`execution` 和 `verificationGoals`。尽可能确定性，避免长篇推理。
 
-- `execution layer`
-  Includes `resourceBindings`, `execution`, and `verificationGoals`.
-  This should be as deterministic as possible and avoid long-form reasoning.
+实际规则：
 
-Practical rules:
+- `strategy.reason` 可以较长；`execution` 内的字段不应长篇
+- `execution` 应优先使用面向 MCP 的结构，而非叙述性文本
+- `resourceBindings` 应足够明确，使另一个 agent 无需重读源包即可导入或复用资源
+- `verificationGoals` 应最小化、稳定且机器可检查
+- 尚不能执行的源证据应归入 `unresolved`，而非放入 `execution` 的临时字段
 
-- `strategy.reason` may be long; fields inside `execution` should not be.
-- `execution` should prefer MCP-facing structures over narrative prose.
-- `resourceBindings` should be explicit enough that another agent can import or
-  reuse assets without re-reading the source package.
-- `verificationGoals` should be minimal, stable, and machine-checkable.
-- Source evidence that cannot yet be executed should go into `unresolved`,
-  not into ad hoc fields inside `execution`.
+## 示例
 
-## Example
-
-A converged example is provided at:
+收敛示例见：
 
 - [material-reconstruction-plan-wing_l.json](/D:/unreal-mcp/docs/examples/material-reconstruction-plan-wing_l.json)
-- [material-reconstruction-plan-wing_l-layout-v2.json](/D:/unreal-mcp/docs/examples/material-reconstruction-plan-wing_l-layout-v2.json)
-  This variant keeps the same first-pass semantic strategy but uses a cleaner lane-based node layout.
+- [material-reconstruction-plan-wing_l-layout-v2.json](/D:/unreal-mcp/docs/examples/material-reconstruction-plan-wing_l-layout-v2.json) — 此变体保持相同的首轮语义策略，但使用更清晰的分通道节点布局
 
 ## `strategy.mode`
 
-Recommended values:
+推荐值：
 
-- `semantic_surface`
-  Rebuild a UE graph from semantic channels and known material conventions.
-
-- `graph_guided_semantic_surface`
-  Mainly rebuild from semantics, but use graph evidence to disambiguate or carry
-  custom logic forward where possible.
-
-- `manual_custom_graph`
-  Build a custom graph where the agent has enough confidence to specify exact
-  nodes and connections.
-
-- `material_instance_only`
-  Reuse a known UE parent and only set parameters/textures.
-
-- `partial_reconstruction`
-  Reconstruct only the reliable subset and record the rest as unresolved.
+- `semantic_surface`：从语义通道和已知材质约定重建 UE 图
+- `graph_guided_semantic_surface`：主要从语义重建，但尽可能利用图证据来消除歧义或延续自定义逻辑
+- `manual_custom_graph`：当 agent 有足够信心指定精确节点和连接时构建自定义图
+- `material_instance_only`：复用已知 UE 父材质，仅设置参数/贴图
+- `partial_reconstruction`：仅重建可靠子集，其余记录为未解决
 
 ## `resourceBindings`
 
-This section bridges package resources to UE assets.
+此部分将包资源桥接到 UE 资产。
 
-Recommended entry shape:
+推荐条目结构：
 
 ```json
 {
@@ -145,7 +125,7 @@ Recommended entry shape:
 }
 ```
 
-Recommended `status` values:
+推荐 `status` 值：
 
 - `existing`
 - `needs_import`
@@ -154,9 +134,9 @@ Recommended `status` values:
 
 ## `execution`
 
-This section is the MCP-facing plan.
+此部分是面向 MCP 的执行方案。
 
-Recommended shape:
+推荐结构：
 
 ```json
 {
@@ -183,23 +163,22 @@ Recommended shape:
 
 ### `execution.graph.recipe`
 
-This should match or translate directly into the current UE material graph
-builder payload:
+应匹配或直接翻译为当前 UE 材质图构建器的负载：
 
 - `nodes`
 - `connections`
 - `properties`
 
-The key point is:
+关键点：
 
-- the package is for the agent
-- the recipe is for Unreal execution
+- 包面向 agent
+- recipe 面向 Unreal 执行
 
 ## `approximations`
 
-This section records intentional deviations from source behavior.
+此部分记录有意偏离源行为的地方。
 
-Recommended entry shape:
+推荐条目结构：
 
 ```json
 {
@@ -210,7 +189,7 @@ Recommended entry shape:
 }
 ```
 
-Recommended approximation kinds:
+推荐近似类型：
 
 - `semantic_conversion`
 - `graph_simplification`
@@ -220,10 +199,9 @@ Recommended approximation kinds:
 
 ## `unresolved`
 
-This section records source evidence the agent could not safely turn into UE
-operations.
+此部分记录 agent 无法安全转换为 UE 操作的源证据。
 
-Recommended entry shape:
+推荐条目结构：
 
 ```json
 {
@@ -237,7 +215,7 @@ Recommended entry shape:
 }
 ```
 
-Recommended unresolved kinds:
+推荐未解决类型：
 
 - `missing_texture_binding`
 - `custom_graph_logic`
@@ -247,9 +225,9 @@ Recommended unresolved kinds:
 
 ## `verificationGoals`
 
-This section defines what the MCP layer must verify after execution.
+此部分定义 MCP 层执行后必须验证的内容。
 
-Recommended entry shape:
+推荐条目结构：
 
 ```json
 [
@@ -274,48 +252,47 @@ Recommended entry shape:
 ]
 ```
 
-## Minimum Useful Plan
+## 最小可行方案
 
-For the current Unity workflow, the minimum useful plan should support:
+对于当前 Unity 工作流，最小可行方案应支持：
 
-- creating a material
-- importing or binding textures
-- building a core PBR graph
-- recording approximations
-- recording unresolved custom logic
-- requesting graph verification
+- 创建材质
+- 导入或绑定贴图
+- 构建核心 PBR 图
+- 记录近似替换
+- 记录未解决的自定义逻辑
+- 请求图验证
 
-That is enough to make the agent useful before solving arbitrary Shader Graph
-translation.
+这足以使 agent 在解决任意 Shader Graph 翻译之前就具备实用价值。
 
-## Recommended Near-Term Execution Modes
+## 推荐的近期执行模式
 
-### Mode A: semantic reconstruction
+### 模式 A：语义重建
 
-Use:
+使用：
 
 - `manifest.json`
-- semantic channels
-- texture bindings
-- surface settings
+- 语义通道
+- 贴图绑定
+- 表面设置
 
-Ignore:
+忽略：
 
-- most graph internals except as evidence
+- 大部分图内部结构，仅作证据参考
 
-### Mode B: graph-guided reconstruction
+### 模式 B：图引导重建
 
-Use:
+使用：
 
-- semantic channels as the main path
-- graph evidence to detect special outputs, custom branches, or subgraph usage
+- 语义通道作为主路径
+- 图证据检测特殊输出、自定义分支或子图使用
 
-Do not require:
+不要求：
 
-- exact Unity node-for-node replay
+- 精确的 Unity 逐节点回放
 
-### Mode C: exact custom recipe
+### 模式 C：精确自定义 recipe
 
-Only use when the agent has enough evidence to specify an exact UE recipe.
+仅当 agent 有足够证据指定精确 UE recipe 时使用。
 
-This should be opt-in and confidence-gated, not the default.
+应为 opt-in 且需满足置信度门槛，不应作为默认选项。

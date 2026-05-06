@@ -1,10 +1,10 @@
 {
-  "_comment": "Recommended: unreal-mcp (all UE domain tools) + renderdoc-mcp (external RenderDoc analysis). The orchestrator is included for optional routing/discovery.",
+  "_comment": "Recommended: unreal-mcp (all UE domain tools) + renderdoc-mcp (external RenderDoc analysis). Add unreal_orchestrator.server separately only when optional routing/discovery is needed.",
   "mcpServers": {
     "unreal-mcp": {
       "command": "python",
       "args": ["-m", "unreal_mcp.server"],
-      "cwd": "D:/unreal-mcp",
+      "cwd": "D:/ue-mcp/unreal-mcp",
       "env": {
         "UE_HOST": "127.0.0.1",
         "UE_PORT": "55557",

@@ -1386,6 +1386,15 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertFalse(hasattr(orchestrator_server, "SCENE_TOOLS"))
         self.assertFalse(hasattr(orchestrator_server, "ASSET_TOOLS"))
 
+    def test_default_mcp_config_exposes_unified_tool_surface(self) -> None:
+        config = json.loads(Path("config/mcp_config.example.json").read_text(encoding="utf-8"))
+        servers = config["mcpServers"]
+
+        self.assertIn("unreal-mcp", servers)
+        self.assertEqual(servers["unreal-mcp"]["args"], ["-m", "unreal_mcp.server"])
+        for server in servers.values():
+            self.assertNotEqual(server.get("args"), ["-m", "unreal_orchestrator.server"])
+
     def test_make_guarded_tool_preserves_signature(self) -> None:
         import inspect
         from unreal_harness_runtime.editor_guard import make_guarded_tool

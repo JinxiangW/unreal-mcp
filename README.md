@@ -44,6 +44,14 @@ python -m unreal_asset.server         # 仅资产工具
 - `UE_EDITOR_EXE=<UnrealEditor.exe>`
 - `UE_EDITOR_CMD=<UnrealEditor-Cmd.exe>`
 
+## MCP 客户端配置
+
+- 默认配置：`config/mcp_config.example.json`
+  - 使用 `python -m unreal_mcp.server`
+  - 直接暴露 `scene`、`asset`、`material`、`material_graph`、`diagnostics`、`renderdoc` 等高层工具
+- `unreal_orchestrator.server` 只用于可选路由/发现，不作为默认工具面
+- RenderDoc sidecar 配置见 `config/mcp_config.multi-server.example.json`
+
 解析当前项目对应引擎源码路径：
 
 ```bash
@@ -56,7 +64,7 @@ python .claude/skills/ue-harness/scripts/resolve_unreal_engine.py
 - 内部 backend：`unreal_backend_tcp`
 - 各域 `server.py` 可独立运行（仅按需调试时使用）
 - `unreal_orchestrator` 仅提供路由/发现（3 个工具，可选）
-- 多服务器 MCP 配置见 `config/mcp_config.multi-server.example.json`
+- MCP 客户端配置见 `config/mcp_config.example.json`
 
 ## 文档
 

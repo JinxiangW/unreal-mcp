@@ -203,6 +203,8 @@
 | material_graph | `analyze_material_graph` | 可用 | legacy tcp wrapper | domain harness | 已做真实环境回归 | 已接入 |
 | material_graph | `create_material_graph_recipe` | 可用 | legacy tcp wrapper | domain harness | 已做真实环境回归 | 已接入 |
 | material_graph | `connect_material_nodes` | 可用 | legacy tcp wrapper | domain harness | 已做真实环境回归 | 已接入 |
+| material_graph | `set_material_graph_property_connections` | 可用 | legacy tcp wrapper + C++ backend | domain harness | 已做真实环境回归 | 已接入 |
+| material_graph | `patch_material_graph` | 可用 | legacy tcp wrapper + C++ backend | domain harness | 已做真实环境回归 | 已接入 |
 | diagnostics | `get_harness_health` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
 | diagnostics | `get_runtime_policy` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
 | diagnostics | `get_transport_port_status` | 可用 | python | orchestrator | 已做真实环境回归 | 已接入 |
@@ -291,7 +293,7 @@
 
 目录：`unreal_material_graph/`
 
-状态：已进入最小可用阶段
+状态：已进入可用阶段；材质图写入/readback/patch 以 C++ UnrealMCP backend 为主，Python 只作为 MCP/TCP 外壳。
 
 当前已实现：
 
@@ -299,6 +301,18 @@
 - `analyze_material_graph`
 - `create_material_graph_recipe`
 - `connect_material_nodes`
+- `set_material_graph_property_connections`
+- `patch_material_graph`
+
+Backend capability notes:
+
+- Supports `Custom.additional_outputs` and calls `RebuildOutputs` after creation.
+- Supports `TextureCoordinate.coordinate_index`.
+- Supports `TransformPosition.source_space/target_space` read/write.
+- Supports `MaterialFunctionCall` input/output pin readback after function resource refresh.
+- Supports material root `property_connections` including `PixelDepthOffset`.
+- Delete/disconnect cleanup covers the same material root property set as readback/write support.
+- Main_Client live regression used only temporary assets under `/Game/MCPTest/MaterialGraphBackend`; no SPOM assets were touched.
 
 ### Diagnostics
 

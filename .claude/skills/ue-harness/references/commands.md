@@ -94,10 +94,27 @@
 
 ## Material Graph
 
-### 已实现
+### Backend capability notes
 
+- `get_material_graph_harness_info`
 - `create_material_graph_recipe`
 - `connect_material_nodes`
+- `set_material_graph_property_connections`
+- `patch_material_graph`
+- `analyze_material_graph`
+- Graph creation, connection, property connection, readback, patch, delete, and disconnect operations are backed by the C++ UnrealMCP material graph backend.
+- Python may be used as the MCP/TCP wrapper, but should not edit material graph wiring through UE Python `MaterialEditingLibrary`.
+- Backend support includes `Custom.additional_outputs` with `RebuildOutputs`, `TextureCoordinate.coordinate_index`, `TransformPosition.source_space/target_space`, `MaterialFunctionCall` resolved pin readback, and material root `property_connections` including `PixelDepthOffset`.
+- For `MaterialFunctionCall` outputs, prefer named `source_output` values such as the function output name; readback returns the resolved `Output_N` pin.
+- Live regression on Main_Client used temporary assets under `/Game/MCPTest/MaterialGraphBackend` and deleted them after verification.
+
+### 已实现
+
+- `get_material_graph_harness_info`
+- `create_material_graph_recipe`
+- `connect_material_nodes`
+- `set_material_graph_property_connections`
+- `patch_material_graph`
 - `analyze_material_graph`
 
 说明：

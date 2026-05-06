@@ -601,6 +601,74 @@ class MaterialGraphContractTests(unittest.TestCase):
         self.assertIn("TransformExpr->TransformType", source)
         self.assertIn("TransformSourceTypeToString", source)
 
+    def test_cpp_material_graph_supports_custom_additional_outputs(self) -> None:
+        source_path = (
+            Path(__file__).resolve().parents[1]
+            / "RenderingMCP"
+            / "Plugins"
+            / "UnrealMCP"
+            / "Source"
+            / "UnrealMCP"
+            / "Private"
+            / "Commands"
+            / "EpicUnrealMCPMaterialCommands.cpp"
+        )
+        source = source_path.read_text(encoding="utf-8")
+
+        self.assertIn('TryGetArrayField(TEXT("additional_outputs")', source)
+        self.assertIn('TryGetStringField(TEXT("output_name")', source)
+        self.assertIn('TryGetStringField(TEXT("output_type")', source)
+        self.assertIn("FCustomOutput&", source)
+        self.assertIn("CustomExpression->AdditionalOutputs", source)
+        self.assertIn("ResolveCustomOutputType(AdditionalOutputTypeName)", source)
+        self.assertIn("CustomExpression->RebuildOutputs()", source)
+        self.assertIn('NodeObj->SetArrayField(TEXT("additional_outputs")', source)
+        self.assertIn('SetNumberField(TEXT("output_index")', source)
+
+    def test_cpp_material_graph_readback_matches_property_connection_support(self) -> None:
+        source_path = (
+            Path(__file__).resolve().parents[1]
+            / "RenderingMCP"
+            / "Plugins"
+            / "UnrealMCP"
+            / "Source"
+            / "UnrealMCP"
+            / "Private"
+            / "Commands"
+            / "EpicUnrealMCPMaterialCommands.cpp"
+        )
+        source = source_path.read_text(encoding="utf-8")
+
+        for property_name in [
+            "WorldPositionOffset",
+            "Refraction",
+            "PixelDepthOffset",
+            "SubsurfaceColor",
+        ]:
+            self.assertIn(f'TEXT("{property_name}")', source)
+            self.assertIn(f'AddPropertyConnection(TEXT("{property_name}")', source)
+        self.assertIn("SupportedMaterialPropertyNames", source)
+
+    def test_cpp_material_graph_readback_exposes_function_call_pins(self) -> None:
+        source_path = (
+            Path(__file__).resolve().parents[1]
+            / "RenderingMCP"
+            / "Plugins"
+            / "UnrealMCP"
+            / "Source"
+            / "UnrealMCP"
+            / "Private"
+            / "Commands"
+            / "EpicUnrealMCPMaterialCommands.cpp"
+        )
+        source = source_path.read_text(encoding="utf-8")
+
+        self.assertIn("FuncCall->FunctionInputs", source)
+        self.assertIn("FuncCall->FunctionOutputs", source)
+        self.assertIn('NodeObj->SetArrayField(TEXT("function_inputs")', source)
+        self.assertIn('NodeObj->SetArrayField(TEXT("function_outputs")', source)
+        self.assertIn('FunctionOutputObj->SetStringField(TEXT("source_output")', source)
+
     @patch("unreal_material_graph.tools._load_full_graph")
     def test_analyze_material_graph_can_return_full_graph_with_normalized_connections(
         self, mock_load_full_graph
@@ -741,6 +809,56 @@ class MaterialGraphContractTests(unittest.TestCase):
             if check["field"] == "post_node_count"
         ]
         self.assertEqual(post_count_checks[0]["expected"], 7)
+
+    @patch("unreal_material_graph.tools.analyze_material_graph")
+    @patch("unreal_material_graph.tools.build_material_graph")
+    def test_create_material_graph_recipe_passes_custom_additional_outputs(
+        self, mock_build_material_graph, mock_analyze_material_graph
+    ) -> None:
+        mock_analyze_material_graph.side_effect = [
+            {
+                "success": True,
+                "node_count": 0,
+                "connection_count": 0,
+                "property_connections": {},
+                "asset_path": "/Game/Materials/M_Test",
+            },
+            {
+                "success": True,
+                "node_count": 1,
+                "connection_count": 0,
+                "property_connections": {},
+                "asset_path": "/Game/Materials/M_Test",
+            },
+        ]
+        mock_build_material_graph.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "node_count": 1,
+                "connection_count": 0,
+            },
+        }
+        additional_outputs = [
+            {"output_name": "Opacity", "output_type": "Float1"},
+            {"name": "PackedNormal", "type": "Float3"},
+        ]
+
+        result = material_graph_tools.create_material_graph_recipe(
+            material_name="/Game/Materials/M_Test",
+            nodes=[
+                {
+                    "id": "CustomExample",
+                    "type": "Custom",
+                    "code": "return 0;",
+                    "additional_outputs": additional_outputs,
+                }
+            ],
+        )
+
+        self.assertTrue(result["success"])
+        backend_kwargs = mock_build_material_graph.call_args.kwargs
+        self.assertEqual(backend_kwargs["nodes"][0]["additional_outputs"], additional_outputs)
 
     @patch("unreal_material_graph.tools.analyze_material_graph")
     @patch("unreal_material_graph.tools.build_material_graph")

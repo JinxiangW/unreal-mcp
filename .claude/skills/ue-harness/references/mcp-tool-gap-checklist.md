@@ -27,7 +27,22 @@ Agent 在完成真实 Unreal 任务时发现的 MCP 能力缺口记录在此文�
 - Proposed tool contract: Extend `patch_material_graph` with `update_nodes: [{ "node_id" | "node_name", "properties": { ... } }]`, or add `set_material_node_property(asset_path, node_selector, properties, compile, save)`.
 - Verification: Duplicate `/Game/PVFeature/TA/Materials/M_SPOM_Shell_UV1` to `M_SPOM_Shell_UV2`, update only `MaterialExpressionTextureCoordinate_1.coordinate_index` to `2`, then analyze/read back that UV0 remains coordinate 0 and metadata coordinate is 2.
 - Root cause: High-level material graph patch surface lacks existing-node editor-property mutation.
-- Notes: Implemented via `patch_material_graph.update_nodes` and backend `build_material_graph.update_nodes`; verified with contract tests, Python compileall, and `RenderingMCPEditor` build. Live asset regression target remains `/Game/PVFeature/TA/Materials/M_SPOM_Shell_UV2` after reloading the updated plugin.
+- Notes: Implemented via `patch_material_graph.update_nodes` and backend `build_material_graph.update_nodes`; verified with contract tests, Python compileall, Main_Client build/load, and a synthetic Main_Client live regression under `/Game/MCPTest/MaterialGraphBackend`. No SPOM assets were touched for this regression.
+
+### GAP-0003: Material graph backend readback parity for custom outputs and property connections
+
+- Status: done
+- Priority: P1
+- Domain: material_graph
+- Affected tool: `create_material_graph_recipe`, `patch_material_graph`, `analyze_material_graph`
+- Workflow: Create a material function with an inline `Custom` node that exposes additional outputs, call it from a parent material, connect material root properties including `PixelDepthOffset`, and verify graph readback after function refresh, disconnect, and delete-node cleanup.
+- Current behavior: Before this change, `Custom.additional_outputs`, resolved `MaterialFunctionCall` pins, `TransformPosition` spaces, `TextureCoordinate.coordinate_index`, and `PixelDepthOffset` property readback were incomplete or easy to desynchronize when mixed with UE Python graph editing.
+- Fallback used: None for the final workflow. The accepted boundary is Python MCP/TCP wrapper plus C++ material graph backend; no UE Python `MaterialEditingLibrary` graph wiring fallback.
+- Expected behavior: MCP graph tools create, patch, connect, disconnect, delete, and read back material graph structure through the C++ backend, with property readback matching write/delete support.
+- Proposed tool contract: Keep `create_material_function_asset` for function asset creation, then use `create_material_graph_recipe`, `patch_material_graph`, `set_material_graph_property_connections`, and `analyze_material_graph` for graph operations.
+- Verification: Contract tests passed; `compileall` passed; `git diff --check` passed; Main_Client live regression passed with 27 checks using only temporary assets under `/Game/MCPTest/MaterialGraphBackend`, then deleted those assets and confirmed the folder was empty.
+- Root cause: C++ backend readback and cleanup coverage lagged behind graph write support, while UE Python graph editing had stale pin and material property synchronization risks.
+- Notes: `MaterialFunctionCall` output order should not be hard-coded. Use named `source_output` values when building; readback returns resolved `Output_N` pins.
 
 ### GAP-0002: Set material override on existing scene StaticMeshComponent
 

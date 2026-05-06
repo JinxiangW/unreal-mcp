@@ -13,9 +13,10 @@
 
 ## 接手前阅读顺序
 
-1. `.claude/skills/ue-harness/SKILL.md`（内部列出了详细阅读顺序）
-2. 当前任务对应 domain 的 Python/C++ 文件
-3. 必要时读 `.claude/skills/ue-harness/` 下的对应参考文件
+1. `docs/agent-quickstart.md`（默认入口、domain 选择、token 禁忌）
+2. `.claude/skills/ue-harness/SKILL.md`（完整规则）
+3. 当前任务对应 domain 的 Python/C++ 文件
+4. 必要时读 `.claude/skills/ue-harness/` 下的对应参考文件
 
 ## 域边界
 

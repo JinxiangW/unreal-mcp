@@ -346,6 +346,32 @@ class BlueprintToolContractTests(unittest.TestCase):
         self.assertEqual(result["nodes"][0]["name"], "K2Node_CallFunction_20")
         self.assertEqual(result["nodes"][0]["matched_pins"][0]["name"], "Class")
 
+    @patch("unreal_blueprint.tools.raw_analyze_blueprint_graph")
+    def test_analyze_blueprint_graph_defaults_to_summary_payload(
+        self, mock_raw_analyze_blueprint_graph
+    ) -> None:
+        mock_raw_analyze_blueprint_graph.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "blueprint_path": "/Game/Blueprints/BP_Test.BP_Test",
+                "graph_name": "EventGraph",
+                "node_count": 7,
+                "connection_count": 3,
+            },
+        }
+
+        result = blueprint_tools.analyze_blueprint_graph(
+            blueprint_path="/Game/Blueprints/BP_Test.BP_Test"
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["node_count"], 7)
+        self.assertEqual(result["connection_count"], 3)
+        self.assertNotIn("graph_data", result)
+        self.assertTrue(mock_raw_analyze_blueprint_graph.call_args.kwargs["summary_only"])
+        self.assertFalse(mock_raw_analyze_blueprint_graph.call_args.kwargs["result_handle"])
+
     @patch("unreal_blueprint.tools.raw_add_blueprint_node")
     def test_add_point_light_component_node_uses_add_component_by_class(
         self, mock_add_blueprint_node
@@ -1391,9 +1417,18 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         servers = config["mcpServers"]
 
         self.assertIn("unreal-mcp", servers)
-        self.assertEqual(servers["unreal-mcp"]["args"], ["-m", "unreal_mcp.server"])
+        self.assertEqual(servers["unreal-mcp"]["args"], ["-m", "unreal_mcp.slim_server"])
         for server in servers.values():
             self.assertNotEqual(server.get("args"), ["-m", "unreal_orchestrator.server"])
+
+    def test_domain_design_includes_recommended_connection(self) -> None:
+        result = orchestrator_server.get_domain_design("scene")
+
+        self.assertTrue(result["success"])
+        connection = result["design"]["recommended_connection"]
+        self.assertEqual(connection["command"], "python")
+        self.assertEqual(connection["args"], ["-m", "unreal_scene.server"])
+        self.assertTrue(connection["requires_editor_ready"])
 
     def test_make_guarded_tool_preserves_signature(self) -> None:
         import inspect
@@ -1442,6 +1477,49 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertIn("request_renderdoc_capture", domain_names)
         self.assertIn("get_editor_ready_state", domain_names)
         self.assertEqual(len(mcp_server.TOOLS), 78)
+
+    def test_slim_mcp_server_exposes_small_discovery_surface(self) -> None:
+        from unreal_mcp import slim_server
+
+        tool_names = {tool.__name__ for tool in slim_server.TOOLS}
+
+        self.assertLessEqual(len(slim_server.TOOLS), 12)
+        self.assertIn("get_harness_domains", tool_names)
+        self.assertIn("get_domain_design", tool_names)
+        self.assertIn("route_harness_task", tool_names)
+        self.assertIn("get_editor_ready_state", tool_names)
+        self.assertIn("get_token_usage_summary", tool_names)
+        self.assertNotIn("create_asset_with_properties", tool_names)
+
+    def test_read_result_handle_pages_nested_list_with_fields(self) -> None:
+        from unreal_orchestrator.result_store import store_result
+
+        stored = store_result(
+            {
+                "status": "success",
+                "result": {
+                    "nodes": [
+                        {"name": "N0", "type": "Constant", "extra": 0},
+                        {"name": "N1", "type": "Multiply", "extra": 1},
+                        {"name": "N2", "type": "Lerp", "extra": 2},
+                    ]
+                },
+            }
+        )
+
+        result = backend_tools.read_result_handle(
+            stored["result_handle"],
+            path="result.nodes",
+            offset=1,
+            limit=2,
+            fields=["name"],
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["path"], "result.nodes")
+        self.assertEqual(result["total_count"], 3)
+        self.assertEqual(result["returned_count"], 2)
+        self.assertEqual(result["result"], [{"name": "N1"}, {"name": "N2"}])
 
 
 if __name__ == "__main__":

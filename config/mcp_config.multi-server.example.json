@@ -1,9 +1,9 @@
 {
-  "_comment": "Recommended: unreal-mcp (all UE domain tools) + renderdoc-mcp (external RenderDoc analysis). Add unreal_orchestrator.server separately only when optional routing/discovery is needed.",
+  "_comment": "Recommended multi-server setup: slim Unreal discovery server + external RenderDoc analysis. Add Unreal domain servers from mcp_config.slim-domains.example.json as needed.",
   "mcpServers": {
     "unreal-mcp": {
       "command": "python",
-      "args": ["-m", "unreal_mcp.server"],
+      "args": ["-m", "unreal_mcp.slim_server"],
       "cwd": "D:/ue-mcp/unreal-mcp",
       "env": {
         "UE_HOST": "127.0.0.1",

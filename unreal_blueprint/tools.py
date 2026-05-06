@@ -165,7 +165,7 @@ def analyze_blueprint_graph(
     include_node_details: bool = True,
     include_pin_connections: bool = True,
     trace_execution_flow: bool = True,
-    include_full_graph: bool = True,
+    include_full_graph: bool = False,
 ) -> Dict[str, Any]:
     """Read and summarize one blueprint graph."""
     operation_id = _new_operation_id("analyze_blueprint_graph")
@@ -199,9 +199,9 @@ def analyze_blueprint_graph(
     nodes = graph_data.get("nodes") or []
     connections = graph_data.get("connections") or []
     summary = {
-        "node_count": len(nodes),
-        "connection_count": len(connections),
-        "graph_name": graph_data.get("graph_name", graph_name),
+        "node_count": body.get("node_count", len(nodes)),
+        "connection_count": body.get("connection_count", len(connections)),
+        "graph_name": body.get("graph_name") or graph_data.get("graph_name", graph_name),
     }
     payload = {
         "success": True,

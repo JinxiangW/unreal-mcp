@@ -23,22 +23,24 @@ description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP
 
 ## 阅读顺序
 
-1. `references/inventory.md` — 功能清单与状态矩阵
-2. `references/categories.md` — 分层分域索引与故障路由
-3. 当前任务对应域的文件
-4. （需要时）`references/commands.md` `references/test-plan.md` `references/verification.md` `references/workflow.md`
-5. （需要时）`references/mcp-tool-gap-workflow.md`
+1. `../../../docs/agent-quickstart.md` — 默认入口、domain 选择和 token 禁忌
+2. `references/inventory.md` — 功能清单与状态矩阵
+3. `references/categories.md` — 分层分域索引与故障路由
+4. 当前任务对应域的文件
+5. （需要时）`references/commands.md` `references/test-plan.md` `references/verification.md` `references/workflow.md`
+6. （需要时）`references/mcp-tool-gap-workflow.md`
 
 ## 默认入口
 
 1. 先判断任务所属域（domain）：`scene / asset / material / material_graph / diagnostics`
-2. Default entry: `unreal_mcp/server.py` — 统一聚合所有域工具（~80 tools），自带 editor guard
-3. 各域 `server.py` 可独立运行（仅按需调试时使用）
-4. `unreal_orchestrator` exposes only 3 routing/discovery tools — optional, for task routing
-5. Before high-risk live-editor operations, check:
+2. Default entry: `unreal_mcp/slim_server.py` — 只暴露发现、ready 和 token 诊断
+3. Full compatibility entry: `unreal_mcp/server.py` — 聚合所有域工具（~80 tools）
+4. 各域 `server.py` 可独立运行，按任务只启用需要的 domain
+5. `unreal_orchestrator` exposes only 3 routing/discovery tools — optional, for task routing
+6. Before high-risk live-editor operations, check:
    - `get_editor_ready_state`
    - `wait_for_editor_ready` when needed
-6. `unreal_backend_tcp` is an internal backend / fallback — not a default business entrypoint
+7. `unreal_backend_tcp` is an internal backend / fallback — not a default business entrypoint
 
 ## Backend 边界
 
@@ -105,6 +107,9 @@ description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP
 - 不要为 `OneMinus` `Multiply` `Lerp` 或简单直连创建微函数
 - 函数内部优先使用原生 UE material node
 - `Custom` 仅用于确实缺原生节点或源码本来就是自定义逻辑的场景
+- `MaterialFunction` 内的 `Texture2D`/texture object 输入必须配置可预览默认值，不能只放裸输入节点
+- 贴图采样器和输出通道必须匹配语义：颜色贴图走 color/baseColor，mask/roughness/metallic/ao/opacity 走 mask/linear 单通道，normal 走 normal sampler
+- `Custom` 节点只保留实际使用并连接的命名输入，不要留下默认空输入或未使用输入
 
 Operational rules:
 
@@ -116,6 +121,13 @@ Operational rules:
 - Prefer native UE material nodes inside a function
 - Use `Custom` only when the source already uses a custom function or UE node coverage is clearly insufficient
 - Keep `Custom` inline — do not write `.ush`, do not use `include`, do not define local helper functions inside the `Custom` snippet
+- For `MaterialFunction` texture inputs (`FunctionInput` with `Texture2D`, `TextureCube`, texture object style inputs), create a separate preview texture object/texture object parameter node, connect it to the function input `Preview`, and set the preview as the default value where the backend supports it. Do not leave texture inputs without preview/default evidence.
+- Before connecting a `TextureSample` output, decide its semantic first:
+  - `baseColor` / albedo / diffuse: sampler `Color`, connect `RGB` or color output to color consumers only
+  - `normal`: sampler `Normal`, connect to `Normal` only after normal-map evidence
+  - `metallic` / `roughness` / `ao` / `opacity` / `mask`: sampler `Masks` or `LinearColor`, connect the intended single channel (`R/G/B/A`) explicitly
+  - never use a color texture's `RGB` output as a mask input unless source evidence explicitly says that channel is a mask
+- For `Custom` nodes, provide `inputs` only for variables referenced by the custom code and wired by graph connections. If the code has no external inputs, set `inputs` to an empty array or omit it. If an input is not connected or not referenced by code, remove it before building the graph.
 
 ### Build Order
 
@@ -125,9 +137,10 @@ Operational rules:
 4. Create or refresh material functions
 5. Validate each high-risk function individually
 6. Create or rebuild the parent material
-7. Connect one high-risk branch at a time
-8. Re-read and validate after each high-risk branch
-9. Do visual inspection only after structural validation passes
+7. Check compile/errors for every created or modified `MaterialFunction` and `Material`
+8. Connect one high-risk branch at a time
+9. Re-read and validate after each high-risk branch
+10. Do visual inspection only after structural validation passes
 
 ### Required Validation
 
@@ -138,8 +151,14 @@ Operational rules:
   - Example: `UseDissolve`
   - Default values should keep the material visible and debuggable in UE preview
 - Write UE parameter `group` values and verify them on readback
+- Verify every function texture input has preview/default evidence on readback before using the function in a parent material
+- Verify `TextureSample.sampler_type` and connected channel against the intended semantic before claiming material parity
+- Verify `Custom.inputs` readback contains only named, used inputs; empty/default placeholder inputs are a tooling or recipe defect
+- After creating or modifying any `MaterialFunction` or parent `Material`, check UE compile status and logs for errors/warnings before continuing. Treat material compile errors, shader errors, missing inputs, missing functions, and invalid texture object usage as blocking defects, not as cosmetic warnings.
+- If a parent `Material` uses a newly created or refreshed `MaterialFunction`, compile/check the function first, then compile/check the parent material after reconnecting the function call.
 - For functions with internal texture sampling or runtime-space dependencies, require a minimal closed loop:
   - function readback is correct
+  - function compiles without errors
   - parent material compiles
   - structure readback matches expectation
 - After graph edits, do not trust `success: true` alone:
@@ -153,6 +172,10 @@ Operational rules:
 Stop and fix tooling or export before continuing if any of the following occur:
 
 - readback is missing expected nodes, functions, or property connections
+- a texture `FunctionInput` lacks preview/default evidence
+- a mask/roughness/metallic/ao/opacity input is fed by an unconstrained color `RGB` sample without explicit source evidence
+- a `Custom` node has unused, unnamed, or unconnected placeholder inputs
+- any created or modified `MaterialFunction` or parent `Material` reports compile errors, shader errors, missing material functions, missing inputs, or invalid texture object/sample usage
 - the material only compiles by disabling the branch under reconstruction
 - `Missing Material Function` appears
 - a shader assert appears

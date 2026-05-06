@@ -1,9 +1,9 @@
 {
-  "_comment": "Default single-server config. Exposes all Unreal domain tools through unreal_mcp.server, including material_graph tools. Use unreal_orchestrator.server only as an optional routing/discovery entrypoint.",
+  "_comment": "Default slim config. Exposes only discovery, routing, readiness, and token diagnostics. Enable a domain server separately for business tools.",
   "mcpServers": {
     "unreal-mcp": {
       "command": "python",
-      "args": ["-m", "unreal_mcp.server"],
+      "args": ["-m", "unreal_mcp.slim_server"],
       "cwd": "D:/ue-mcp/unreal-mcp",
       "env": {
         "UE_HOST": "127.0.0.1",

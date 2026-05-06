@@ -5,7 +5,8 @@
 ## 目录
 
 - `unreal_mcp/`
-  - 统一对外入口，聚合所有域工具（~80 tools）
+  - `slim_server.py` 为默认瘦入口，只暴露发现、ready 和 token 诊断
+  - `server.py` 为兼容全量入口，聚合所有域工具（~80 tools）
 - `unreal_orchestrator/`
   - 路由与发现入口（3 个工具，可选）
 - `unreal_backend_tcp/`
@@ -24,10 +25,16 @@
 默认入口：
 
 ```bash
+python -m unreal_mcp.slim_server
+```
+
+全量兼容入口：
+
+```bash
 python -m unreal_mcp.server
 ```
 
-单独域或 orchestrator（按需）：
+单独域或 orchestrator（按需启用业务工具）：
 
 ```bash
 python -m unreal_orchestrator.server  # 仅路由/发现
@@ -47,9 +54,10 @@ python -m unreal_asset.server         # 仅资产工具
 ## MCP 客户端配置
 
 - 默认配置：`config/mcp_config.example.json`
-  - 使用 `python -m unreal_mcp.server`
-  - 直接暴露 `scene`、`asset`、`material`、`material_graph`、`diagnostics`、`renderdoc` 等高层工具
-- `unreal_orchestrator.server` 只用于可选路由/发现，不作为默认工具面
+  - 使用 `python -m unreal_mcp.slim_server`
+  - 只暴露路由/发现、ready、token 诊断，避免 agent 加载全量工具 schema
+  - 需要业务工具时，按任务启用对应 domain server；示例见 `config/mcp_config.slim-domains.example.json`
+- `unreal_mcp.server` 保留为 full/all-tools 兼容入口，不建议作为默认配置
 - RenderDoc sidecar 配置见 `config/mcp_config.multi-server.example.json`
 
 解析当前项目对应引擎源码路径：
@@ -60,7 +68,8 @@ python .claude/skills/ue-harness/scripts/resolve_unreal_engine.py
 
 ## 当前结构
 
-- 统一对外入口：`unreal_mcp/server.py`（聚合所有域工具，~80 tools）
+- 默认瘦入口：`unreal_mcp/slim_server.py`（发现、ready、token 诊断）
+- 全量兼容入口：`unreal_mcp/server.py`（聚合所有域工具，~80 tools）
 - 内部 backend：`unreal_backend_tcp`
 - 各域 `server.py` 可独立运行（仅按需调试时使用）
 - `unreal_orchestrator` 仅提供路由/发现（3 个工具，可选）
@@ -69,6 +78,7 @@ python .claude/skills/ue-harness/scripts/resolve_unreal_engine.py
 ## 文档
 
 - `docs/architecture.html`
+- `docs/agent-quickstart.md`
 - `.claude/skills/ue-harness/` — skill 主入口及全部参考文档
 ## 提交约定
 

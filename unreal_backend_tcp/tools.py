@@ -188,9 +188,16 @@ def read_result_handle(
     fields: Optional[List[str]] = None,
     offset: int = 0,
     limit: Optional[int] = None,
+    path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Read a stored large-result handle."""
-    return read_result(result_handle, fields=fields, offset=offset, limit=limit)
+    return read_result(
+        result_handle,
+        fields=fields,
+        offset=offset,
+        limit=limit,
+        path=path,
+    )
 
 
 def release_result_handle(result_handle: str) -> Dict[str, Any]:

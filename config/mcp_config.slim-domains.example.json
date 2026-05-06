@@ -1,0 +1,65 @@
+{
+  "_comment": "Slim discovery server plus optional domain servers. Enable only the domain servers needed for the current task to reduce tool schema tokens.",
+  "mcpServers": {
+    "unreal-mcp": {
+      "command": "python",
+      "args": ["-m", "unreal_mcp.slim_server"],
+      "cwd": "D:/ue-mcp/unreal-mcp",
+      "env": {
+        "UE_HOST": "127.0.0.1",
+        "UE_PORT": "55557",
+        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
+      }
+    },
+    "unreal-scene": {
+      "command": "python",
+      "args": ["-m", "unreal_scene.server"],
+      "cwd": "D:/ue-mcp/unreal-mcp",
+      "env": {
+        "UE_HOST": "127.0.0.1",
+        "UE_PORT": "55557",
+        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
+      }
+    },
+    "unreal-asset": {
+      "command": "python",
+      "args": ["-m", "unreal_asset.server"],
+      "cwd": "D:/ue-mcp/unreal-mcp",
+      "env": {
+        "UE_HOST": "127.0.0.1",
+        "UE_PORT": "55557",
+        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
+      }
+    },
+    "unreal-blueprint": {
+      "command": "python",
+      "args": ["-m", "unreal_blueprint.server"],
+      "cwd": "D:/ue-mcp/unreal-mcp",
+      "env": {
+        "UE_HOST": "127.0.0.1",
+        "UE_PORT": "55557",
+        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
+      }
+    },
+    "unreal-material": {
+      "command": "python",
+      "args": ["-m", "unreal_material.server"],
+      "cwd": "D:/ue-mcp/unreal-mcp",
+      "env": {
+        "UE_HOST": "127.0.0.1",
+        "UE_PORT": "55557",
+        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
+      }
+    },
+    "unreal-material-graph": {
+      "command": "python",
+      "args": ["-m", "unreal_material_graph.server"],
+      "cwd": "D:/ue-mcp/unreal-mcp",
+      "env": {
+        "UE_HOST": "127.0.0.1",
+        "UE_PORT": "55557",
+        "UE_PROJECT_PATH": "D:/UnrealProjects/MyToon/MyToon.uproject"
+      }
+    }
+  }
+}

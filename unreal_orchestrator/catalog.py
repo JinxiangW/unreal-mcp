@@ -5,6 +5,25 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 
+def _domain_connection(
+    server_module: str | None,
+    *,
+    requires_editor_ready: bool,
+) -> Dict[str, Any]:
+    if not server_module:
+        return {
+            "available": False,
+            "reason": "No standalone domain server is available yet.",
+        }
+    return {
+        "available": True,
+        "command": "python",
+        "args": ["-m", server_module],
+        "server_module": server_module,
+        "requires_editor_ready": requires_editor_ready,
+    }
+
+
 DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
     "scene": {
         "domain": "scene",
@@ -27,6 +46,11 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "packages": ["unreal_scene"],
         "server_module": "unreal_scene.server",
+        "recommended_connection": _domain_connection(
+            "unreal_scene.server",
+            requires_editor_ready=True,
+        ),
+        "recommended_usage": "Enable this domain for actor, light, level, viewport, and post-process edits.",
     },
     "asset": {
         "domain": "asset",
@@ -37,6 +61,11 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         "keywords": ["asset", "import", "texture", "fbx", "folder", "content browser"],
         "packages": ["unreal_asset"],
         "server_module": "unreal_asset.server",
+        "recommended_connection": _domain_connection(
+            "unreal_asset.server",
+            requires_editor_ready=True,
+        ),
+        "recommended_usage": "Enable this domain for asset queries, CRUD, import, texture properties, and batch asset edits.",
     },
     "material": {
         "domain": "material",
@@ -53,6 +82,11 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "packages": ["unreal_material"],
         "server_module": "unreal_material.server",
+        "recommended_connection": _domain_connection(
+            "unreal_material.server",
+            requires_editor_ready=True,
+        ),
+        "recommended_usage": "Enable this domain for material assets, material functions, material instances, and parameters.",
     },
     "material_graph": {
         "domain": "material_graph",
@@ -69,6 +103,11 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "packages": ["unreal_material_graph"],
         "server_module": "unreal_material_graph.server",
+        "recommended_connection": _domain_connection(
+            "unreal_material_graph.server",
+            requires_editor_ready=True,
+        ),
+        "recommended_usage": "Enable this domain for material graph readback, node creation, wiring, and patch operations.",
     },
     "renderdoc": {
         "domain": "renderdoc",
@@ -88,6 +127,11 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "packages": ["unreal_renderdoc"],
         "server_module": "unreal_renderdoc.server",
+        "recommended_connection": _domain_connection(
+            "unreal_renderdoc.server",
+            requires_editor_ready=False,
+        ),
+        "recommended_usage": "Enable this domain for UE-side RenderDoc capture context, capture requests, and symbol lookup helpers.",
     },
     "niagara": {
         "domain": "niagara",
@@ -97,6 +141,11 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         "summary": "Niagara graph and emitter workflows.",
         "keywords": ["niagara", "emitter", "particle", "vfx"],
         "packages": [],
+        "recommended_connection": _domain_connection(
+            None,
+            requires_editor_ready=True,
+        ),
+        "recommended_usage": "Niagara remains a planned split; use legacy/internal fallback only when needed.",
     },
     "blueprint_info": {
         "domain": "blueprint_info",
@@ -112,6 +161,11 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "packages": ["unreal_blueprint"],
         "server_module": "unreal_blueprint.server",
+        "recommended_connection": _domain_connection(
+            "unreal_blueprint.server",
+            requires_editor_ready=True,
+        ),
+        "recommended_usage": "Enable this domain for blueprint inspection and structural analysis.",
     },
     "blueprint_graph": {
         "domain": "blueprint_graph",
@@ -127,6 +181,11 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "packages": ["unreal_blueprint"],
         "server_module": "unreal_blueprint.server",
+        "recommended_connection": _domain_connection(
+            "unreal_blueprint.server",
+            requires_editor_ready=True,
+        ),
+        "recommended_usage": "Enable this domain for blueprint graph node, pin, variable, and function edits.",
     },
     "diagnostics": {
         "domain": "diagnostics",
@@ -143,6 +202,11 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "packages": ["unreal_diagnostics"],
         "server_module": "unreal_diagnostics.server",
+        "recommended_connection": _domain_connection(
+            "unreal_diagnostics.server",
+            requires_editor_ready=False,
+        ),
+        "recommended_usage": "Enable this domain for deeper health, transport, ready-state, and token diagnostics.",
     },
 }
 

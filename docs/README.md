@@ -1,6 +1,7 @@
 # 文档索引
 
 - `architecture.html`：当前架构图
+- `uemcp-feature-document.md`：当前 UE MCP 功能文档
 - `agent-quickstart.md`：agent 默认入口、domain 选择和 token 禁忌
 - `material-graph-ir.md`：材质图 IR 方案
 - `examples/`：示例数据与验证报告

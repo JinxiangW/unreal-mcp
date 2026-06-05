@@ -50,8 +50,7 @@
 
 关键文件：
 
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/MCPServerRunnable.cpp`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/MCPServerRunnable.h`
+- UE 侧插件传输实现（目标项目侧维护，不在本仓库）
 
 什么时候看这层：
 
@@ -69,8 +68,7 @@
 
 关键文件：
 
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/EpicUnrealMCPBridge.cpp`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/EpicUnrealMCPBridge.h`
+- UE 侧插件命令分发实现（目标项目侧维护，不在本仓库）
 
 什么时候看这层：
 
@@ -88,8 +86,9 @@
 
 关键文件：
 
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPCommonUtils.cpp`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPCommonUtils.h`
+- `unreal_backend_tcp/tools.py`
+- `unreal_backend_tcp/common.py`
+- UE 侧属性写入实现（目标项目侧维护，不在本仓库）
 
 什么时候看这层：
 
@@ -123,11 +122,11 @@
 
 关键文件：
 
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPEnvironmentCommands.cpp`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPEnvironmentCommands.h`
+- `unreal_scene/tools.py`
+- `unreal_scene/server.py`
 - 关联共享层：
-  - `EpicUnrealMCPCommonUtils.cpp`
-  - `EpicUnrealMCPBridge.cpp`
+  - `unreal_backend_tcp/tools.py`
+  - UE 侧插件命令实现（目标项目侧维护，不在本仓库）
 
 AI 遇到这些任务时只看：
 
@@ -155,8 +154,8 @@ AI 遇到这些任务时只看：
 
 关键文件：
 
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPEditorCommands.cpp`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPEditorCommands.h`
+- `unreal_asset/tools.py`
+- `unreal_asset/server.py`
 
 AI 遇到这些任务时只看：
 
@@ -176,8 +175,10 @@ AI 遇到这些任务时只看：
 
 关键文件：
 
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPMaterialCommands.cpp`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPMaterialCommands.h`
+- `unreal_material/tools.py`
+- `unreal_material/server.py`
+- `unreal_material_graph/tools.py`
+- `unreal_material_graph/server.py`
 
 AI 遇到这些任务时只看：
 
@@ -196,8 +197,7 @@ AI 遇到这些任务时只看：
 
 关键文件：
 
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPNiagaraCommands.cpp`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPNiagaraCommands.h`
+- UE 侧 Niagara 命令实现（目标项目侧维护，不在本仓库）
 
 AI 遇到这些任务时只看：
 
@@ -214,8 +214,8 @@ AI 遇到这些任务时只看：
 
 关键文件：
 
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPBlueprintCommands.cpp`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPBlueprintCommands.h`
+- `unreal_blueprint/tools.py`
+- `unreal_blueprint/server.py`
 
 AI 遇到这些任务时只看：
 
@@ -236,10 +236,8 @@ AI 遇到这些任务时只看：
 
 关键文件：
 
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/EpicUnrealMCPBlueprintGraphCommands.cpp`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/EpicUnrealMCPBlueprintGraphCommands.h`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Private/Commands/BlueprintGraph/**/*.cpp`
-- `RenderingMCP/Plugins/UnrealMCP/Source/UnrealMCP/Public/Commands/BlueprintGraph/**/*.h`
+- `unreal_blueprint/tools.py`
+- UE 侧蓝图图命令实现（目标项目侧维护，不在本仓库）
 
 AI 遇到这些任务时只看：
 
@@ -260,14 +258,14 @@ AI 遇到这些任务时只看：
 
 - `unreal_orchestrator/server.py`
 - `unreal_backend_tcp/connection.py`
-- `MCPServerRunnable.cpp`
+- UE 侧插件传输实现（目标项目侧维护，不在本仓库）
 
 ### 任务：工具有，但 UE 返回 `Unknown command`
 
 先读：
 
 - `unreal_backend_tcp/tools.py`
-- `EpicUnrealMCPBridge.cpp`
+- UE 侧插件命令分发实现（目标项目侧维护，不在本仓库）
 
 ### 任务：场景灯光 / 后处理 / Actor 编辑失败
 

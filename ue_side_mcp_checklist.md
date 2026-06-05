@@ -112,8 +112,8 @@ These items directly improve `renderdoc-mcp` usefulness without requiring tighte
 
 ## Current Validation Notes
 
-- [x] `editor` capture flow verified against live `RenderingMCP` editor
-- [x] `PIE` capture flow verified against live `RenderingMCP` editor
+- [x] `editor` capture flow verified against live editor
+- [x] `PIE` capture flow verified against live editor
 - [x] `standalone` capture flow verified through `renderdoccmd` + `UnrealEditor.exe -game`
 - [ ] `packaged` capture flow is not yet verified because current project/engine cook fails before a packaged executable is produced
 

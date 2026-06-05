@@ -18,7 +18,6 @@
 - `unreal_material_graph/` — material graph 读取、分析、recipe 构建
 - `unreal_renderdoc/` — UE 侧 RenderDoc 捕获控制与上下文收集
 - `unreal_diagnostics/` — health、ready、transport、token 诊断
-- `RenderingMCP/` — Unreal 测试工程与 `Plugins/UnrealMCP`
 
 ## 启动
 

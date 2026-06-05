@@ -606,95 +606,6 @@ class MaterialToolContractTests(unittest.TestCase):
 
 
 class MaterialGraphContractTests(unittest.TestCase):
-    def test_cpp_material_graph_supports_texcoord_index_and_transform(self) -> None:
-        source_path = (
-            Path(__file__).resolve().parents[1]
-            / "RenderingMCP"
-            / "Plugins"
-            / "UnrealMCP"
-            / "Source"
-            / "UnrealMCP"
-            / "Private"
-            / "Commands"
-            / "EpicUnrealMCPMaterialCommands.cpp"
-        )
-        source = source_path.read_text(encoding="utf-8")
-
-        self.assertIn('TryGetNumberField(TEXT("coordinate_index")', source)
-        self.assertIn("TexCoord->CoordinateIndex", source)
-        self.assertIn("UMaterialExpressionTransform", source)
-        self.assertIn("ResolveTransformSourceType", source)
-        self.assertIn("TransformExpr->TransformType", source)
-        self.assertIn("TransformSourceTypeToString", source)
-
-    def test_cpp_material_graph_supports_custom_additional_outputs(self) -> None:
-        source_path = (
-            Path(__file__).resolve().parents[1]
-            / "RenderingMCP"
-            / "Plugins"
-            / "UnrealMCP"
-            / "Source"
-            / "UnrealMCP"
-            / "Private"
-            / "Commands"
-            / "EpicUnrealMCPMaterialCommands.cpp"
-        )
-        source = source_path.read_text(encoding="utf-8")
-
-        self.assertIn('TryGetArrayField(TEXT("additional_outputs")', source)
-        self.assertIn('TryGetStringField(TEXT("output_name")', source)
-        self.assertIn('TryGetStringField(TEXT("output_type")', source)
-        self.assertIn("FCustomOutput&", source)
-        self.assertIn("CustomExpression->AdditionalOutputs", source)
-        self.assertIn("ResolveCustomOutputType(AdditionalOutputTypeName)", source)
-        self.assertIn("CustomExpression->RebuildOutputs()", source)
-        self.assertIn('NodeObj->SetArrayField(TEXT("additional_outputs")', source)
-        self.assertIn('SetNumberField(TEXT("output_index")', source)
-
-    def test_cpp_material_graph_readback_matches_property_connection_support(self) -> None:
-        source_path = (
-            Path(__file__).resolve().parents[1]
-            / "RenderingMCP"
-            / "Plugins"
-            / "UnrealMCP"
-            / "Source"
-            / "UnrealMCP"
-            / "Private"
-            / "Commands"
-            / "EpicUnrealMCPMaterialCommands.cpp"
-        )
-        source = source_path.read_text(encoding="utf-8")
-
-        for property_name in [
-            "WorldPositionOffset",
-            "Refraction",
-            "PixelDepthOffset",
-            "SubsurfaceColor",
-        ]:
-            self.assertIn(f'TEXT("{property_name}")', source)
-            self.assertIn(f'AddPropertyConnection(TEXT("{property_name}")', source)
-        self.assertIn("SupportedMaterialPropertyNames", source)
-
-    def test_cpp_material_graph_readback_exposes_function_call_pins(self) -> None:
-        source_path = (
-            Path(__file__).resolve().parents[1]
-            / "RenderingMCP"
-            / "Plugins"
-            / "UnrealMCP"
-            / "Source"
-            / "UnrealMCP"
-            / "Private"
-            / "Commands"
-            / "EpicUnrealMCPMaterialCommands.cpp"
-        )
-        source = source_path.read_text(encoding="utf-8")
-
-        self.assertIn("FuncCall->FunctionInputs", source)
-        self.assertIn("FuncCall->FunctionOutputs", source)
-        self.assertIn('NodeObj->SetArrayField(TEXT("function_inputs")', source)
-        self.assertIn('NodeObj->SetArrayField(TEXT("function_outputs")', source)
-        self.assertIn('FunctionOutputObj->SetStringField(TEXT("source_output")', source)
-
     @patch("unreal_material_graph.tools._load_full_graph")
     def test_analyze_material_graph_can_return_full_graph_with_normalized_connections(
         self, mock_load_full_graph
@@ -1271,14 +1182,14 @@ class RenderDocContractTests(unittest.TestCase):
                 },
             },
         ]
-        mock_latest_project_log.return_value = Path("D:/Logs/RenderingMCP.log")
+        mock_latest_project_log.return_value = Path("D:/Logs/ExampleProject.log")
         mock_parse_log_context.return_value = {
-            "log_path": "D:/Logs/RenderingMCP.log",
+            "log_path": "D:/Logs/ExampleProject.log",
             "rhi_name": "D3D12",
             "shader_platform": "PCD3D_SM6",
             "feature_level": "SM6",
         }
-        mock_get_project_path.return_value = Path("D:/Projects/RenderingMCP/RenderingMCP.uproject")
+        mock_get_project_path.return_value = Path("D:/Projects/ExampleProject/ExampleProject.uproject")
         mock_extract_selection_context.return_value = {
             "success": True,
             "selected_actors": [],
@@ -1292,7 +1203,7 @@ class RenderDocContractTests(unittest.TestCase):
         self.assertTrue(result["success"])
         context = result["context"]
         rich_context = result["rich_context"]
-        self.assertEqual(context["engine"]["project"], "RenderingMCP")
+        self.assertEqual(context["engine"]["project"], "ExampleProject")
         self.assertEqual(context["engine"]["rhi"], "D3D12")
         self.assertEqual(context["scene"]["world"], "MyWorld")
         self.assertEqual(context["view"]["size"], [1920, 1080])

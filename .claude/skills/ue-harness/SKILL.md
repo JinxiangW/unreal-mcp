@@ -1,6 +1,6 @@
 ---
 name: ue-harness
-description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP tool behavior, orchestrator or domain backends, diagnostics, material reconstruction planning, Unity-to-UE migration, or the `RenderingMCP/Plugins/UnrealMCP` plugin. Covers domain selection, default MCP entrypoints, backend boundaries, material execution rules, and migration workflows.
+description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP tool behavior, orchestrator or domain backends, diagnostics, material reconstruction planning, or Unity-to-UE migration. Covers domain selection, default MCP entrypoints, backend boundaries, material execution rules, and migration workflows.
 ---
 
 # UE Harness
@@ -19,7 +19,6 @@ description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP
 - `unreal_material` — 材质资产工作流
 - `unreal_material_graph` — 材质图（Material Graph）编辑
 - `unreal_diagnostics` — 诊断
-- `RenderingMCP/Plugins/UnrealMCP` — UE 侧 C++ 插件
 
 ## 阅读顺序
 
@@ -81,7 +80,6 @@ description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP
 4. Do not use generated `.sln` paths as primary authority — they can be stale after switching engines
 5. Search source in this order:
    - project `Source/` and project `Plugins/`
-   - repo plugin `RenderingMCP/Plugins/UnrealMCP/Source/`
    - resolved engine `Source/`
    - resolved engine `Plugins/`
    - resolved engine `Content/Functions/` (for material functions)

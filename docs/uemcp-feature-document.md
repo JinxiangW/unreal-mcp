@@ -126,7 +126,7 @@ flowchart LR
   MaterialGraph --> Backend
   RenderDoc --> Runtime
 
-  Runtime --> UEPlugin["RenderingMCP/Plugins/UnrealMCP"]
+  Runtime --> UEPlugin["UE side plugin"]
   Backend --> UEPlugin
   Asset --> Commandlet["commandlets/asset_import_commandlet.py"]
 ```
@@ -136,7 +136,7 @@ flowchart LR
 - `unreal_orchestrator`：只做路由和发现。
 - `unreal_backend_tcp`：内部 TCP backend，负责 raw command、连接 UE 插件和大结果 handle。
 - `unreal_harness_runtime`：编辑器 ready、live editor Python、commandlet、运行时路径解析。
-- `RenderingMCP/Plugins/UnrealMCP`：UE 侧 C++ 插件，监听 TCP 并执行 C++ 命令。
+- UE 侧插件：监听 TCP 并执行 UE 编辑器命令，按目标项目侧配置维护。
 
 ## 4. Domain 功能总览
 
@@ -582,7 +582,7 @@ python -m unreal_mcp.slim_server
 - `unreal_backend_tcp` 是内部 backend / fallback，不是默认业务入口。
 - `material` 和 `material_graph` 必须区分：材质资产/实例/参数走 `material`，节点图走 `material_graph`。
 - `niagara` 仍是 planned split，没有独立 domain server；需要时走 legacy/internal fallback。
-- C++ 插件改动后必须构建 `RenderingMCPEditor`，已打开的 Unreal Editor 通常需要重启才会加载新 DLL。
+- UE 侧插件改动后，已打开的 Unreal Editor 通常需要重启才会加载新 DLL。
 - 普通工具调用不应隐式启动或重启编辑器。
 - 材质图和蓝图图编辑依赖 UE 侧实际状态，文档不能替代 live 回归。
 
@@ -595,4 +595,3 @@ python -m unreal_mcp.slim_server
 - `unreal_orchestrator/catalog.py`：domain 元数据和路由关键字。
 - `config/mcp_config.example.json`：默认 MCP 客户端配置。
 - `config/mcp_config.slim-domains.example.json`：瘦入口 + domain server 配置示例。
-- `RenderingMCP/Plugins/UnrealMCP`：UE 侧 C++ 插件源码。

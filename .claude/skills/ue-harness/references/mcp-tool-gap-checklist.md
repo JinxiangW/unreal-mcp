@@ -57,7 +57,7 @@ Agent 在完成真实 Unreal 任务时发现的 MCP 能力缺口记录在此文�
 - Proposed tool contract: Add `set_actor_component_material(actor_name_or_label, component_name?, material_slot, material_asset_path, save_level?)`, or extend `apply_scene_actor_batch` with a `material_overrides` operation for existing actors.
 - Verification: In `/Game/RCF/Maps/Test/Trace/DemoTest`, set `TessellationTestCube_SPOMShell2.StaticMeshComponent0` slot 0 to `/Game/PVFeature/TA/Materials/M_SPOM_Shell_UV2_Inst` and verify `get_material(0)` returns that instance.
 - Root cause: High-level scene harness lacks material override operation for existing components.
-- Notes: Implemented via `set_actor_component_material` plus `apply_scene_actor_batch.material_overrides`; verified with contract tests, Python compileall, and `RenderingMCPEditor` build. Live level regression target remains `/Game/RCF/Maps/Test/Trace/DemoTest` after reloading the updated plugin.
+- Notes: Implemented via `set_actor_component_material` plus `apply_scene_actor_batch.material_overrides`; verified with contract tests and Python compileall. Live level regression target remains `/Game/RCF/Maps/Test/Trace/DemoTest` after reloading the updated plugin.
 
 ## 条目模板
 

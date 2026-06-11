@@ -103,10 +103,14 @@ DOMAIN_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "packages": ["unreal_material_graph"],
         "server_module": "unreal_material_graph.server",
-        "recommended_connection": _domain_connection(
-            "unreal_material_graph.server",
-            requires_editor_ready=True,
-        ),
+        "recommended_connection": {
+            **_domain_connection(
+                "unreal_material_graph.server",
+                requires_editor_ready=True,
+            ),
+            "unguarded_read_tools": ["get_material_graph"],
+            "read_only_tools_require_editor_ready": False,
+        },
         "recommended_usage": "Enable this domain for material graph readback, node creation, wiring, and patch operations.",
     },
     "renderdoc": {

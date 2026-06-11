@@ -604,8 +604,61 @@ class MaterialToolContractTests(unittest.TestCase):
             },
         )
 
+    def test_unreal_connection_receives_raw_json_response_in_chunks(self) -> None:
+        from unreal_backend_tcp.connection import UnrealConnection
+
+        class FakeSocket:
+            def __init__(self) -> None:
+                self.chunks = [
+                    b'{"status":"success",',
+                    b'"result":{"message":"pong"}}',
+                ]
+
+            def settimeout(self, timeout: float) -> None:
+                self.timeout = timeout
+
+            def recv(self, size: int) -> bytes:
+                return self.chunks.pop(0)
+
+        connection = UnrealConnection()
+        connection.socket = FakeSocket()
+
+        response = connection._receive_raw_json_response("ping", timeout_override=1)
+
+        self.assertEqual(response["status"], "success")
+        self.assertEqual(response["result"]["message"], "pong")
+
 
 class MaterialGraphContractTests(unittest.TestCase):
+    @patch("unreal_material_graph.tools._load_full_graph")
+    def test_get_material_graph_returns_full_graph_and_repairs_truncated_types(
+        self, mock_load_full_graph
+    ) -> None:
+        mock_load_full_graph.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "path": "/Game/Materials/M_Test",
+                "asset_type": "Material",
+                "nodes": [
+                    {
+                        "node_id": "Expr_ultiply_17",
+                        "type": "ultiply",
+                        "name": "MaterialExpressionMultiply_17",
+                    }
+                ],
+                "connections": [],
+                "property_connections": {},
+            },
+        }
+
+        result = material_graph_tools.get_material_graph("/Game/Materials/M_Test")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["nodes"][0]["type"], "Multiply")
+        self.assertEqual(result["nodes"][0]["raw_type"], "ultiply")
+        self.assertEqual(result["node_type_counts"], {"Multiply": 1})
+
     @patch("unreal_material_graph.tools._load_full_graph")
     def test_analyze_material_graph_can_return_full_graph_with_normalized_connections(
         self, mock_load_full_graph
@@ -1341,6 +1394,15 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertEqual(connection["args"], ["-m", "unreal_scene.server"])
         self.assertTrue(connection["requires_editor_ready"])
 
+    def test_material_graph_design_marks_direct_read_as_unguarded(self) -> None:
+        result = orchestrator_server.get_domain_design("material_graph")
+
+        self.assertTrue(result["success"])
+        connection = result["design"]["recommended_connection"]
+        self.assertTrue(connection["requires_editor_ready"])
+        self.assertFalse(connection["read_only_tools_require_editor_ready"])
+        self.assertIn("get_material_graph", connection["unguarded_read_tools"])
+
     def test_make_guarded_tool_preserves_signature(self) -> None:
         import inspect
         from unreal_harness_runtime.editor_guard import make_guarded_tool
@@ -1370,7 +1432,7 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertEqual(len(asset_server.TOOLS), 19)
         self.assertEqual(len(blueprint_server.TOOLS), 10)
         self.assertEqual(len(material_server.TOOLS), 10)
-        self.assertEqual(len(material_graph_server.TOOLS), 6)
+        self.assertEqual(len(material_graph_server.TOOLS), 7)
         self.assertEqual(len(renderdoc_server.TOOLS), 12)
         self.assertEqual(len(diagnostics_server.TOOLS), 10)
 
@@ -1384,10 +1446,11 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertIn("create_material_asset", domain_names)
         self.assertIn("set_scene_light_intensity", domain_names)
         self.assertIn("add_blueprint_node", domain_names)
+        self.assertIn("get_material_graph", domain_names)
         self.assertIn("patch_material_graph", domain_names)
         self.assertIn("request_renderdoc_capture", domain_names)
         self.assertIn("get_editor_ready_state", domain_names)
-        self.assertEqual(len(mcp_server.TOOLS), 78)
+        self.assertEqual(len(mcp_server.TOOLS), 79)
 
     def test_slim_mcp_server_exposes_small_discovery_surface(self) -> None:
         from unreal_mcp import slim_server

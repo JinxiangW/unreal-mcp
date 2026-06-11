@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import socket
 import struct
 import threading
@@ -20,8 +21,12 @@ class UnrealConnection:
     CONNECT_TIMEOUT = 10
     DEFAULT_RECV_TIMEOUT = 30
     LARGE_OP_RECV_TIMEOUT = 300
+    PROTOCOL_PROBE_TIMEOUT = 2
     BUFFER_SIZE = 8192
     HEADER_SIZE = 4
+    LENGTH_PREFIXED_PROTOCOL = "length_prefixed"
+    RAW_JSON_PROTOCOL = "raw_json"
+    SUPPORTED_PROTOCOLS = {LENGTH_PREFIXED_PROTOCOL, RAW_JSON_PROTOCOL}
 
     LARGE_OPERATION_COMMANDS = {
         "get_material_graph",
@@ -38,6 +43,7 @@ class UnrealConnection:
         self.connected = False
         self._lock = threading.RLock()
         self._last_error: Optional[str] = None
+        self._protocol: Optional[str] = None
 
     def _create_socket(self) -> socket.socket:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -107,7 +113,11 @@ class UnrealConnection:
         with self._lock:
             self._close_socket_unsafe()
 
-    def _get_timeout_for_command(self, command_type: str) -> int:
+    def _get_timeout_for_command(
+        self, command_type: str, timeout_override: Optional[int] = None
+    ) -> int:
+        if timeout_override is not None:
+            return timeout_override
         if command_type in self.LARGE_OPERATION_COMMANDS:
             return self.LARGE_OP_RECV_TIMEOUT
         return self.DEFAULT_RECV_TIMEOUT
@@ -135,11 +145,13 @@ class UnrealConnection:
 
         return b"".join(chunks)
 
-    def _receive_response(self, command_type: str) -> bytes:
+    def _receive_response(
+        self, command_type: str, timeout_override: Optional[int] = None
+    ) -> bytes:
         if not self.socket:
             raise ConnectionError("Socket not connected")
 
-        timeout = self._get_timeout_for_command(command_type)
+        timeout = self._get_timeout_for_command(command_type, timeout_override)
         try:
             header = self._recv_exact(self.HEADER_SIZE, timeout)
             payload_size = struct.unpack("!I", header)[0]
@@ -149,8 +161,105 @@ class UnrealConnection:
         except socket.timeout as exc:
             raise TimeoutError("Timeout waiting for response") from exc
 
-    def _send_command_once(
-        self, command: str, params: Optional[Dict[str, Any]], attempt: int
+    def _receive_raw_json_response(
+        self, command_type: str, timeout_override: Optional[int] = None
+    ) -> Dict[str, Any]:
+        if not self.socket:
+            raise ConnectionError("Socket not connected")
+
+        timeout = self._get_timeout_for_command(command_type, timeout_override)
+        deadline = time.time() + timeout
+        payload = bytearray()
+        decoder = json.JSONDecoder()
+
+        while time.time() < deadline:
+            remaining = max(deadline - time.time(), 0.1)
+            self.socket.settimeout(remaining)
+            try:
+                chunk = self.socket.recv(self.BUFFER_SIZE)
+            except socket.timeout as exc:
+                raise TimeoutError("Timeout waiting for raw JSON response") from exc
+            if not chunk:
+                raise ConnectionError("Connection closed while receiving raw JSON")
+
+            payload.extend(chunk)
+            try:
+                text = payload.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+
+            stripped = text.lstrip()
+            if not stripped:
+                continue
+            try:
+                response, _ = decoder.raw_decode(stripped)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(response, dict):
+                raise ValueError("Raw JSON response was not an object")
+            return response
+
+        raise TimeoutError("Timeout receiving raw JSON response")
+
+    def _configured_protocol(self) -> Optional[str]:
+        value = os.environ.get("UE_MCP_TCP_PROTOCOL", "auto").strip().lower()
+        value = value.replace("-", "_")
+        aliases = {
+            "length": self.LENGTH_PREFIXED_PROTOCOL,
+            "length_prefixed": self.LENGTH_PREFIXED_PROTOCOL,
+            "framed": self.LENGTH_PREFIXED_PROTOCOL,
+            "raw": self.RAW_JSON_PROTOCOL,
+            "raw_json": self.RAW_JSON_PROTOCOL,
+            "json": self.RAW_JSON_PROTOCOL,
+        }
+        if value in {"", "auto"}:
+            return None
+        protocol = aliases.get(value)
+        if protocol not in self.SUPPORTED_PROTOCOLS:
+            raise ValueError(
+                "Unsupported UE_MCP_TCP_PROTOCOL: "
+                f"{value}. Expected auto, length_prefixed, or raw_json."
+            )
+        return protocol
+
+    def _probe_protocol(self) -> str:
+        errors = []
+        for protocol in (self.LENGTH_PREFIXED_PROTOCOL, self.RAW_JSON_PROTOCOL):
+            try:
+                response = self._send_command_with_protocol(
+                    "ping",
+                    {},
+                    protocol=protocol,
+                    timeout_override=self.PROTOCOL_PROBE_TIMEOUT,
+                )
+                if response.get("status") == "success":
+                    self._protocol = protocol
+                    logger.info("Detected Unreal TCP protocol: %s", protocol)
+                    return protocol
+                errors.append(f"{protocol}: {response.get('error') or response}")
+            except Exception as exc:
+                errors.append(f"{protocol}: {exc}")
+
+        self._protocol = None
+        raise ConnectionError(
+            "Failed to detect Unreal TCP protocol: " + "; ".join(errors)
+        )
+
+    def _resolve_protocol(self) -> str:
+        configured = self._configured_protocol()
+        if configured:
+            return configured
+        if self._protocol:
+            return self._protocol
+        return self._probe_protocol()
+
+    def _send_command_with_protocol(
+        self,
+        command: str,
+        params: Optional[Dict[str, Any]],
+        *,
+        protocol: str,
+        timeout_override: Optional[int] = None,
     ) -> Dict[str, Any]:
         with self._lock:
             if not self.connect():
@@ -164,11 +273,21 @@ class UnrealConnection:
 
                 command_json = json.dumps({"type": command, "params": params or {}})
                 command_bytes = command_json.encode("utf-8")
-                header = struct.pack("!I", len(command_bytes))
                 self.socket.settimeout(10)
-                self.socket.sendall(header + command_bytes)
-                response_data = self._receive_response(command)
-                response = json.loads(response_data.decode("utf-8"))
+                if protocol == self.LENGTH_PREFIXED_PROTOCOL:
+                    header = struct.pack("!I", len(command_bytes))
+                    self.socket.sendall(header + command_bytes)
+                    response_data = self._receive_response(
+                        command, timeout_override=timeout_override
+                    )
+                    response = json.loads(response_data.decode("utf-8"))
+                elif protocol == self.RAW_JSON_PROTOCOL:
+                    self.socket.sendall(command_bytes)
+                    response = self._receive_raw_json_response(
+                        command, timeout_override=timeout_override
+                    )
+                else:
+                    raise ValueError(f"Unsupported Unreal TCP protocol: {protocol}")
 
                 if response.get("status") == "error":
                     logger.warning("Unreal returned error: %s", response.get("error"))
@@ -182,6 +301,21 @@ class UnrealConnection:
                 return response
             finally:
                 self._close_socket_unsafe()
+
+    def _send_command_once(
+        self, command: str, params: Optional[Dict[str, Any]], attempt: int
+    ) -> Dict[str, Any]:
+        protocol = self._resolve_protocol()
+        try:
+            return self._send_command_with_protocol(
+                command,
+                params,
+                protocol=protocol,
+            )
+        except (ConnectionError, TimeoutError, socket.error, OSError):
+            if self._configured_protocol() is None:
+                self._protocol = None
+            raise
 
     def send_command(
         self, command: str, params: Optional[Dict[str, Any]] = None

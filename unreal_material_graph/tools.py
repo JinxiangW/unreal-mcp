@@ -151,6 +151,7 @@ _UPDATE_NODE_PROPERTY_ALIASES = {
     "MaterialExpressionEditorY": "pos_y",
     "Desc": "desc",
 }
+_MATERIAL_EXPRESSION_PREFIX = "MaterialExpression"
 
 
 def _normalize_update_node_schema(update: Dict[str, Any]) -> Dict[str, Any]:
@@ -188,6 +189,30 @@ def _node_matches_selector(node: Dict[str, Any], selector: Dict[str, Any]) -> bo
     return bool(node_id or node_name or node_type)
 
 
+def _infer_material_expression_type_from_name(name: Any) -> Optional[str]:
+    if not isinstance(name, str) or not name.startswith(_MATERIAL_EXPRESSION_PREFIX):
+        return None
+    suffix = name[len(_MATERIAL_EXPRESSION_PREFIX) :]
+    if not suffix:
+        return None
+    return suffix.split("_", 1)[0] or None
+
+
+def _normalize_node_payload(node: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(node)
+    inferred_type = _infer_material_expression_type_from_name(normalized.get("name"))
+    if not inferred_type:
+        return normalized
+
+    raw_type = normalized.get("type")
+    if not isinstance(raw_type, str) or not raw_type:
+        normalized["type"] = inferred_type
+    elif raw_type != inferred_type and inferred_type[1:] == raw_type:
+        normalized["raw_type"] = raw_type
+        normalized["type"] = inferred_type
+    return normalized
+
+
 def _read_node_property(node: Dict[str, Any], property_name: str) -> Any:
     aliases = [property_name, _UPDATE_NODE_PROPERTY_ALIASES.get(property_name)]
     for alias in aliases:
@@ -201,7 +226,10 @@ def _normalize_graph_payload(
     *,
     include_legacy_connection_keys: bool,
 ) -> Dict[str, Any]:
-    nodes = list(result.get("nodes") or [])
+    nodes = [
+        _normalize_node_payload(node) if isinstance(node, dict) else node
+        for node in (result.get("nodes") or [])
+    ]
     connections = [
         _normalize_connection_schema(
             connection,
@@ -236,6 +264,7 @@ def get_material_graph_harness_info() -> Dict[str, Any]:
         "status": "available_via_internal_backend",
         "supports": [
             "graph_read",
+            "direct_graph_read",
             "graph_analysis",
             "material_node_creation",
             "graph_connections",
@@ -270,6 +299,21 @@ def _load_full_graph(asset_path: str) -> Dict[str, Any]:
         if fetched.get("success") and isinstance(fetched.get("result"), dict):
             return fetched["result"]
     return response
+
+
+def get_material_graph(
+    asset_path: str,
+    include_full_graph: bool = True,
+    include_legacy_connection_keys: bool = True,
+) -> Dict[str, Any]:
+    """Read a material graph directly through the C++ TCP backend."""
+    payload = analyze_material_graph(
+        asset_path=asset_path,
+        include_full_graph=include_full_graph,
+        include_legacy_connection_keys=include_legacy_connection_keys,
+    )
+    payload["operation_id"] = _new_operation_id("get_material_graph")
+    return payload
 
 
 def analyze_material_graph(

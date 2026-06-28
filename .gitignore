@@ -7,3 +7,5 @@ Intermediate/
 Saved/
 Binaries/
 logs/
+*.egg-info/
+uv.lock

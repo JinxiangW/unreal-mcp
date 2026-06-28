@@ -68,6 +68,8 @@ def get_material_harness_info() -> Dict[str, Any]:
         "target_backend": "ue_python_and_cpp_material_backend",
         "supports": [
             "material_assets",
+            "material_asset_inspection",
+            "material_dependency_inspection",
             "material_function_assets",
             "material_instances",
             "material_instance_property_updates",
@@ -218,6 +220,308 @@ else:
         "verification": {"verified": True, "checks": []},
         "asset_path": asset_path,
         **names,
+    }
+
+
+def get_material_info(
+    asset_path: str,
+    include_parameters: bool = True,
+) -> Dict[str, Any]:
+    """Read compact material or material-instance asset facts."""
+    operation_id = _new_operation_id("get_material_info")
+    normalized_path = (asset_path or "").strip()
+    if not normalized_path:
+        return _structured_material_failure(
+            operation_id,
+            asset_path,
+            "asset_path must not be empty",
+        )
+
+    body = f"""
+asset_path = {python_literal(normalized_path)}
+include_parameters = {str(bool(include_parameters))}
+
+def _mcp_simple(value):
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return round(value, 6)
+    if isinstance(value, unreal.LinearColor):
+        return {{"r": round(value.r, 6), "g": round(value.g, 6), "b": round(value.b, 6), "a": round(value.a, 6)}}
+    if hasattr(value, "get_path_name"):
+        try:
+            return value.get_path_name()
+        except Exception:
+            pass
+    if hasattr(value, "get_name"):
+        try:
+            return value.get_name()
+        except Exception:
+            pass
+    return str(value)
+
+def _mcp_read_prop(obj, field):
+    try:
+        return True, _mcp_simple(obj.get_editor_property(field))
+    except Exception as exc:
+        return False, str(exc)
+
+def _mcp_read_parameter_values(asset):
+    names = {{
+        "scalar": [],
+        "vector": [],
+        "texture": [],
+        "static_switch": [],
+    }}
+    values = {{
+        "scalar": {{}},
+        "vector": {{}},
+        "texture": {{}},
+        "static_switch": {{}},
+    }}
+    lib = unreal.MaterialEditingLibrary
+    readers = [
+        ("scalar", "get_scalar_parameter_names", "get_material_instance_scalar_parameter_value"),
+        ("vector", "get_vector_parameter_names", "get_material_instance_vector_parameter_value"),
+        ("texture", "get_texture_parameter_names", "get_material_instance_texture_parameter_value"),
+        ("static_switch", "get_static_switch_parameter_names", "get_material_instance_static_switch_parameter_value"),
+    ]
+    for kind, list_fn, value_fn in readers:
+        try:
+            names[kind] = [str(item) for item in getattr(lib, list_fn)(asset)]
+        except Exception:
+            names[kind] = []
+        for param_name in names[kind]:
+            try:
+                values[kind][param_name] = _mcp_simple(getattr(lib, value_fn)(asset, param_name))
+            except Exception:
+                pass
+    return names, values
+
+asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+if asset is None:
+    _mcp_emit({{"success": False, "error": f"Material asset not found: {{asset_path}}"}})
+    return
+
+info = {{
+    "name": asset.get_name(),
+    "path": unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(asset),
+    "class": asset.get_class().get_name() if hasattr(asset, "get_class") else type(asset).__name__,
+}}
+failed = []
+for field in (
+    "parent",
+    "material_domain",
+    "blend_mode",
+    "shading_model",
+    "shading_models",
+    "two_sided",
+    "use_material_attributes",
+    "dithered_lod_transition",
+    "translucency_lighting_mode",
+):
+    ok, value = _mcp_read_prop(asset, field)
+    if ok:
+        info[field] = value
+
+if include_parameters:
+    parameter_names, parameter_values = _mcp_read_parameter_values(asset)
+    info["parameter_names"] = parameter_names
+    info["parameter_values"] = parameter_values
+
+_mcp_emit({{"success": True, "material": info, "failed": failed}})
+"""
+    result = run_editor_python(wrap_editor_python(body))
+    if not result.get("success"):
+        return _structured_material_failure(
+            operation_id,
+            normalized_path,
+            result.get("error", "get_material_info failed"),
+        )
+    material = result.get("material") or {}
+    checks = [
+        _material_check(
+            normalized_path,
+            "loaded",
+            True,
+            bool(material.get("path")),
+        )
+    ]
+    verified = all(item["ok"] for item in checks)
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "material",
+        "targets": [material.get("path") or normalized_path],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {material.get("path") or normalized_path: material},
+        "verification": {"verified": verified, "checks": checks},
+        "asset_path": material.get("path") or normalized_path,
+        "material": material,
+    }
+
+
+def get_material_dependencies(
+    asset_path: str,
+    recursive: bool = True,
+) -> Dict[str, Any]:
+    """Read material parent chain and asset-registry dependency hints."""
+    operation_id = _new_operation_id("get_material_dependencies")
+    normalized_path = (asset_path or "").strip()
+    if not normalized_path:
+        return _structured_material_failure(
+            operation_id,
+            asset_path,
+            "asset_path must not be empty",
+        )
+
+    body = f"""
+asset_path = {python_literal(normalized_path)}
+recursive = {str(bool(recursive))}
+
+def _mcp_ref(obj):
+    if obj is None:
+        return None
+    return {{
+        "name": obj.get_name() if hasattr(obj, "get_name") else str(obj),
+        "path": obj.get_path_name() if hasattr(obj, "get_path_name") else None,
+        "class": obj.get_class().get_name() if hasattr(obj, "get_class") else type(obj).__name__,
+    }}
+
+def _mcp_parent_chain(asset):
+    chain = []
+    seen = set()
+    current = asset
+    while current is not None:
+        try:
+            parent = current.get_editor_property("parent")
+        except Exception:
+            parent = None
+        if parent is None:
+            break
+        ref = _mcp_ref(parent)
+        key = ref.get("path") if ref else None
+        if not key or key in seen:
+            break
+        seen.add(key)
+        chain.append(ref)
+        current = parent if recursive else None
+    return chain
+
+def _mcp_registry_dependencies(asset):
+    deps = []
+    errors = []
+    try:
+        registry = unreal.AssetRegistryHelpers.get_asset_registry()
+        package_name = asset.get_outermost().get_name()
+        try:
+            options = unreal.AssetRegistryDependencyOptions(
+                include_soft_package_references=True,
+                include_hard_package_references=True,
+                include_searchable_names=False,
+                include_soft_management_references=False,
+                include_hard_management_references=False,
+            )
+            raw_deps = registry.get_dependencies(package_name, options)
+        except Exception:
+            raw_deps = registry.get_dependencies(package_name)
+        deps = [str(item) for item in raw_deps]
+    except Exception as exc:
+        errors.append(str(exc))
+    return deps, errors
+
+def _mcp_texture_parameter_dependencies(asset):
+    textures = []
+    try:
+        names = unreal.MaterialEditingLibrary.get_texture_parameter_names(asset)
+    except Exception:
+        names = []
+    for param_name in names:
+        try:
+            texture = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(asset, str(param_name))
+        except Exception:
+            texture = None
+        ref = _mcp_ref(texture)
+        if ref is not None:
+            ref["parameter"] = str(param_name)
+            textures.append(ref)
+    return textures
+
+asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+if asset is None:
+    _mcp_emit({{"success": False, "error": f"Material asset not found: {{asset_path}}"}})
+    return
+
+registry_dependencies, registry_errors = _mcp_registry_dependencies(asset)
+loaded_dependencies = []
+for dep_path in registry_dependencies:
+    loaded = unreal.EditorAssetLibrary.load_asset(dep_path)
+    ref = _mcp_ref(loaded)
+    if ref is None:
+        ref = {{"path": dep_path, "name": dep_path.rsplit("/", 1)[-1], "class": None}}
+    loaded_dependencies.append(ref)
+
+classified = {{
+    "materials": [],
+    "material_functions": [],
+    "textures": [],
+    "other": [],
+}}
+for dep in loaded_dependencies:
+    cls = str(dep.get("class") or "")
+    if "MaterialFunction" in cls:
+        classified["material_functions"].append(dep)
+    elif cls in ("Material", "MaterialInstanceConstant") or "MaterialInstance" in cls:
+        classified["materials"].append(dep)
+    elif "Texture" in cls:
+        classified["textures"].append(dep)
+    else:
+        classified["other"].append(dep)
+
+texture_params = _mcp_texture_parameter_dependencies(asset)
+for item in texture_params:
+    if item.get("path") and not any(dep.get("path") == item.get("path") for dep in classified["textures"]):
+        classified["textures"].append(item)
+
+payload = {{
+    "asset": _mcp_ref(asset),
+    "parent_chain": _mcp_parent_chain(asset),
+    "dependencies": loaded_dependencies,
+    "classified": classified,
+    "texture_parameter_dependencies": texture_params,
+    "registry_errors": registry_errors,
+}}
+_mcp_emit({{"success": True, "dependencies": payload}})
+"""
+    result = run_editor_python(wrap_editor_python(body))
+    if not result.get("success"):
+        return _structured_material_failure(
+            operation_id,
+            normalized_path,
+            result.get("error", "get_material_dependencies failed"),
+        )
+    dependencies = result.get("dependencies") or {}
+    checks = [
+        _material_check(
+            normalized_path,
+            "asset_loaded",
+            True,
+            bool((dependencies.get("asset") or {}).get("path")),
+        )
+    ]
+    verified = all(item["ok"] for item in checks)
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "material",
+        "targets": [normalized_path],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {normalized_path: dependencies},
+        "verification": {"verified": verified, "checks": checks},
+        "asset_path": normalized_path,
+        **dependencies,
     }
 
 

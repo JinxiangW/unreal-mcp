@@ -1188,6 +1188,7 @@ def get_renderdoc_harness_info() -> Dict[str, Any]:
             "reverse_lookup_renderdoc_symbols",
             "set_renderdoc_debug_workflow",
             "request_renderdoc_capture",
+            "capture_frame",
             "capture_current_selection",
             "capture_current_viewport_issue",
             "capture_renderdoc_diff_pair",
@@ -2093,6 +2094,28 @@ def capture_current_selection(
     if result.get("success"):
         result["selection_context"] = selection_context
     return result
+
+
+def capture_frame(
+    workflow: str = "editor",
+    capture_name: Optional[str] = None,
+    notes: Optional[str] = None,
+    after_frames: int = 0,
+    capture_dir: Optional[str] = None,
+    wait_timeout_seconds: int = 90,
+) -> Dict[str, Any]:
+    """Capture one frame through the UE-side RenderDoc capture workflow."""
+    return request_renderdoc_capture(
+        workflow=workflow,
+        after_frames=after_frames,
+        capture_name=capture_name,
+        notes=notes,
+        include_selection=True,
+        capture_dir=capture_dir,
+        wait_timeout_seconds=wait_timeout_seconds,
+        capture_frame_count=1,
+        capture_reason=capture_name or notes or "capture_frame",
+    )
 
 
 def capture_current_viewport_issue(

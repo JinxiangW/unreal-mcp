@@ -58,6 +58,49 @@ class AssetToolContractTests(unittest.TestCase):
         self.assertEqual(props["compression_settings"]["value"], 1)
         self.assertFalse(props["srgb"])
 
+    @patch("unreal_asset.tools.run_editor_python")
+    def test_load_asset_returns_compact_metadata(self, mock_run_editor_python) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "asset": {
+                "name": "BP_ToonDisplay",
+                "path": "/Toon/Render/Blueprints/BP_ToonDisplay.BP_ToonDisplay",
+                "class": "Blueprint",
+                "loaded": True,
+            },
+        }
+
+        result = asset_tools.load_asset(
+            "/Toon/Render/Blueprints/BP_ToonDisplay.BP_ToonDisplay"
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["asset"]["class"], "Blueprint")
+
+    @patch("unreal_asset.tools.run_editor_python")
+    def test_get_object_properties_reads_references(self, mock_run_editor_python) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "object_path": "/Game/Map.Map:PersistentLevel.Actor",
+            "object_name": "Actor",
+            "object_class": "BP_ToonDisplay_C",
+            "properties": {
+                "SourcePrimitiveComponent": "/Game/Map.Map:PersistentLevel.Actor.Source",
+                "TargetPrimitiveComponents": [
+                    "/Game/Map.Map:PersistentLevel.Actor.Target"
+                ],
+            },
+            "failed_properties": [],
+        }
+
+        result = asset_tools.get_object_properties(
+            "/Game/Map.Map:PersistentLevel.Actor",
+            ["SourcePrimitiveComponent", "TargetPrimitiveComponents"],
+        )
+
+        self.assertTrue(result["success"])
+        self.assertIn("TargetPrimitiveComponents", result["properties"])
+
     def test_asset_harness_advertises_material_function_creation(self) -> None:
         result = asset_tools.get_asset_harness_info()
 
@@ -304,6 +347,35 @@ class BlueprintToolContractTests(unittest.TestCase):
             mock_read_blueprint_content.call_args.kwargs["blueprint_path"],
             "/Game/Blueprints/BP_Test.BP_Test",
         )
+
+    @patch("unreal_blueprint.tools.run_editor_python")
+    def test_get_blueprint_components_returns_scs_and_inherited_components(
+        self, mock_run_editor_python
+    ) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "blueprint_path": "/Game/Blueprints/BP_Test.BP_Test",
+            "blueprint_name": "BP_Test",
+            "generated_class": "/Game/Blueprints/BP_Test.BP_Test_C",
+            "components": [
+                {
+                    "name": "Source",
+                    "class": "StaticMeshComponent",
+                    "variable_name": "SourcePrimitiveComponent",
+                    "attach_parent": "DefaultSceneRoot",
+                }
+            ],
+            "inherited_components": [{"name": "DefaultSceneRoot", "class": "SceneComponent"}],
+            "failed": [],
+        }
+
+        result = blueprint_tools.get_blueprint_components(
+            blueprint_path="/Game/Blueprints/BP_Test.BP_Test"
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["components"][0]["variable_name"], "SourcePrimitiveComponent")
+        self.assertEqual(result["inherited_component_count"], 1)
 
     @patch("unreal_blueprint.tools.analyze_blueprint_graph")
     def test_find_blueprint_nodes_filters_by_title_and_pin(
@@ -583,6 +655,78 @@ class MaterialToolContractTests(unittest.TestCase):
             description="Test function",
         )
 
+    @patch("unreal_material.tools.run_editor_python")
+    def test_get_material_info_returns_parent_and_parameters(
+        self, mock_run_editor_python
+    ) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "material": {
+                "name": "MI_Toon",
+                "path": "/Game/Materials/MI_Toon.MI_Toon",
+                "class": "MaterialInstanceConstant",
+                "parent": "/Game/Materials/M_Toon.M_Toon",
+                "blend_mode": {"name": "BLEND_OPAQUE", "value": 0},
+                "parameter_names": {
+                    "scalar": ["OutlineWidth"],
+                    "vector": [],
+                    "texture": [],
+                    "static_switch": [],
+                },
+                "parameter_values": {
+                    "scalar": {"OutlineWidth": 1.0},
+                    "vector": {},
+                    "texture": {},
+                    "static_switch": {},
+                },
+            },
+            "failed": [],
+        }
+
+        result = material_tools.get_material_info("/Game/Materials/MI_Toon.MI_Toon")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["material"]["parent"], "/Game/Materials/M_Toon.M_Toon")
+        self.assertIn("OutlineWidth", result["material"]["parameter_names"]["scalar"])
+
+    @patch("unreal_material.tools.run_editor_python")
+    def test_get_material_dependencies_classifies_dependencies(
+        self, mock_run_editor_python
+    ) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "dependencies": {
+                "asset": {
+                    "path": "/Game/Materials/MI_Toon.MI_Toon",
+                    "class": "MaterialInstanceConstant",
+                },
+                "parent_chain": [
+                    {"path": "/Game/Materials/M_Toon.M_Toon", "class": "Material"}
+                ],
+                "dependencies": [],
+                "classified": {
+                    "materials": [
+                        {"path": "/Game/Materials/M_Toon.M_Toon", "class": "Material"}
+                    ],
+                    "material_functions": [],
+                    "textures": [
+                        {"path": "/Game/Tex/T_Toon.T_Toon", "class": "Texture2D"}
+                    ],
+                    "other": [],
+                },
+                "texture_parameter_dependencies": [],
+                "registry_errors": [],
+            },
+        }
+
+        result = material_tools.get_material_dependencies(
+            "/Game/Materials/MI_Toon.MI_Toon"
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["parent_chain"][0]["class"], "Material")
+        self.assertEqual(result["classified"]["textures"][0]["class"], "Texture2D")
+
     @patch("unreal_backend_tcp.tools.send_command")
     def test_backend_create_material_function_uses_raw_command(
         self, mock_send_command
@@ -658,6 +802,38 @@ class MaterialGraphContractTests(unittest.TestCase):
         self.assertEqual(result["nodes"][0]["type"], "Multiply")
         self.assertEqual(result["nodes"][0]["raw_type"], "ultiply")
         self.assertEqual(result["node_type_counts"], {"Multiply": 1})
+
+    @patch("unreal_material_graph.tools._load_full_graph")
+    def test_get_material_graph_summary_extracts_key_nodes(
+        self, mock_load_full_graph
+    ) -> None:
+        mock_load_full_graph.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "path": "/Game/Materials/M_Toon",
+                "asset_type": "Material",
+                "nodes": [
+                    {"node_id": "Custom_1", "type": "Custom", "code": "return 0;"},
+                    {
+                        "node_id": "Func_1",
+                        "type": "MaterialFunctionCall",
+                        "function": "/Game/MF_Toon.MF_Toon",
+                    },
+                ],
+                "connections": [],
+                "property_connections": {"CustomData0": {"node_id": "Custom_1"}},
+            },
+        }
+
+        result = material_graph_tools.get_material_graph_summary(
+            "/Game/Materials/M_Toon"
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(len(result["custom_nodes"]), 1)
+        self.assertEqual(len(result["function_calls"]), 1)
+        self.assertIn("CustomData0", result["property_connections"])
 
     @patch("unreal_material_graph.tools._load_full_graph")
     def test_analyze_material_graph_can_return_full_graph_with_normalized_connections(
@@ -984,6 +1160,94 @@ class SceneToolContractTests(unittest.TestCase):
         script = mock_run_editor_python.call_args.args[0]
         self.assertIn("selected_component.set_material(material_slot, material)", script)
         self.assertIn("selected_component.get_material(material_slot)", script)
+
+    @patch("unreal_scene.tools._run_editor_python")
+    def test_find_actors_by_class_or_asset_returns_matches(
+        self, mock_run_editor_python
+    ) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "actors": [
+                {
+                    "name": "BP_ToonDisplay_1",
+                    "actor_name": "BP_ToonDisplay_C_1",
+                    "class": "BP_ToonDisplay_C",
+                    "path": "/Game/Map.Map:PersistentLevel.BP_ToonDisplay_C_1",
+                }
+            ],
+            "count": 1,
+            "limit": 50,
+            "filters": {
+                "asset_path": "/Toon/Render/Blueprints/BP_ToonDisplay.BP_ToonDisplay"
+            },
+            "resolved_class": "/Toon/Render/Blueprints/BP_ToonDisplay.BP_ToonDisplay_C",
+        }
+
+        result = scene_tools.find_actors_by_class_or_asset(
+            asset_path="/Toon/Render/Blueprints/BP_ToonDisplay.BP_ToonDisplay"
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["actors"][0]["class"], "BP_ToonDisplay_C")
+
+    @patch("unreal_scene.tools._run_editor_python")
+    def test_get_actor_components_returns_component_properties(
+        self, mock_run_editor_python
+    ) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "actor": {"name": "BP_ToonDisplay_C_1", "label": "BP_ToonDisplay_1"},
+            "components": [
+                {
+                    "name": "Source",
+                    "class": "StaticMeshComponent",
+                    "attach_parent": "DefaultSceneRoot",
+                    "properties": {"visible": True},
+                }
+            ],
+            "component_count": 1,
+            "failed": [],
+        }
+
+        result = scene_tools.get_actor_components(
+            "BP_ToonDisplay_1",
+            properties=["visible"],
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["components"][0]["properties"]["visible"], True)
+
+    @patch("unreal_scene.tools._run_editor_python")
+    def test_get_component_materials_returns_slots(self, mock_run_editor_python) -> None:
+        mock_run_editor_python.return_value = {
+            "success": True,
+            "actor": {"name": "BP_ToonDisplay_C_1", "label": "BP_ToonDisplay_1"},
+            "components": [
+                {
+                    "component": "Source",
+                    "component_class": "StaticMeshComponent",
+                    "slots": [
+                        {
+                            "slot_index": 0,
+                            "slot_name": "Body",
+                            "material": {
+                                "path": "/Game/Materials/MI_Toon.MI_Toon",
+                                "class": "MaterialInstanceConstant",
+                            },
+                        }
+                    ],
+                }
+            ],
+            "component_count": 1,
+        }
+
+        result = scene_tools.get_component_materials("BP_ToonDisplay_1")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            result["components"][0]["slots"][0]["material"]["path"],
+            "/Game/Materials/MI_Toon.MI_Toon",
+        )
 
     @patch("unreal_scene.tools.set_actor_component_material")
     def test_apply_scene_actor_batch_supports_material_overrides(
@@ -1358,6 +1622,22 @@ class RenderDocContractTests(unittest.TestCase):
             changed = result["comparison_metadata"]["structured_inputs"]["cvars"]
             self.assertEqual(changed[0]["name"], "r.ScreenPercentage")
 
+    @patch("unreal_renderdoc.tools.request_renderdoc_capture")
+    def test_capture_frame_wraps_one_frame_request(self, mock_request_capture) -> None:
+        mock_request_capture.return_value = {"success": True, "capture_path": "D:/cap.rdc"}
+
+        result = renderdoc_tools.capture_frame(
+            workflow="editor",
+            capture_name="toon_check",
+            after_frames=2,
+        )
+
+        self.assertTrue(result["success"])
+        mock_request_capture.assert_called_once()
+        kwargs = mock_request_capture.call_args.kwargs
+        self.assertEqual(kwargs["capture_frame_count"], 1)
+        self.assertEqual(kwargs["after_frames"], 2)
+
 
 class PackagingAndExposureContractTests(unittest.TestCase):
     def test_pyproject_includes_unreal_renderdoc_package(self) -> None:
@@ -1428,12 +1708,12 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         from unreal_renderdoc import server as renderdoc_server
         from unreal_diagnostics import server as diagnostics_server
 
-        self.assertEqual(len(scene_server.TOOLS), 12)
-        self.assertEqual(len(asset_server.TOOLS), 19)
-        self.assertEqual(len(blueprint_server.TOOLS), 10)
-        self.assertEqual(len(material_server.TOOLS), 10)
-        self.assertEqual(len(material_graph_server.TOOLS), 7)
-        self.assertEqual(len(renderdoc_server.TOOLS), 12)
+        self.assertEqual(len(scene_server.TOOLS), 15)
+        self.assertEqual(len(asset_server.TOOLS), 22)
+        self.assertEqual(len(blueprint_server.TOOLS), 11)
+        self.assertEqual(len(material_server.TOOLS), 12)
+        self.assertEqual(len(material_graph_server.TOOLS), 8)
+        self.assertEqual(len(renderdoc_server.TOOLS), 13)
         self.assertEqual(len(diagnostics_server.TOOLS), 10)
 
     def test_unified_mcp_server_includes_all_domain_tools(self) -> None:
@@ -1450,7 +1730,7 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertIn("patch_material_graph", domain_names)
         self.assertIn("request_renderdoc_capture", domain_names)
         self.assertIn("get_editor_ready_state", domain_names)
-        self.assertEqual(len(mcp_server.TOOLS), 79)
+        self.assertEqual(len(mcp_server.TOOLS), 90)
 
     def test_slim_mcp_server_exposes_small_discovery_surface(self) -> None:
         from unreal_mcp import slim_server

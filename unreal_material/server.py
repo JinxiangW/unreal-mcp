@@ -8,7 +8,9 @@ from .tools import (
     create_material_asset,
     create_material_function_asset,
     create_material_instance_asset,
+    get_material_dependencies,
     get_material_harness_info,
+    get_material_info,
     get_material_instance_parameter_names,
     set_material_instance_scalar_parameter,
     set_material_instance_texture_parameter,
@@ -19,6 +21,8 @@ from .tools import (
 
 TOOLS = [
     get_material_harness_info,
+    make_guarded_tool("material.get_material_info", get_material_info),
+    make_guarded_tool("material.get_material_dependencies", get_material_dependencies),
     make_guarded_tool("material.create_material_asset", create_material_asset),
     make_guarded_tool("material.create_material_function_asset", create_material_function_asset),
     make_guarded_tool("material.create_material_instance_asset", create_material_instance_asset),

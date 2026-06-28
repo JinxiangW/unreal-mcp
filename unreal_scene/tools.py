@@ -1262,6 +1262,403 @@ _mcp_emit({{
     return _run_editor_python(_wrap_scene_python(body))
 
 
+def find_actors_by_class_or_asset(
+    actor_class: Optional[str] = None,
+    asset_path: Optional[str] = None,
+    name_filter: Optional[str] = None,
+    limit: int = 50,
+) -> Dict[str, Any]:
+    """Find actors in the loaded editor world by class name/path or Blueprint asset."""
+    operation_id = _new_operation_id("find_actors_by_class_or_asset")
+    if not actor_class and not asset_path and not name_filter:
+        return _scene_input_error(
+            operation_id,
+            "actor_class, asset_path, or name_filter is required",
+        )
+    try:
+        normalized_limit = max(1, int(limit))
+    except (TypeError, ValueError):
+        return _scene_input_error(operation_id, "limit must be an integer")
+
+    body = f"""
+actor_class_filter = {_json_literal(actor_class)}
+asset_path = {_json_literal(asset_path)}
+name_filter = {_json_literal(name_filter)}
+limit = {normalized_limit}
+
+def _mcp_resolve_class(actor_class_filter, asset_path):
+    if asset_path:
+        asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+        if asset is None:
+            return None, f"Asset not found: {{asset_path}}"
+        for field in ("generated_class", "skeleton_generated_class"):
+            try:
+                generated = asset.get_editor_property(field)
+                if generated is not None:
+                    return generated, None
+            except Exception:
+                pass
+        if hasattr(asset, "generated_class"):
+            try:
+                return asset.generated_class, None
+            except Exception:
+                pass
+        if hasattr(asset, "get_class"):
+            return asset.get_class(), None
+    if actor_class_filter:
+        if actor_class_filter.startswith("/"):
+            try:
+                loaded = unreal.load_class(None, actor_class_filter)
+                if loaded is not None:
+                    return loaded, None
+            except Exception:
+                pass
+        candidate = getattr(unreal, actor_class_filter, None)
+        if candidate is not None:
+            return candidate, None
+    return None, None
+
+def _mcp_class_matches(actual_class, target_class, actor_class_filter):
+    if target_class is not None:
+        try:
+            if actual_class == target_class or actual_class.is_child_of(target_class):
+                return True
+        except Exception:
+            if actual_class == target_class:
+                return True
+    if actor_class_filter:
+        actual_name = actual_class.get_name() if hasattr(actual_class, "get_name") else str(actual_class)
+        actual_path = actual_class.get_path_name() if hasattr(actual_class, "get_path_name") else actual_name
+        expected = actor_class_filter.lower()
+        return actual_name.lower() == expected or actual_path.lower() == expected or actual_path.lower().endswith("." + expected)
+    return True
+
+target_class, resolve_error = _mcp_resolve_class(actor_class_filter, asset_path)
+actors = []
+for actor in unreal.EditorLevelLibrary.get_all_level_actors():
+    actor_cls = actor.get_class()
+    if (actor_class_filter or asset_path) and not _mcp_class_matches(actor_cls, target_class, actor_class_filter):
+        continue
+    label = None
+    try:
+        label = actor.get_actor_label()
+    except Exception:
+        pass
+    if name_filter:
+        haystack = f"{{actor.get_name()}} {{label or ''}}".lower()
+        if name_filter.lower() not in haystack:
+            continue
+    actors.append({{
+        "name": _mcp_get_actor_identifier(actor),
+        "actor_name": actor.get_name(),
+        "actor_label": label,
+        "class": actor_cls.get_name() if hasattr(actor_cls, "get_name") else str(actor_cls),
+        "class_path": actor_cls.get_path_name() if hasattr(actor_cls, "get_path_name") else None,
+        "path": actor.get_path_name(),
+        "location": _mcp_to_simple(actor.get_actor_location()),
+    }})
+
+actors.sort(key=lambda item: item.get("name") or item.get("actor_name") or "")
+_mcp_emit({{
+    "success": resolve_error is None,
+    "actors": actors[:limit],
+    "count": len(actors),
+    "limit": limit,
+    "filters": {{
+        "actor_class": actor_class_filter,
+        "asset_path": asset_path,
+        "name_filter": name_filter,
+    }},
+    "resolved_class": target_class.get_path_name() if target_class is not None and hasattr(target_class, "get_path_name") else None,
+    "error": resolve_error,
+}})
+"""
+    result = _run_editor_python(_wrap_scene_python(body))
+    actors = result.get("actors") or []
+    filters = result.get("filters") or {
+        "actor_class": actor_class,
+        "asset_path": asset_path,
+        "name_filter": name_filter,
+    }
+    summary = build_query_summary(
+        requested=result.get("limit", normalized_limit),
+        returned=len(actors),
+        total=result.get("count", len(actors)),
+        offset=0,
+        verified=len(actors) if result.get("success") else 0,
+    )
+    if not result.get("success"):
+        return structured_query_failure(
+            operation_id=operation_id,
+            domain="scene",
+            target=asset_path or actor_class or name_filter,
+            error=result.get("error", "find_actors_by_class_or_asset failed"),
+            summary=summary,
+            filters=filters,
+            post_state={"scene_query": {"actors": actors}} if actors else {},
+        )
+    return structured_query_success(
+        operation_id=operation_id,
+        domain="scene",
+        targets=[item.get("name") for item in actors if item.get("name")],
+        post_state={
+            "scene_query": {
+                "count": result.get("count", len(actors)),
+                "limit": result.get("limit", normalized_limit),
+                "actors": actors,
+                "resolved_class": result.get("resolved_class"),
+            }
+        },
+        summary=summary,
+        items=[
+            {
+                "target": item.get("name"),
+                "success": True,
+                "verification": {"verified": True, "checks": []},
+            }
+            for item in actors
+        ],
+        filters=filters,
+        extra={"actors": actors, "resolved_class": result.get("resolved_class")},
+    )
+
+
+def get_actor_components(
+    actor_name_or_label: str,
+    component_class: Optional[str] = None,
+    properties: Optional[list[str]] = None,
+) -> Dict[str, Any]:
+    """List components for a loaded actor and optionally read component properties."""
+    operation_id = _new_operation_id("get_actor_components")
+    actor_name = (actor_name_or_label or "").strip()
+    if not actor_name:
+        return _scene_input_error(operation_id, "actor_name_or_label is required")
+    requested_properties = properties or []
+    if not isinstance(requested_properties, list) or not all(
+        isinstance(item, str) and item.strip() for item in requested_properties
+    ):
+        return _scene_input_error(
+            operation_id,
+            "properties must be an array of non-empty strings when provided",
+            targets=[actor_name],
+        )
+
+    body = f"""
+actor_name = {_json_literal(actor_name)}
+component_class_filter = {_json_literal(component_class)}
+requested_properties = {_json_literal([item.strip() for item in requested_properties])}
+
+def _mcp_component_matches(component, component_class_filter):
+    if not component_class_filter:
+        return True
+    cls = component.get_class()
+    cls_name = cls.get_name() if hasattr(cls, "get_name") else str(cls)
+    cls_path = cls.get_path_name() if hasattr(cls, "get_path_name") else cls_name
+    expected = component_class_filter.lower()
+    return cls_name.lower() == expected or cls_path.lower() == expected or expected in cls_name.lower()
+
+def _mcp_component_entry(component):
+    cls = component.get_class()
+    entry = {{
+        "name": component.get_name(),
+        "class": cls.get_name() if hasattr(cls, "get_name") else str(cls),
+        "class_path": cls.get_path_name() if hasattr(cls, "get_path_name") else None,
+        "path": component.get_path_name(),
+        "owner": component.get_owner().get_path_name() if hasattr(component, "get_owner") and component.get_owner() else None,
+        "properties": {{}},
+    }}
+    try:
+        parent = component.get_attach_parent()
+        entry["attach_parent"] = parent.get_name() if parent else None
+        entry["attach_parent_path"] = parent.get_path_name() if parent else None
+    except Exception:
+        entry["attach_parent"] = None
+        entry["attach_parent_path"] = None
+    for field in requested_properties:
+        try:
+            entry["properties"][field] = _mcp_to_simple(component.get_editor_property(field))
+        except Exception as exc:
+            entry.setdefault("failed_properties", []).append(f"{{field}}: {{exc}}")
+    return entry
+
+actor = _mcp_find_actor(actor_name)
+if actor is None:
+    _mcp_emit({{"success": False, "error": f"Actor not found: {{actor_name}}", "components": []}})
+    return
+
+actor_component_class = getattr(unreal, "ActorComponent", None)
+all_components = list(actor.get_components_by_class(actor_component_class)) if actor_component_class is not None else []
+components = [_mcp_component_entry(component) for component in all_components if _mcp_component_matches(component, component_class_filter)]
+components.sort(key=lambda item: item.get("name") or "")
+failed = []
+for component in components:
+    for failure in component.get("failed_properties", []):
+        failed.append({{"target": component.get("name"), "error": failure}})
+
+_mcp_emit({{
+    "success": len(failed) == 0,
+    "actor": {{
+        "name": actor.get_name(),
+        "label": actor.get_actor_label(),
+        "class": actor.get_class().get_name(),
+        "path": actor.get_path_name(),
+    }},
+    "components": components,
+    "component_count": len(components),
+    "failed": failed,
+}})
+"""
+    result = _run_editor_python(_wrap_scene_python(body))
+    if not result.get("success") and not result.get("components"):
+        return _scene_input_error(
+            operation_id,
+            result.get("error", "get_actor_components failed"),
+            targets=[actor_name],
+        )
+    components = result.get("components") or []
+    failed_changes = [
+        {
+            "target": item.get("target") or actor_name,
+            "field": "component_property",
+            "error": item.get("error"),
+        }
+        for item in result.get("failed", [])
+    ]
+    verified = not failed_changes
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "scene",
+        "targets": [actor_name],
+        "applied_changes": [],
+        "failed_changes": failed_changes,
+        "post_state": {
+            actor_name: {
+                "actor": result.get("actor"),
+                "components": components,
+                "component_count": len(components),
+            }
+        },
+        "verification": {"verified": verified, "checks": []},
+        "actor": result.get("actor"),
+        "components": components,
+        "component_count": len(components),
+    }
+
+
+def get_component_materials(
+    actor_name_or_label: str,
+    component_name: Optional[str] = None,
+    include_empty_slots: bool = True,
+) -> Dict[str, Any]:
+    """Read material slots from PrimitiveComponent-compatible actor components."""
+    operation_id = _new_operation_id("get_component_materials")
+    actor_name = (actor_name_or_label or "").strip()
+    if not actor_name:
+        return _scene_input_error(operation_id, "actor_name_or_label is required")
+
+    body = f"""
+actor_name = {_json_literal(actor_name)}
+component_name = {_json_literal(component_name)}
+include_empty_slots = {str(bool(include_empty_slots))}
+
+def _mcp_material_ref(material):
+    if material is None:
+        return None
+    return {{
+        "name": material.get_name() if hasattr(material, "get_name") else str(material),
+        "path": material.get_path_name() if hasattr(material, "get_path_name") else None,
+        "class": material.get_class().get_name() if hasattr(material, "get_class") else type(material).__name__,
+    }}
+
+def _mcp_component_materials(component):
+    entry = {{
+        "component": component.get_name(),
+        "component_class": component.get_class().get_name(),
+        "component_path": component.get_path_name(),
+        "slots": [],
+    }}
+    try:
+        slot_names = [str(item) for item in component.get_material_slot_names()]
+    except Exception:
+        slot_names = []
+    try:
+        material_count = int(component.get_num_materials())
+    except Exception:
+        material_count = 0
+    for index in range(material_count):
+        try:
+            material = component.get_material(index)
+        except Exception:
+            material = None
+        if material is None and not include_empty_slots:
+            continue
+        slot = {{
+            "slot_index": index,
+            "slot_name": slot_names[index] if index < len(slot_names) else None,
+            "material": _mcp_material_ref(material),
+        }}
+        entry["slots"].append(slot)
+    try:
+        overrides = component.get_editor_property("override_materials")
+        entry["override_materials"] = [_mcp_material_ref(item) for item in overrides]
+    except Exception:
+        entry["override_materials"] = []
+    return entry
+
+actor = _mcp_find_actor(actor_name)
+if actor is None:
+    _mcp_emit({{"success": False, "error": f"Actor not found: {{actor_name}}", "components": []}})
+    return
+
+primitive_class = getattr(unreal, "PrimitiveComponent", None)
+components = list(actor.get_components_by_class(primitive_class)) if primitive_class is not None else []
+if component_name:
+    components = [component for component in components if component.get_name() == component_name]
+
+payload = [_mcp_component_materials(component) for component in components]
+payload.sort(key=lambda item: item.get("component") or "")
+_mcp_emit({{
+    "success": True,
+    "actor": {{
+        "name": actor.get_name(),
+        "label": actor.get_actor_label(),
+        "class": actor.get_class().get_name(),
+        "path": actor.get_path_name(),
+    }},
+    "components": payload,
+    "component_count": len(payload),
+}})
+"""
+    result = _run_editor_python(_wrap_scene_python(body))
+    if not result.get("success"):
+        return _scene_input_error(
+            operation_id,
+            result.get("error", "get_component_materials failed"),
+            targets=[actor_name],
+        )
+    components = result.get("components") or []
+    return {
+        "success": True,
+        "operation_id": operation_id,
+        "domain": "scene",
+        "targets": [actor_name],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {
+            actor_name: {
+                "actor": result.get("actor"),
+                "components": components,
+                "component_count": len(components),
+            }
+        },
+        "verification": {"verified": True, "checks": []},
+        "actor": result.get("actor"),
+        "components": components,
+        "component_count": len(components),
+    }
+
+
 def apply_scene_actor_batch(actor_specs: list[Dict[str, Any]]) -> Dict[str, Any]:
     """Apply a reusable batch of actor spawn/update recipes."""
     operation_id = _new_operation_id("apply_scene_actor_batch")

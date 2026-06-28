@@ -266,6 +266,7 @@ def get_material_graph_harness_info() -> Dict[str, Any]:
             "graph_read",
             "direct_graph_read",
             "graph_analysis",
+            "graph_summary",
             "material_node_creation",
             "graph_connections",
             "graph_patch",
@@ -314,6 +315,80 @@ def get_material_graph(
     )
     payload["operation_id"] = _new_operation_id("get_material_graph")
     return payload
+
+
+def get_material_graph_summary(asset_path: str) -> Dict[str, Any]:
+    """Return a compact material graph summary with key diagnostic node groups."""
+    operation_id = _new_operation_id("get_material_graph_summary")
+    graph_result = analyze_material_graph(
+        asset_path=asset_path,
+        include_full_graph=True,
+        include_legacy_connection_keys=False,
+    )
+    if not graph_result.get("success"):
+        graph_result["operation_id"] = operation_id
+        return graph_result
+
+    nodes = graph_result.get("nodes") or []
+    property_connections = graph_result.get("property_connections") or {}
+    key_nodes = []
+    for node in nodes:
+        node_type = str(node.get("type") or "")
+        if any(
+            token in node_type
+            for token in (
+                "Custom",
+                "CustomOutput",
+                "CustomData",
+                "MaterialFunctionCall",
+                "TextureSample",
+                "TextureObject",
+            )
+        ):
+            key_nodes.append(
+                {
+                    "node_id": node.get("node_id") or node.get("id"),
+                    "name": node.get("name"),
+                    "type": node_type,
+                    "description": node.get("description"),
+                    "function": node.get("function") or node.get("material_function"),
+                    "code": node.get("code"),
+                    "inputs": node.get("inputs"),
+                    "outputs": node.get("outputs"),
+                    "additional_outputs": node.get("additional_outputs"),
+                }
+            )
+
+    summary = {
+        "asset_path": graph_result.get("asset_path", asset_path),
+        "asset_type": graph_result.get("asset_type"),
+        "node_count": graph_result.get("node_count", 0),
+        "connection_count": graph_result.get("connection_count", 0),
+        "property_connection_count": graph_result.get("property_connection_count", 0),
+        "node_type_counts": graph_result.get("node_type_counts", {}),
+        "property_connections": sorted(property_connections.keys()),
+        "custom_nodes": [
+            item for item in key_nodes if "Custom" in str(item.get("type") or "")
+        ],
+        "function_calls": [
+            item for item in key_nodes if str(item.get("type") or "") == "MaterialFunctionCall"
+        ],
+        "texture_nodes": [
+            item for item in key_nodes if "Texture" in str(item.get("type") or "")
+        ],
+        "key_nodes": key_nodes,
+    }
+    return {
+        "success": True,
+        "operation_id": operation_id,
+        "domain": "material_graph",
+        "targets": [asset_path],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {asset_path: summary},
+        "verification": graph_result.get("verification", {"verified": True, "checks": []}),
+        **summary,
+    }
 
 
 def analyze_material_graph(

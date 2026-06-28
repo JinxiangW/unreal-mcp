@@ -10,6 +10,7 @@ from .tools import (
     create_material_graph_recipe,
     get_material_graph,
     get_material_graph_harness_info,
+    get_material_graph_summary,
     patch_material_graph,
     set_material_graph_property_connections,
 )
@@ -17,6 +18,7 @@ from .tools import (
 TOOLS = [
     get_material_graph_harness_info,
     get_material_graph,
+    get_material_graph_summary,
     make_guarded_tool("material_graph.analyze_material_graph", analyze_material_graph),
     make_guarded_tool("material_graph.create_material_graph_recipe", create_material_graph_recipe),
     make_guarded_tool("material_graph.connect_material_nodes", connect_material_nodes),

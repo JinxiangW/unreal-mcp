@@ -14,6 +14,11 @@ from unreal_backend_tcp.tools import (
     read_blueprint_content as raw_read_blueprint_content,
     set_node_property as raw_set_node_property,
 )
+from unreal_harness_runtime.python_exec import (
+    python_literal,
+    run_editor_python,
+    wrap_editor_python,
+)
 
 
 def _new_operation_id(action: str) -> str:
@@ -155,6 +160,196 @@ def read_blueprint_content(
         "post_state": {identifier: body},
         "verification": {"verified": True, "checks": checks},
         **body,
+    }
+
+
+def get_blueprint_components(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    include_inherited: bool = True,
+) -> Dict[str, Any]:
+    """Read Blueprint SCS component templates and inherited CDO components."""
+    operation_id = _new_operation_id("get_blueprint_components")
+    try:
+        identifier, resolved_path = _resolve_blueprint_identifier(
+            blueprint_path=blueprint_path,
+            blueprint_name=blueprint_name,
+        )
+    except ValueError as exc:
+        return _structured_blueprint_failure(operation_id, "", str(exc))
+
+    body = f"""
+blueprint_path = {python_literal(resolved_path)}
+include_inherited = {str(bool(include_inherited))}
+
+def _mcp_simple(value):
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return round(value, 6)
+    if hasattr(value, "get_path_name"):
+        try:
+            return value.get_path_name()
+        except Exception:
+            pass
+    if hasattr(value, "get_name"):
+        try:
+            return value.get_name()
+        except Exception:
+            pass
+    return str(value)
+
+def _mcp_object_ref(obj):
+    if obj is None:
+        return None
+    return {{
+        "name": obj.get_name() if hasattr(obj, "get_name") else str(obj),
+        "path": obj.get_path_name() if hasattr(obj, "get_path_name") else None,
+        "class": obj.get_class().get_name() if hasattr(obj, "get_class") else type(obj).__name__,
+    }}
+
+def _mcp_read_component_template(component, source, attach_parent=None, variable_name=None):
+    entry = _mcp_object_ref(component) or {{}}
+    entry["source"] = source
+    entry["variable_name"] = str(variable_name) if variable_name is not None else entry.get("name")
+    entry["attach_parent"] = attach_parent
+    for field in ("creation_method", "mobility", "visible", "component_tags"):
+        try:
+            entry[field] = _mcp_simple(component.get_editor_property(field))
+        except Exception:
+            pass
+    return entry
+
+asset = unreal.EditorAssetLibrary.load_asset(blueprint_path)
+if asset is None:
+    _mcp_emit({{"success": False, "error": f"Blueprint not found: {{blueprint_path}}"}})
+    return
+
+generated_class = None
+try:
+    generated_class = asset.get_editor_property("generated_class")
+except Exception:
+    try:
+        generated_class = asset.generated_class
+    except Exception:
+        generated_class = None
+
+components = []
+failed = []
+
+try:
+    scs = asset.get_editor_property("simple_construction_script")
+except Exception:
+    scs = None
+
+if scs is not None:
+    try:
+        nodes = list(scs.get_all_nodes())
+    except Exception:
+        nodes = []
+        failed.append("simple_construction_script.get_all_nodes failed")
+    for node in nodes:
+        try:
+            template = node.get_editor_property("component_template")
+        except Exception:
+            template = None
+        if template is None:
+            continue
+        try:
+            variable_name = node.get_editor_property("variable_name")
+        except Exception:
+            variable_name = template.get_name()
+        attach_parent = None
+        for field in ("parent_component_or_variable_name", "parent_component_name"):
+            try:
+                parent_value = node.get_editor_property(field)
+                if parent_value:
+                    attach_parent = str(parent_value)
+                    break
+            except Exception:
+                pass
+        components.append(_mcp_read_component_template(template, "scs", attach_parent, variable_name))
+
+inherited_components = []
+if include_inherited and generated_class is not None:
+    default_object = None
+    try:
+        default_object = generated_class.get_default_object()
+    except Exception:
+        try:
+            default_object = unreal.get_default_object(generated_class)
+        except Exception:
+            default_object = None
+    if default_object is not None:
+        actor_component_class = getattr(unreal, "ActorComponent", None)
+        try:
+            cdo_components = list(default_object.get_components_by_class(actor_component_class)) if actor_component_class is not None else []
+        except Exception:
+            cdo_components = []
+        known_paths = {{item.get("path") for item in components if item.get("path")}}
+        for component in cdo_components:
+            ref = _mcp_read_component_template(component, "inherited_cdo")
+            if ref.get("path") in known_paths:
+                continue
+            inherited_components.append(ref)
+
+_mcp_emit({{
+    "success": len(failed) == 0,
+    "blueprint_path": blueprint_path,
+    "blueprint_name": asset.get_name(),
+    "generated_class": generated_class.get_path_name() if generated_class is not None and hasattr(generated_class, "get_path_name") else None,
+    "components": components,
+    "inherited_components": inherited_components,
+    "component_count": len(components),
+    "inherited_component_count": len(inherited_components),
+    "failed": failed,
+}})
+"""
+    result = run_editor_python(wrap_editor_python(body))
+    if not result.get("success") and not result.get("components"):
+        return _structured_blueprint_failure(
+            operation_id,
+            identifier,
+            result.get("error")
+            or "; ".join(result.get("failed") or [])
+            or "get_blueprint_components failed",
+        )
+
+    components = result.get("components") or []
+    inherited = result.get("inherited_components") or []
+    checks = [
+        {
+            "target": resolved_path,
+            "field": "blueprint_loaded",
+            "expected": True,
+            "actual": bool(result.get("blueprint_name")),
+            "ok": bool(result.get("blueprint_name")),
+        }
+    ]
+    failed_changes = [
+        {"target": resolved_path, "field": "components", "error": item}
+        for item in result.get("failed", [])
+    ]
+    verified = not failed_changes and all(item["ok"] for item in checks)
+    payload = {
+        "blueprint_path": result.get("blueprint_path", resolved_path),
+        "blueprint_name": result.get("blueprint_name"),
+        "generated_class": result.get("generated_class"),
+        "components": components,
+        "inherited_components": inherited,
+        "component_count": len(components),
+        "inherited_component_count": len(inherited),
+    }
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "blueprint",
+        "targets": [identifier],
+        "applied_changes": [],
+        "failed_changes": failed_changes,
+        "post_state": {identifier: payload},
+        "verification": {"verified": verified, "checks": checks},
+        **payload,
     }
 
 

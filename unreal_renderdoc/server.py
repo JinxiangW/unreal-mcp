@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .tools import (
+    capture_frame,
     capture_current_selection,
     capture_current_viewport_issue,
     capture_renderdoc_diff_pair,
@@ -28,6 +29,7 @@ TOOLS = [
     reverse_lookup_renderdoc_symbols,
     set_renderdoc_debug_workflow,
     request_renderdoc_capture,
+    capture_frame,
     capture_current_selection,
     capture_current_viewport_issue,
     capture_renderdoc_diff_pair,

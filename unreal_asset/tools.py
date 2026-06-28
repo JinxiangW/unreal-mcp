@@ -328,6 +328,8 @@ def get_asset_harness_info() -> Dict[str, Any]:
         "supports": [
             "asset_crud",
             "asset_property_reads",
+            "asset_lookup",
+            "uobject_property_reads",
             "asset_property_writes",
             "imports_via_commandlet",
             "batch_asset_workflows",
@@ -352,6 +354,245 @@ def get_asset_harness_info() -> Dict[str, Any]:
         "verification": {"verified": True, "checks": []},
         **payload,
     }
+
+
+def load_asset(asset_path: str) -> Dict[str, Any]:
+    """Load one asset by object path and return compact metadata."""
+    operation_id = _new_operation_id("load_asset")
+    normalized_path = (asset_path or "").strip()
+    if not normalized_path:
+        return _structured_asset_failure(
+            operation_id,
+            [],
+            "asset_path must not be empty",
+        )
+
+    body = f"""
+asset_path = {python_literal(normalized_path)}
+{_ASSET_COERCE_PYTHON_HELPERS}
+
+def _mcp_asset_summary(asset, requested_path):
+    if asset is None:
+        return None
+    try:
+        loaded_path = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(asset)
+    except Exception:
+        loaded_path = asset.get_path_name() if hasattr(asset, "get_path_name") else requested_path
+    return {{
+        "name": asset.get_name() if hasattr(asset, "get_name") else str(asset),
+        "path": loaded_path,
+        "class": asset.get_class().get_name() if hasattr(asset, "get_class") else type(asset).__name__,
+        "requested_path": requested_path,
+        "loaded": True,
+    }}
+
+asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+if asset is None:
+    _mcp_emit({{"success": False, "error": f"Asset not found: {{asset_path}}", "asset_path": asset_path}})
+else:
+    _mcp_emit({{"success": True, "asset": _mcp_asset_summary(asset, asset_path)}})
+"""
+    result = run_editor_python(wrap_editor_python(body))
+    if not result.get("success"):
+        return _structured_asset_failure(
+            operation_id,
+            normalized_path,
+            result.get("error", "load_asset failed"),
+        )
+
+    asset = result.get("asset") or {}
+    checks = [
+        _asset_check(asset.get("path") or normalized_path, "loaded", True, asset.get("loaded")),
+    ]
+    verified = all(item["ok"] for item in checks)
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "asset",
+        "targets": [asset.get("path") or normalized_path],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {asset.get("path") or normalized_path: asset},
+        "verification": {"verified": verified, "checks": checks},
+        "asset_path": asset.get("path") or normalized_path,
+        "asset": asset,
+    }
+
+
+def find_asset(
+    asset_path: Optional[str] = None,
+    path: str = "/Game/",
+    name_filter: Optional[str] = None,
+    asset_class: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+    load: bool = True,
+) -> Dict[str, Any]:
+    """Find assets by exact path or compact Content Browser filters."""
+    operation_id = _new_operation_id("find_asset")
+    try:
+        normalized_limit = max(1, int(limit))
+        normalized_offset = max(0, int(offset))
+    except (TypeError, ValueError):
+        return _structured_asset_failure(
+            operation_id,
+            asset_path or path,
+            "limit and offset must be integers",
+        )
+
+    normalized_asset_path = (asset_path or "").strip() or None
+    normalized_query_path = (path or "/Game/").strip() or "/Game/"
+    normalized_name_filter = name_filter.strip() if isinstance(name_filter, str) else None
+    normalized_asset_class = asset_class.strip() if isinstance(asset_class, str) else None
+
+    body = f"""
+requested_asset_path = {python_literal(normalized_asset_path)}
+query_path = {python_literal(normalized_query_path)}
+name_filter = {python_literal(normalized_name_filter)}
+asset_class_filter = {python_literal(normalized_asset_class)}
+limit = {normalized_limit}
+offset = {normalized_offset}
+should_load = {str(bool(load))}
+{_ASSET_COERCE_PYTHON_HELPERS}
+
+def _mcp_asset_path_variants(path):
+    if not path:
+        return []
+    value = str(path)
+    variants = [value]
+    leaf = value.rsplit("/", 1)[-1]
+    if "." not in leaf:
+        variants.append(value + "." + leaf)
+    return variants
+
+def _mcp_asset_summary(asset, requested_path):
+    if asset is None:
+        return None
+    try:
+        loaded_path = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(asset)
+    except Exception:
+        loaded_path = asset.get_path_name() if hasattr(asset, "get_path_name") else requested_path
+    return {{
+        "name": asset.get_name() if hasattr(asset, "get_name") else str(asset),
+        "path": loaded_path,
+        "class": asset.get_class().get_name() if hasattr(asset, "get_class") else type(asset).__name__,
+        "requested_path": requested_path,
+        "loaded": True,
+    }}
+
+matches = []
+failed = []
+if requested_asset_path:
+    seen = set()
+    for candidate in _mcp_asset_path_variants(requested_asset_path):
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        asset = unreal.EditorAssetLibrary.load_asset(candidate)
+        if asset is None:
+            continue
+        summary = _mcp_asset_summary(asset, candidate)
+        if asset_class_filter and summary.get("class") != asset_class_filter:
+            failed.append(f"asset_class: expected {{asset_class_filter}}, got {{summary.get('class')}}")
+            continue
+        matches.append(summary)
+        break
+else:
+    try:
+        candidate_paths = unreal.EditorAssetLibrary.list_assets(query_path, recursive=True, include_folder=False)
+    except Exception as exc:
+        candidate_paths = []
+        failed.append(f"list_assets: {{exc}}")
+    skipped = 0
+    for candidate_path in candidate_paths:
+        leaf = str(candidate_path).rsplit("/", 1)[-1]
+        if name_filter and name_filter.lower() not in leaf.lower():
+            continue
+        asset = unreal.EditorAssetLibrary.load_asset(candidate_path) if should_load or asset_class_filter else None
+        if asset_class_filter:
+            if asset is None:
+                continue
+            cls = asset.get_class().get_name() if hasattr(asset, "get_class") else type(asset).__name__
+            if cls != asset_class_filter:
+                continue
+        if skipped < offset:
+            skipped += 1
+            continue
+        if asset is not None:
+            summary = _mcp_asset_summary(asset, candidate_path)
+        else:
+            summary = {{
+                "name": leaf.split(".")[-1],
+                "path": str(candidate_path),
+                "class": None,
+                "requested_path": str(candidate_path),
+                "loaded": False,
+            }}
+        matches.append(summary)
+        if len(matches) >= limit:
+            break
+
+_mcp_emit({{
+    "success": bool(matches) and not failed,
+    "assets": matches,
+    "failed": failed,
+    "count": len(matches),
+    "limit": limit,
+    "offset": offset,
+    "filters": {{
+        "asset_path": requested_asset_path,
+        "path": query_path,
+        "name_filter": name_filter,
+        "asset_class": asset_class_filter,
+        "load": should_load,
+    }},
+}})
+"""
+    result = run_editor_python(wrap_editor_python(body))
+    assets = result.get("assets") or []
+    failed = result.get("failed") or []
+    if not result.get("success"):
+        return structured_query_failure(
+            operation_id=operation_id,
+            domain="asset",
+            target=asset_path or path,
+            error=result.get("error") or "; ".join(failed) or "find_asset failed",
+            summary=build_query_summary(
+                requested=normalized_limit,
+                returned=len(assets),
+                total=len(assets),
+                offset=normalized_offset,
+                verified=0,
+            ),
+            filters=result.get("filters") or {},
+            post_state={"asset_query": {"assets": assets}} if assets else {},
+            result=result,
+        )
+
+    summary = build_query_summary(
+        requested=result.get("limit", normalized_limit),
+        returned=len(assets),
+        total=result.get("count", len(assets)),
+        offset=result.get("offset", normalized_offset),
+        verified=len(assets),
+    )
+    return structured_query_success(
+        operation_id=operation_id,
+        domain="asset",
+        targets=[item.get("path") for item in assets if item.get("path")],
+        post_state={"asset_query": {"assets": assets, "filters": result.get("filters") or {}}},
+        summary=summary,
+        items=[
+            {
+                "target": item.get("path"),
+                "success": True,
+                "verification": {"verified": True, "checks": []},
+            }
+            for item in assets
+        ],
+        filters=result.get("filters") or {},
+        extra={"assets": assets},
+    )
 
 
 def query_assets_summary(
@@ -871,6 +1112,125 @@ _mcp_emit({{
         "items": items,
         "properties": requested_properties,
         "results": result_items,
+    }
+
+
+def get_object_properties(
+    object_path: str,
+    properties: list[str],
+) -> Dict[str, Any]:
+    """Read selected editor properties from a loaded UObject or asset path."""
+    operation_id = _new_operation_id("get_object_properties")
+    normalized_path = (object_path or "").strip()
+    if not normalized_path:
+        return _structured_asset_failure(
+            operation_id,
+            [],
+            "object_path must not be empty",
+        )
+    if not isinstance(properties, list) or not all(
+        isinstance(item, str) and item.strip() for item in properties
+    ):
+        return _structured_asset_failure(
+            operation_id,
+            normalized_path,
+            "properties must be an array of non-empty strings",
+        )
+
+    requested_properties = [item.strip() for item in properties]
+    body = f"""
+object_path = {python_literal(normalized_path)}
+properties = {python_literal(requested_properties)}
+{_ASSET_COERCE_PYTHON_HELPERS}
+
+def _mcp_load_object(path):
+    try:
+        obj = unreal.load_object(None, path)
+        if obj is not None:
+            return obj
+    except Exception:
+        pass
+    try:
+        return unreal.EditorAssetLibrary.load_asset(path)
+    except Exception:
+        return None
+
+obj = _mcp_load_object(object_path)
+if obj is None:
+    _mcp_emit({{
+        "success": False,
+        "object_path": object_path,
+        "properties": {{}},
+        "failed_properties": [f"object: Object not found: {{object_path}}"],
+    }})
+else:
+    payload = {{}}
+    failed = []
+    for key in properties:
+        try:
+            payload[key] = _mcp_to_simple(obj.get_editor_property(key))
+        except Exception as exc:
+            failed.append(f"{{key}}: {{exc}}")
+    _mcp_emit({{
+        "success": len(failed) == 0,
+        "object_path": obj.get_path_name() if hasattr(obj, "get_path_name") else object_path,
+        "object_name": obj.get_name() if hasattr(obj, "get_name") else str(obj),
+        "object_class": obj.get_class().get_name() if hasattr(obj, "get_class") else type(obj).__name__,
+        "properties": payload,
+        "failed_properties": failed,
+    }})
+"""
+    result = run_editor_python(wrap_editor_python(body))
+    if not result.get("success") and not result.get("properties"):
+        return _structured_asset_failure(
+            operation_id,
+            normalized_path,
+            result.get("error")
+            or "; ".join(result.get("failed_properties") or [])
+            or "get_object_properties failed",
+        )
+
+    object_result_path = result.get("object_path", normalized_path)
+    properties_payload = result.get("properties") or {}
+    failed_changes = [
+        {
+            "target": object_result_path,
+            "field": failure.split(":", 1)[0],
+            "error": failure,
+        }
+        for failure in result.get("failed_properties", [])
+    ]
+    checks = [
+        {
+            "target": object_result_path,
+            "field": key,
+            "expected": "readable",
+            "actual": key in properties_payload,
+            "ok": key in properties_payload,
+        }
+        for key in requested_properties
+        if key in properties_payload
+    ]
+    verified = not failed_changes
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "asset",
+        "targets": [object_result_path],
+        "applied_changes": [],
+        "failed_changes": failed_changes,
+        "post_state": {
+            object_result_path: {
+                "object_name": result.get("object_name"),
+                "object_class": result.get("object_class"),
+                "properties": properties_payload,
+            }
+        },
+        "verification": {"verified": verified, "checks": checks},
+        "object_path": object_result_path,
+        "object_name": result.get("object_name"),
+        "object_class": result.get("object_class"),
+        "properties": properties_payload,
     }
 
 

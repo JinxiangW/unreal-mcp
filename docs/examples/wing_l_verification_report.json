@@ -3,8 +3,8 @@
   "manifest_path": "D:\\unity-mcp\\exports\\Wing_L\\manifest.json",
   "material_path": "/Game/Materials/Wings/M_Wing_L_Rebuild",
   "summary": {
-    "total_checks": 39,
-    "passed": 39,
+    "total_checks": 40,
+    "passed": 40,
     "failed": 0
   },
   "checks": [
@@ -54,7 +54,7 @@
       "name": "graph.output.BaseColor",
       "ok": true,
       "actual": {
-        "node_id": "Expr_If_55125",
+        "node_id": "Expr_If_55040",
         "output_index": 0
       },
       "expected": "connected"
@@ -63,7 +63,7 @@
       "name": "graph.output.OpacityMask",
       "ok": true,
       "actual": {
-        "node_id": "Expr_If_55124",
+        "node_id": "Expr_If_55041",
         "output_index": 0
       },
       "expected": "connected"
@@ -72,7 +72,7 @@
       "name": "graph.output.Normal",
       "ok": true,
       "actual": {
-        "node_id": "Expr_TextureSampleParameter2D_55154",
+        "node_id": "Expr_TextureSampleParameter2D_54978",
         "output_index": 0
       },
       "expected": "connected"
@@ -81,7 +81,7 @@
       "name": "graph.output.Metallic",
       "ok": true,
       "actual": {
-        "node_id": "Expr_ScalarParameter_55134",
+        "node_id": "Expr_ScalarParameter_54982",
         "output_index": 0
       },
       "expected": "connected"
@@ -90,7 +90,7 @@
       "name": "graph.output.Roughness",
       "ok": true,
       "actual": {
-        "node_id": "Expr_OneMinus_55133",
+        "node_id": "Expr_OneMinus_54984",
         "output_index": 0
       },
       "expected": "connected"
@@ -99,7 +99,7 @@
       "name": "graph.output.AmbientOcclusion",
       "ok": true,
       "actual": {
-        "node_id": "Expr_ScalarParameter_55142",
+        "node_id": "Expr_ScalarParameter_54985",
         "output_index": 0
       },
       "expected": "connected"
@@ -108,7 +108,7 @@
       "name": "graph.output.EmissiveColor",
       "ok": true,
       "actual": {
-        "node_id": "Expr_If_55126",
+        "node_id": "Expr_If_55043",
         "output_index": 0
       },
       "expected": "connected"
@@ -117,11 +117,11 @@
       "name": "graph.param.UseDissolve.exists",
       "ok": true,
       "actual": {
-        "node_id": "Expr_ScalarParameter_55145",
+        "node_id": "Expr_ScalarParameter_54992",
         "type": "ScalarParameter",
-        "name": "MaterialExpressionScalarParameter_5",
-        "pos_x": -2600,
-        "pos_y": 2640,
+        "name": "MaterialExpressionScalarParameter_6",
+        "pos_x": -1560,
+        "pos_y": 1320,
         "parameter_name": "UseDissolve",
         "default_value": 0,
         "group": "Dissolve"
@@ -142,6 +142,12 @@
     },
     {
       "name": "graph.group.BaseColorTint",
+      "ok": true,
+      "actual": "Standard Lit",
+      "expected": "Standard Lit"
+    },
+    {
+      "name": "graph.group.Cutoff",
       "ok": true,
       "actual": "Standard Lit",
       "expected": "Standard Lit"

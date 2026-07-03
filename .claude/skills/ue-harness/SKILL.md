@@ -70,7 +70,7 @@ description: Use when working inside `D:\unreal-mcp` on Unreal harness code, MCP
 在阅读 Unreal Engine 源码来解释节点、引脚、资产类型、shader 路径或编辑器行为时使用。
 
 1. Resolve the active engine first:
-   - Run `python scripts/resolve_unreal_engine.py` from repo root, or read `unreal_harness_runtime.config.get_runtime_paths()`
+   - Run `python ${CLAUDE_SKILL_DIR}/scripts/resolve_unreal_engine.py`, or read `unreal_harness_runtime.config.get_runtime_paths()`
    - Prefer `UE_ENGINE_ROOT` when explicitly set
    - Then prefer engine derived from `UE_EDITOR_EXE` or `UE_EDITOR_CMD`
    - Then resolve `UE_PROJECT_PATH` → `.uproject` `EngineAssociation` via registered Unreal builds

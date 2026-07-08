@@ -55,4 +55,7 @@ private:
 
     // Rename function in Blueprint
     TSharedPtr<FJsonObject> HandleRenameFunction(const TSharedPtr<FJsonObject>& Params);
+
+    // Build the extraction footprint detection graph
+    TSharedPtr<FJsonObject> HandleSetupExtractionFootprintGraph(const TSharedPtr<FJsonObject>& Params);
 };

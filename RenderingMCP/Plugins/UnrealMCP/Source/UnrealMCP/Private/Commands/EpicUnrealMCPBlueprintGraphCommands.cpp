@@ -8,7 +8,6 @@
 #include "Commands/BlueprintGraph/NodePropertyManager.h"
 #include "Commands/BlueprintGraph/Function/FunctionManager.h"
 #include "Commands/BlueprintGraph/Function/FunctionIO.h"
-#include "Commands/BlueprintGraph/ExtractionFootprintGraphBuilder.h"
 
 FEpicUnrealMCPBlueprintGraphCommands::FEpicUnrealMCPBlueprintGraphCommands()
 {
@@ -67,10 +66,6 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintGraphCommands::HandleCommand(cons
     else if (CommandType == TEXT("rename_function"))
     {
         return HandleRenameFunction(Params);
-    }
-    else if (CommandType == TEXT("setup_extraction_footprint_graph"))
-    {
-        return HandleSetupExtractionFootprintGraph(Params);
     }
 
     return FEpicUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown blueprint graph command: %s"), *CommandType));
@@ -390,19 +385,4 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintGraphCommands::HandleRenameFuncti
         *OldFunctionName, *NewFunctionName, *BlueprintName);
 
     return FFunctionManager::RenameFunction(Params);
-}
-
-TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintGraphCommands::HandleSetupExtractionFootprintGraph(const TSharedPtr<FJsonObject>& Params)
-{
-    FString BlueprintName;
-    if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
-    {
-        return FEpicUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
-    }
-
-    UE_LOG(LogTemp, Display,
-        TEXT("FEpicUnrealMCPBlueprintGraphCommands::HandleSetupExtractionFootprintGraph: Generating footprint graph in '%s'"),
-        *BlueprintName);
-
-    return FExtractionFootprintGraphBuilder::SetupGraph(Params);
 }

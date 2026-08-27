@@ -10,7 +10,19 @@ Agent 在完成真实 Unreal 任务时发现的 MCP 能力缺口记录在此文�
 
 ## 待处理条目
 
-暂无待处理条目。
+### GAP-0005: Account for implicit connection removal when deleting material nodes
+
+- Status: open
+- Priority: P2
+- Domain: material_graph
+- Affected tool: `patch_material_graph`
+- Workflow: Delete a material node that owns an existing node-to-node connection while also replacing material root property connections.
+- Current behavior: The backend correctly deletes the node and its incident connections, and readback is correct, but high-level delta verification expects the pre-delete node connection count unless the caller also lists each incident edge in `disconnect_connections`. The tool therefore reports `success: false` for a successful patch.
+- Fallback used: Trust the verified post-operation graph readback after confirming node count and `property_connections`.
+- Expected behavior: Deleting a node should account for its incident node connections during post-connection-count verification, without requiring redundant `disconnect_connections` entries.
+- Proposed tool contract: Update `_run_graph_patch` verification to resolve deleted node selectors against the pre-graph and subtract incident node connections, or omit the exact connection-count check when deletion selectors are present and rely on structural readback.
+- Verification: On `/Game/PVFeature/TA/EditorTools/POMBaker/Materials/M_ShallowPudPOM`, delete `BreakMaterialAttributes`, disconnect nine legacy root properties, and add `MaterialAttributes`; expect one node, zero node connections, one `MaterialAttributes` property connection, and overall `success: true`.
+- Root cause: High-level delta verification does not include connections implicitly removed by `delete_nodes`.
 
 ## 已完成条目
 
@@ -43,6 +55,21 @@ Agent 在完成真实 Unreal 任务时发现的 MCP 能力缺口记录在此文�
 - Verification: Contract tests passed; `compileall` passed; `git diff --check` passed; Main_Client live regression passed with 27 checks using only temporary assets under `/Game/MCPTest/MaterialGraphBackend`, then deleted those assets and confirmed the folder was empty.
 - Root cause: C++ backend readback and cleanup coverage lagged behind graph write support, while UE Python graph editing had stale pin and material property synchronization risks.
 - Notes: `MaterialFunctionCall` output order should not be hard-coded. Use named `source_output` values when building; readback returns resolved `Output_N` pins.
+
+### GAP-0004: Direct Material Attributes root property connections
+
+- Status: done
+- Priority: P1
+- Domain: material_graph
+- Affected tool: `set_material_graph_property_connections`, `patch_material_graph`, `analyze_material_graph`
+- Workflow: Connect a `MaterialFunctionCall` Material Attributes output directly to a parent material root with `bUseMaterialAttributes=true`, without inserting `BreakMaterialAttributes` and reconnecting every individual property.
+- Current behavior: The backend supported individual material properties and `PixelDepthOffset`, but omitted hidden `MP_MaterialAttributes` from the supported-property list, name mapping, and graph readback.
+- Fallback used: A temporary `BreakMaterialAttributes` node plus individual root property connections.
+- Expected behavior: Accept `MaterialAttributes` or `material_attributes` in property connection requests and return the direct root connection during graph readback.
+- Proposed tool contract: Extend the existing material root `property_connections` contract with `MaterialAttributes` mapped to `MP_MaterialAttributes`.
+- Verification: Live Coding loaded the updated UnrealMCP module; `/Game/PVFeature/TA/EditorTools/POMBaker/Materials/M_ShallowPudPOM` was converted to one `MaterialFunctionCall`, zero node connections, and one `MaterialAttributes` root connection. Readback verified `use_material_attributes=true`; the parent material and `/Game/PVFeature/TA/EditorTools/POMBaker/Materials/MI_ShallowPudPOM_BP_pond_01` compiled for PCD3D_SM6 without material errors after correcting the PackedRMAO default sampler pairing. `uv run --with pytest pytest -q` passed 65 tests.
+- Root cause: `MP_MaterialAttributes` was missing from `SupportedMaterialPropertyNames`, `GetMaterialPropertyInput`, and material graph property readback.
+- Notes: Loaded through `UnrealEditor-UnrealMCP.patch_0`; a normal editor restart will load the rebuilt base module after the plugin is rebuilt outside Live Coding.
 
 ### GAP-0002: Set material override on existing scene StaticMeshComponent
 

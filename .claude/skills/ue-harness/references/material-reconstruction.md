@@ -14,7 +14,7 @@
 2. `material-reconstruction-plan.md` — 重建方案格式
 3. 包中的 `manifest.json`（如果有）
 4. 包中的 `shadergraph.json`（如果有）
-5. `../../../docs/examples/` 下的对应包示例（如果有）
+5. `D:\ue-mcp\unreal-mcp\docs\examples\` 下的对应包示例（如果有）
 
 ## 工作流
 

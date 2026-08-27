@@ -310,7 +310,7 @@ Backend capability notes:
 - Supports `TextureCoordinate.coordinate_index`.
 - Supports `TransformPosition.source_space/target_space` read/write.
 - Supports `MaterialFunctionCall` input/output pin readback after function resource refresh.
-- Supports material root `property_connections` including `PixelDepthOffset`.
+- Supports material root `property_connections` including `PixelDepthOffset` and `MaterialAttributes`.
 - Delete/disconnect cleanup covers the same material root property set as readback/write support.
 - Main_Client live regression used only temporary assets under `/Game/MCPTest/MaterialGraphBackend`; no SPOM assets were touched.
 

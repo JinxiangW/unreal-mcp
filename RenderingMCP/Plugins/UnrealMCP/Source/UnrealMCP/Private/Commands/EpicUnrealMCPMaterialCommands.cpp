@@ -260,7 +260,8 @@ namespace
         TEXT("AmbientOcclusion"),
         TEXT("Refraction"),
         TEXT("PixelDepthOffset"),
-        TEXT("SubsurfaceColor")
+        TEXT("SubsurfaceColor"),
+        TEXT("MaterialAttributes")
     };
 
     EMaterialSamplerType ResolveTextureSamplerType(const FString& RequestedSamplerType, UTexture* Texture)
@@ -1445,6 +1446,8 @@ FExpressionInput* FEpicUnrealMCPMaterialCommands::GetMaterialPropertyInput(UMate
         MaterialProperty = MP_PixelDepthOffset;
     else if (LowerPropName == TEXT("subsurfacecolor") || LowerPropName == TEXT("subsurface_color"))
         MaterialProperty = MP_SubsurfaceColor;
+    else if (LowerPropName == TEXT("materialattributes") || LowerPropName == TEXT("material_attributes"))
+        MaterialProperty = MP_MaterialAttributes;
     else
         return nullptr;
 
@@ -2061,6 +2064,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPMaterialCommands::HandleGetMaterialGraph(c
         AddPropertyConnection(TEXT("Refraction"), MP_Refraction);
         AddPropertyConnection(TEXT("PixelDepthOffset"), MP_PixelDepthOffset);
         AddPropertyConnection(TEXT("SubsurfaceColor"), MP_SubsurfaceColor);
+        AddPropertyConnection(TEXT("MaterialAttributes"), MP_MaterialAttributes);
         
         ResultObj->SetObjectField(TEXT("property_connections"), PropertyConnectionsObj);
         ResultObj->SetNumberField(TEXT("property_connection_count"), PropertyConnectionsObj->Values.Num());

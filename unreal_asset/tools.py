@@ -2259,7 +2259,12 @@ def import_texture_asset(
     name: str,
     destination_path: str = "/Game/Textures/",
 ) -> Dict[str, Any]:
-    """Import a texture asset through an isolated Unreal commandlet process."""
+    """Import a texture asset through an isolated Unreal commandlet process.
+
+    Texture imports intentionally use the legacy TextureFactory in the
+    commandlet. On UE 5.6, the default Python AssetImportTask path can route PNG
+    files through Interchange and assert in TaskGraph during unattended imports.
+    """
     operation_id = _new_operation_id("import_texture_asset")
     result = run_python_commandlet(
         [
@@ -2319,19 +2324,100 @@ def import_texture_asset(
 def import_fbx_asset(
     fbx_path: str,
     destination_path: str = "/Game/ImportedMeshes/",
+    destination_name: str = "",
+    import_as_skeletal: bool = False,
+    import_materials: bool = False,
+    import_textures: bool = False,
+    import_animations: bool = False,
+    import_rotation: Optional[list[float]] = None,
+    combine_meshes: Optional[bool] = None,
+    import_meshes_in_bone_hierarchy: Optional[bool] = None,
+    create_physics_asset: bool = False,
+    normal_import_method: str = "",
+    skeleton: str = "",
+    convert_scene: Optional[bool] = None,
+    convert_scene_unit: Optional[bool] = None,
+    force_front_x_axis: Optional[bool] = None,
+    update_skeleton_reference_pose: Optional[bool] = None,
+    use_t0_as_ref_pose: Optional[bool] = None,
+    replace_existing: bool = True,
+    replace_existing_settings: bool = False,
+    save: bool = True,
 ) -> Dict[str, Any]:
-    """Import an FBX asset through an isolated Unreal commandlet process."""
+    """Import a static or skeletal FBX asset through an isolated Unreal commandlet process."""
     operation_id = _new_operation_id("import_fbx_asset")
-    result = run_python_commandlet(
-        [
-            "--mode",
-            "fbx",
-            "--source",
-            fbx_path,
-            "--destination",
-            destination_path,
-        ]
-    )
+    rotation_values = None
+    if import_rotation is not None:
+        try:
+            rotation_values = [float(value) for value in import_rotation]
+        except (TypeError, ValueError):
+            return _structured_asset_failure(
+                operation_id,
+                destination_path,
+                "import_rotation must contain numeric pitch, yaw, and roll values",
+            )
+        if len(rotation_values) != 3:
+            return _structured_asset_failure(
+                operation_id,
+                destination_path,
+                "import_rotation must contain exactly three values: pitch, yaw, roll",
+            )
+
+    def bool_arg(value: bool) -> str:
+        return "true" if value else "false"
+
+    args = [
+        "--mode",
+        "fbx",
+        "--source",
+        fbx_path,
+        "--destination",
+        destination_path,
+        "--replace-existing",
+        bool_arg(replace_existing),
+        "--replace-existing-settings",
+        bool_arg(replace_existing_settings),
+        "--save",
+        bool_arg(save),
+        "--import-as-skeletal",
+        bool_arg(import_as_skeletal),
+        "--import-materials",
+        bool_arg(import_materials),
+        "--import-textures",
+        bool_arg(import_textures),
+        "--import-animations",
+        bool_arg(import_animations),
+        "--create-physics-asset",
+        bool_arg(create_physics_asset),
+    ]
+    if destination_name:
+        args.extend(["--name", destination_name])
+    if rotation_values is not None:
+        args.extend(["--import-rotation", *[str(value) for value in rotation_values]])
+    if combine_meshes is not None:
+        args.extend(["--combine-meshes", bool_arg(combine_meshes)])
+    if import_meshes_in_bone_hierarchy is not None:
+        args.extend(
+            [
+                "--import-meshes-in-bone-hierarchy",
+                bool_arg(import_meshes_in_bone_hierarchy),
+            ]
+        )
+    if normal_import_method:
+        args.extend(["--normal-import-method", normal_import_method])
+    if skeleton:
+        args.extend(["--skeleton", skeleton])
+    for flag, value in (
+        ("--convert-scene", convert_scene),
+        ("--convert-scene-unit", convert_scene_unit),
+        ("--force-front-x-axis", force_front_x_axis),
+        ("--update-skeleton-reference-pose", update_skeleton_reference_pose),
+        ("--use-t0-as-ref-pose", use_t0_as_ref_pose),
+    ):
+        if value is not None:
+            args.extend([flag, bool_arg(value)])
+
+    result = run_python_commandlet(args)
     imported = result.get("imported_object_paths", [])
     checks = [_asset_check(path, "imported", True, True) for path in imported]
     verified = bool(imported) and all(item["ok"] for item in checks)

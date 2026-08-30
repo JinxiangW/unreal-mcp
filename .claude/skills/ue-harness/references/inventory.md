@@ -264,12 +264,12 @@
 - `create_asset_with_properties`
 - `update_asset_properties`
 - `import_texture_asset`
-- `import_fbx_asset`
+- `import_fbx_asset`（static/skeletal FBX commandlet import，支持 destination name、import rotation、combine/split static mesh、skeletal hierarchy 和常用 import data flags）
 
 执行模型：
 
 - `create/update` 走 live editor `run_python`
-- `import` 走独立 commandlet
+- `import` 走独立 commandlet，避免大资产导入占用或崩溃 live editor MCP 连接
 
 ### Material
 

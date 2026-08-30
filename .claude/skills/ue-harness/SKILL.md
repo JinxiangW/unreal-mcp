@@ -49,6 +49,19 @@ description: Use when working inside `D:\ue-mcp\unreal-mcp` on Unreal harness co
 - **material_graph**：currently depends on internal backend and UE plugin C++ commands
 - **unreal_backend_tcp**：owns TCP transport, raw command dispatch, and large-result handles
 
+## Asset Import Stability
+
+UE 5.6 的默认 Python `AssetTools.import_asset_tasks` 在导入 PNG/Texture 时，如果没有显式 factory，会走 Interchange import path。该路径在 unattended Python/MCP 导入中可能触发 `TaskGraph` `RecursionGuard` assert 并导致 Editor 退出。
+
+Operational rules:
+
+- Do not import PNG/texture assets with a bare `AssetImportTask`.
+- Prefer `unreal_asset.import_texture_asset`; it uses the commandlet path and must keep `TextureFactory` enabled.
+- If using UE Python directly, set `task.factory = unreal.TextureFactory()` before `import_asset_tasks([task])`.
+- If using commandlet directly, pass `-factoryname=/Script/UnrealEd.TextureFactory`.
+- Optional safety for commandlets: `-ForceDPCVars="Interchange.FeatureFlags.Import.PNG=0"`.
+- If a texture import crashes in `InterchangeEngine` / `AssetTools`, restart the editor and retry through legacy `TextureFactory`; do not keep retrying the default importer.
+
 ## 通用规则
 
 - Prefer high-level tools over ad hoc property writes

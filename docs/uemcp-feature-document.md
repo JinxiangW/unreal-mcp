@@ -266,7 +266,7 @@ python -m unreal_asset.server
 | `set_texture_srgb` | 批量设置纹理 sRGB。 |
 | `update_texture_group_config` | 修改项目 device profile 中的 TextureLODGroups。 |
 | `import_texture_asset` | 通过 commandlet 导入纹理。 |
-| `import_fbx_asset` | 通过 commandlet 导入 FBX。 |
+| `import_fbx_asset` | 通过 commandlet 导入 static/skeletal FBX，支持 destination name、import rotation、static combine/split、skeleton 和常用 skeletal import flags。 |
 | `inspect_particle_system` | 检查 Cascade ParticleSystem；必要时 fallback 到 Niagara backend 摘要。 |
 | `inspect_cascade_emitter` | 检查指定 Cascade emitter。 |
 
@@ -275,7 +275,7 @@ python -m unreal_asset.server
 - 资产浏览和属性批量修改。
 - 贴图压缩、sRGB、LOD group 调整。
 - 通用资产创建、复制、移动。
-- 纹理和 FBX 导入。
+- 纹理和 static/skeletal FBX 导入。
 - Cascade 粒子系统检查。
 
 边界：
@@ -501,7 +501,7 @@ python -m unreal_mcp.slim_server
 
 流程：
 
-1. `import_texture_asset` 或 `import_fbx_asset` 导入外部文件。
+1. `import_texture_asset` 或 `import_fbx_asset` 导入外部文件；角色 FBX 优先使用 `import_fbx_asset(import_as_skeletal=True, ...)`，不要走 live editor 大资产导入。
 2. `query_assets_summary` / `query_textures` 确认资产存在。
 3. `set_texture_compression_settings`、`set_texture_srgb` 或 `update_asset_properties_batch` 批量设置属性。
 4. 检查 `verification` 和 `failed_changes`。

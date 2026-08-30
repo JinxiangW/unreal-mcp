@@ -67,6 +67,7 @@
 - `create_asset_with_properties`
 - `import_texture_asset`
 - `import_fbx_asset`
+  - 支持 static/skeletal FBX commandlet import；skeletal 角色导入可传 destination name、import rotation、skeleton、hierarchy 和常用 FBX import data flags。
 - `update_asset_properties`
 
 ### 后续可长出的命令

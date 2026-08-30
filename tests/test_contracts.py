@@ -106,6 +106,71 @@ class AssetToolContractTests(unittest.TestCase):
 
         self.assertIn("MaterialFunction", result["supported_create_types"])
 
+    @patch("unreal_asset.tools.run_python_commandlet")
+    def test_import_fbx_asset_passes_skeletal_options_to_commandlet(
+        self, mock_run_python_commandlet
+    ) -> None:
+        mock_run_python_commandlet.return_value = {
+            "success": True,
+            "imported_object_paths": ["/Game/Models/SK_Test.SK_Test"],
+        }
+
+        result = asset_tools.import_fbx_asset(
+            "C:/Temp/SK_Test.fbx",
+            destination_path="/Game/Models",
+            destination_name="SK_Test",
+            import_as_skeletal=True,
+            import_rotation=[-90, 180, 0],
+            import_meshes_in_bone_hierarchy=True,
+            create_physics_asset=False,
+            normal_import_method="FBXNIM_IMPORT_NORMALS_AND_TANGENTS",
+            convert_scene=True,
+            convert_scene_unit=True,
+            force_front_x_axis=False,
+            replace_existing_settings=True,
+        )
+
+        self.assertTrue(result["success"])
+        args = mock_run_python_commandlet.call_args.args[0]
+
+        def value_after(flag: str) -> str:
+            return args[args.index(flag) + 1]
+
+        self.assertEqual(value_after("--mode"), "fbx")
+        self.assertEqual(value_after("--name"), "SK_Test")
+        self.assertEqual(value_after("--destination"), "/Game/Models")
+        self.assertEqual(value_after("--import-as-skeletal"), "true")
+        self.assertEqual(value_after("--import-materials"), "false")
+        self.assertEqual(value_after("--import-textures"), "false")
+        self.assertEqual(value_after("--replace-existing-settings"), "true")
+        self.assertEqual(value_after("--import-meshes-in-bone-hierarchy"), "true")
+        self.assertEqual(value_after("--convert-scene"), "true")
+        self.assertEqual(value_after("--convert-scene-unit"), "true")
+        self.assertEqual(value_after("--force-front-x-axis"), "false")
+        self.assertEqual(
+            value_after("--normal-import-method"),
+            "FBXNIM_IMPORT_NORMALS_AND_TANGENTS",
+        )
+        rotation_index = args.index("--import-rotation")
+        self.assertEqual(
+            args[rotation_index + 1 : rotation_index + 4],
+            ["-90.0", "180.0", "0.0"],
+        )
+
+    @patch("unreal_asset.tools.run_python_commandlet")
+    def test_import_fbx_asset_rejects_invalid_rotation_before_commandlet(
+        self, mock_run_python_commandlet
+    ) -> None:
+        result = asset_tools.import_fbx_asset(
+            "C:/Temp/SK_Test.fbx",
+            destination_path="/Game/Models",
+            import_rotation=[0, 90],
+        )
+
+        self.assertFalse(result["success"])
+        self.assertIn("import_rotation", result["error"])
+        mock_run_python_commandlet.assert_not_called()
+
     @patch("unreal_asset.tools.raw_create_material_function")
     def test_create_asset_with_properties_supports_material_function(
         self, mock_create_material_function

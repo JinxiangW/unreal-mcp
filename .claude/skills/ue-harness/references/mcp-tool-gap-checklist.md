@@ -26,6 +26,20 @@ Agent 在完成真实 Unreal 任务时发现的 MCP 能力缺口记录在此文�
 
 ## 已完成条目
 
+### GAP-0006: Skeletal FBX commandlet import options
+
+- Status: done
+- Priority: P1
+- Domain: asset
+- Affected tool: `import_fbx_asset`
+- Workflow: Import a Unity/Endfield skeletal character FBX with custom import rotation, no material/texture import, split skeletal hierarchy meshes, and stable commandlet execution instead of live editor import.
+- Current behavior: `import_fbx_asset` already used the commandlet backend, but forced `import_as_skeletal=False` and exposed no FBX import options, so skeletal character imports still required ad hoc UE Python commandlet scripts.
+- Fallback used: Temporary UE commandlet scripts constructing `unreal.FbxImportUI` manually for Laevat staging imports and rotation probes.
+- Expected behavior: MCP should route static and skeletal FBX imports through the isolated commandlet and expose the required FBX import options directly.
+- Proposed tool contract: Extend `import_fbx_asset` with `destination_name`, `import_as_skeletal`, material/texture/animation flags, `import_rotation`, static `combine_meshes`, skeletal hierarchy/skeleton/physics options, and common FBX import data flags.
+- Verification: `uv run python -m unittest tests.test_contracts` passed; `uv run python -m py_compile commandlets\\asset_import_commandlet.py unreal_asset\\tools.py tests\\test_contracts.py` passed; `save=False` MyToon commandlet smoke import of Laevat skeletal FBX to `/Toon/Render/Models/__MCPCommandletSmoke` succeeded with 4 imported object paths, no warnings, and `exit_code=0`; no smoke-test `.uasset` files were persisted.
+- Root cause: The high-level asset import contract was narrower than the existing commandlet backend and covered only static FBX defaults.
+
 ### GAP-0001: Patch existing material expression properties
 
 - Status: done

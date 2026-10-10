@@ -134,6 +134,17 @@
 - `connections`
 - `properties`
 
+与图组织相关的扩展节点采用以下最小字段：
+
+- `GetMaterialAttributes` / `SetMaterialAttributes`：`attributes: string[]`
+- `NamedRerouteDeclaration`：`declaration_name`、可选 `color: [r,g,b,a]`
+- `NamedRerouteUsage`：`declaration_node_id` 或 `declaration_name`
+- `Comment`：`text`、`position: {x,y}`、`size: {x,y}`、`color`、`font_size`、`group_mode`
+
+readback 为 Get/Set 返回 `attribute_names`，为 Named Reroute 返回 declaration 名称、GUID 和 usage 关联，并在顶层返回 `comments`。
+
+只读工具 `analyze_material_graph_layout(asset_path)` 使用 `material_readable_v1` 固定 profile 分析现有 readback。它返回尺寸估算模式、阈值、rule metrics、带节点 ID 的 violations，以及仅由阻断项决定的 `verification.verified`。该工具不修改 recipe、节点坐标或资产。
+
 该 recipe 应保持 UE 特定。标准 IR 应翻译为它，而非直接替代它。
 
 直接含义：

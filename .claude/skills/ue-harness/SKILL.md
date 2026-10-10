@@ -28,6 +28,7 @@ description: Use when working inside `D:\ue-mcp\unreal-mcp` on Unreal harness co
 4. 当前任务对应域的文件
 5. （需要时）`references/commands.md` `references/test-plan.md` `references/verification.md` `references/workflow.md`
 6. （需要时）`references/mcp-tool-gap-workflow.md`
+7. Material Graph 排版或排版验收：`references/material-graph-layout.md`
 
 ## 默认入口
 
@@ -176,6 +177,7 @@ Operational rules:
   - re-read the graph
   - inspect key `property_connections`
   - inspect logs for `Missing Material Function`, shader asserts, or compile fallback
+- For non-trivial Material Graph layout, follow `references/material-graph-layout.md`, then run `analyze_material_graph_layout`. Treat `verification.verified=false` as blocking unless the task explicitly accepts existing layout debt.
 - If visual parity depends on external runtime state, do not claim alignment until that runtime state is present in the source package
 
 ### Stop Conditions
@@ -212,4 +214,5 @@ Do not claim "aligned with source" without a machine-readable verification artif
 ## 附加资源（Additional Resources）
 
 - 材质重建规划（Material Reconstruction Planning）：[material-reconstruction.md](references/material-reconstruction.md)
+- Material Graph 排版与验收：[material-graph-layout.md](references/material-graph-layout.md)
 - Unity 到 UE 场景与灯光迁移：[unity-to-ue.md](references/unity-to-ue.md)

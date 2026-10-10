@@ -1,5 +1,9 @@
 # 功能清单总览
 
+2026-09-14 新增：原生DDS纹理数组/自定义mip导入、数组属性检查、线性GPU数据探针与HDR场景诊断。详见 [数组数据接口与验证](../../../../docs/texture-array-data.md)。
+
+2026-09-11 新增：隔离批量导入及设置回读、StaticMesh 结构/默认材质工具、材质编译统计、离屏预览和 GPU CSV 验证。修复参数默认值与删除节点后的连接计数。详见 [真实工作流与接口](../../../../docs/impostor-asset-validation.md)。
+
 这份文档列出当前仓库里的功能全景，而不是只列高层命令或架构方向。
 
 分为三类：
@@ -299,6 +303,7 @@
 
 - `get_material_graph_harness_info`
 - `analyze_material_graph`
+- `analyze_material_graph_layout`
 - `create_material_graph_recipe`
 - `connect_material_nodes`
 - `set_material_graph_property_connections`
@@ -311,6 +316,10 @@ Backend capability notes:
 - Supports `TransformPosition.source_space/target_space` read/write.
 - Supports `MaterialFunctionCall` input/output pin readback after function resource refresh.
 - Supports material root `property_connections` including `PixelDepthOffset` and `MaterialAttributes`.
+- Supports native-safe `GetMaterialAttributes` / `SetMaterialAttributes` creation through `attributes`, using UE's `CreateOrGet...Attribute` APIs.
+- Supports named reroute declarations/usages with declaration pointer and GUID synchronization.
+- Supports material comments in `FMaterialExpressionCollection.EditorComments` plus structured comment readback.
+- Supports read-only topology-aware layout analysis with estimated node bounds, graded violations, and no asset mutation.
 - Delete/disconnect cleanup covers the same material root property set as readback/write support.
 - Main_Client live regression used only temporary assets under `/Game/MCPTest/MaterialGraphBackend`; no SPOM assets were touched.
 

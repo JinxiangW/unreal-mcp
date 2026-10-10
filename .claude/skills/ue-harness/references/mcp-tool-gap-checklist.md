@@ -10,19 +10,28 @@ Agent 在完成真实 Unreal 任务时发现的 MCP 能力缺口记录在此文�
 
 ## 待处理条目
 
-### GAP-0005: Account for implicit connection removal when deleting material nodes
+### GAP-0008: Patch Custom input arrays without partial graph mutation
+
+- Status: open
+- Priority: P1
+- Domain / affected tool: material_graph / `patch_material_graph`
+- Workflow: Extend `/Game/FX_lightfuncTest` Custom expression with a connected `offsetCM` input while retaining its five existing inputs.
+- Current behavior: `update_nodes.properties.Inputs` fails with `Unsupported property type: ArrayProperty`; nodes and scalar properties earlier in the same patch have already been applied.
+- Fallback used: MCP editor Python appends `unreal.CustomInput`, preserving existing input structs, followed by native graph connections and independent readback.
+- Expected behavior / proposed contract: Add typed Custom-input append/update support and validate all unsupported updates before creating nodes; preserve existing links by input name.
+- Verification: Six named connected inputs, original five links intact, no duplicate added nodes after failure/retry, successful SM6 compilation. Evidence: `E:/capture-tool/ue-caustics/material_patch.result.json`, `readback.result.json`.
+
+### GAP-0009: Count replaced material connections by destination input
 
 - Status: open
 - Priority: P2
-- Domain: material_graph
-- Affected tool: `patch_material_graph`
-- Workflow: Delete a material node that owns an existing node-to-node connection while also replacing material root property connections.
-- Current behavior: The backend correctly deletes the node and its incident connections, and readback is correct, but high-level delta verification expects the pre-delete node connection count unless the caller also lists each incident edge in `disconnect_connections`. The tool therefore reports `success: false` for a successful patch.
-- Fallback used: Trust the verified post-operation graph readback after confirming node count and `property_connections`.
-- Expected behavior: Deleting a node should account for its incident node connections during post-connection-count verification, without requiring redundant `disconnect_connections` entries.
-- Proposed tool contract: Update `_run_graph_patch` verification to resolve deleted node selectors against the pre-graph and subtract incident node connections, or omit the exact connection-count check when deletion selectors are present and rely on structural readback.
-- Verification: On `/Game/PVFeature/TA/EditorTools/POMBaker/Materials/M_ShallowPudPOM`, delete `BreakMaterialAttributes`, disconnect nine legacy root properties, and add `MaterialAttributes`; expect one node, zero node connections, one `MaterialAttributes` property connection, and overall `success: true`.
-- Root cause: High-level delta verification does not include connections implicitly removed by `delete_nodes`.
+- Domain / affected tool: material_graph / `patch_material_graph`
+- Workflow: Reconnect existing Custom inputs alongside new graph connections in `/Game/FX_lightfuncTest`.
+- Current behavior: Native patch creates/sets 40 links, five replace existing links. High-level verification expects 7+40=47 links and reports failure; independent graph correctly has 42.
+- Fallback used: Verify unique source/target/input/output tuples and six Custom inputs on independent readback, then perform actual UE rendering checks.
+- Expected behavior / proposed contract: Account for replacement/idempotent connections keyed by destination node and input instead of always adding the requested count.
+- Verification: Reapplying an identical link is successful and does not increase total links. Evidence: `E:/capture-tool/ue-caustics/connect_patch.result.json`, `validation_report.json`.
+
 
 ## 已完成条目
 
@@ -39,6 +48,108 @@ Agent 在完成真实 Unreal 任务时发现的 MCP 能力缺口记录在此文�
 - Proposed tool contract: Extend `import_fbx_asset` with `destination_name`, `import_as_skeletal`, material/texture/animation flags, `import_rotation`, static `combine_meshes`, skeletal hierarchy/skeleton/physics options, and common FBX import data flags.
 - Verification: `uv run python -m unittest tests.test_contracts` passed; `uv run python -m py_compile commandlets\\asset_import_commandlet.py unreal_asset\\tools.py tests\\test_contracts.py` passed; `save=False` MyToon commandlet smoke import of Laevat skeletal FBX to `/Toon/Render/Models/__MCPCommandletSmoke` succeeded with 4 imported object paths, no warnings, and `exit_code=0`; no smoke-test `.uasset` files were persisted.
 - Root cause: The high-level asset import contract was narrower than the existing commandlet backend and covered only static FBX defaults.
+### GAP-0015: Create and verify real material static-switch permutations
+
+- Status: done
+- Priority: P1
+- Domain / affected tools: material_graph / `ensure_material_static_switch_inputs`; material / `set_material_instance_static_switches`.
+- Workflow: Build four inverse-L1 impostor permutations with `UseHierarchy` and `UseBilinear`, without runtime scalar branches pretending to be compile-time switches.
+- Previous behavior: Native graph recipe lacks StaticSwitchParameter creation; the high-level instance updater does not handle static values.
+- Implemented contract: Create/reuse native StaticSwitchParameter expressions with True/False inputs, connect to existing named inputs, compile/save and verify graph links. Batch native instance overrides, update the permutation once, save and read back.
+- Engine detail: UE 5.6 `MaterialEditingLibrary.cpp::SetMaterialInstanceStaticSwitchParameterValue` writes the value but always returns false. The wrapper preflights names and validates native readback instead of relying on that return value.
+- Verification: Four live `MI_OR_Rho_*` instances under `/Game/PVFeature/TA/FrostedGlass/TrueImposter/OctaRadial`, different compiled shader statistics, exact switch readback, CPU/GPU intersection fixtures. Unit tests cover the false return, bool validation, unknown names and failed graph verification.
+
+### GAP-0014: Texture Object sampler properties were ignored and omitted from readback
+
+- Status: done
+- Priority: P1
+- Domain / affected tool: material_graph / texture object recipe creation and sampler inspection.
+- Workflow: Linear depth, packed UV, Bounds and RMO TextureObjectParameters displayed Color sampler warnings.
+- Root cause: Native texture object creation did not apply the supplied sampler type; native graph output omitted the property, hiding the mismatch.
+- Implemented contract: `sync_material_texture_samplers(material_path, repair=False)` inspects actual TextureBase properties, derives sampler requirements from compression/sRGB/data-group/VT settings, and optionally repairs, recompiles, saves and reads back. LayerStudy builders call this after graph creation.
+- Verification: Live `/Game/PVFeature/TA/FrostedGlass/TrueImposter/LayerStudy` four masters; 11 mismatches repaired. Unit regression executes generated code with a TextureObjectParameter analogue and checks read-only, repair and idempotence behavior.
+- Related limitation: Updating a node's texture via native `update_nodes` rejects ObjectProperty. Existing delete/create/reconnect graph operations safely replace that one node without rebuilding the material.
+
+### GAP-0013: Native texture arrays, authored mips and exact GPU data readback
+
+- Status: done
+- Priority: P1
+- Domain / affected tool: asset / `import_texture_arrays`, `inspect_texture_arrays`; scene / `render_material_data`, `render_static_mesh_preview`
+- Workflow: Import depth/UV arrays with 18/36 slices and conservative Bounds with 3 slices and 9 authored mips; validate actual GPU values for an opaque impostor.
+- Previous behavior / fallback: Batch import had no DDS array contract; source DDS export through the native exporter asserted on Texture2DArray. Shader-data and HDR diagnostic readback lacked suitable high-level tools.
+- Implemented contract: Checked raw mip files -> correctly ordered DX10 DDS -> isolated native importer, explicit formats/settings and class verification. Safe property/registry inspection replaces unsupported DDS export. Linear material-to-PNG output supports float bit-pattern probes; scene previews additionally support HDR EXR and report actual camera rotation. Canonicalize texture parameter paths before comparison.
+- Verification: `/Game/PVFeature/TA/FrostedGlass/TrueImposter/LayerStudy`. Six arrays, all slices, all 22 array/mip combinations: exact R32F/RGBA32F bits and UV bytes on GPU. Twelve-view quality, source-texture replacement, fallback maps and two rounds of GPU CSV captured. 108 Python tests and compileall pass. Existing 26 assets and default material unchanged.
+- Evidence: `F:/GFFEngines/Main_Client/Saved/GeneratedAssets/TrueImposter/LayerStudy/reports/final_validation.json`; interface notes: `docs/texture-array-data.md`.
+- Recovery: Native `ExportTextureSourceToDDS` assertion was diagnosed; the unsafe call was removed from inspection and the editor was restored. No engine/plugin C++ edits were required.
+
+### GAP-0012: Render and profile a material without desktop interaction
+
+- Precision follow-up (2026-09-15): Added optional `world_origin` (existing default preserved) and origin readback to `render_static_mesh_preview`. OctaRadial diagnostics at Z=-100000 showed 64 CPU/GPU mask differences in one view, versus 7 at the origin; synthetic local GPU ray tests matched. Near-origin and far-origin captures are retained separately. Added validation for finite positions and regression tests for shared mesh/camera translation.
+
+- Status: done
+- Priority: P1
+- Domain / affected tool: scene / `render_static_mesh_preview`; material / `get_material_statistics`
+- Workflow: Validate a custom opaque material against real geometry from multiple views and compare quality-tier GPU costs without computer use.
+- Previous behavior / fallback: No high-level isolated preview or compiled-statistics tools; ad hoc editor Python was necessary.
+- Implemented contract: Show-only transient mesh capture with manual exposure, PNG readback, guaranteed normal-path cleanup; optional bounded asynchronous GPU CSV profiling with one capture per engine frame and completion/cleanup sidecar. Read native compiled shader statistics independently.
+- Verification: `/Game/PVFeature/TA/FrostedGlass/TrueImposter`, twelve-view mask IoU 99.16%-99.61%, rotation/scale checks, five quality tiers profiled, temporary actors destroyed and GPU cvars restored. `Main_Client/Saved/GeneratedAssets/TrueImposter/reports/final_validation.json`.
+
+### GAP-0011: Preserve parameter defaults across readback and graph recipes
+
+- Status: done
+- Priority: P1
+- Domain / affected tool: material_graph / `create_material_graph_recipe`
+- Workflow: Create nonzero scalar/vector parameter defaults for an opaque ray-casting material.
+- Previous behavior / fallback: Readback exposes `default_value`, but C++ creation expects `value`; defaults silently became zero and blacked out the material. Manual per-instance parameters could mask the error.
+- Implemented contract: Normalize `default_value` to `value` for parameter creation, preserve explicitly supplied `value`, and normalize CameraVectorWS's readback name to its builder name.
+- Verification: Unit coverage plus repeated live material rebuilds; all scalar/vector defaults independently compared to the recipe. Five quality tiers render correctly; 103 tests pass.
+
+### GAP-0010: Isolate batch texture/mesh imports from live TaskGraph execution
+
+- Status: done
+- Priority: P1
+- Domain / affected tool: asset / `import_assets_batch`, `inspect_static_mesh`, `set_static_mesh_material`
+- Workflow: Import R32F/RGBA32F layered-depth assets, byte textures and an FBX with settings applied, saved and verified.
+- Previous behavior / fallback: Individual commandlet tools lack batch/settings contracts. A trial synchronous live ImportAssetTasks call asserted TaskGraph RecursionGuard during Interchange import and crashed UE.
+- Implemented contract: Validate 1-16 inputs, import in an isolated commandlet resolved from the project's engine, apply settings and save/read back each item. Parse both stdout and UE log because Python prints may only appear in the log. Explicit replace_existing is required for overwrites. Mesh tools read geometry counts and save default material references.
+- Verification: Two successful commandlet batches in `/Game/PVFeature/TA/FrostedGlass/TrueImposter`; six textures and two meshes; runtime mesh has one Section and 1452 triangles. Editor restored after the trial failure. Unit regressions, compileall and actual rendering passed.
+
+### GAP-0005: Account for implicit connection removal when deleting material nodes
+
+- Status: done
+- Priority: P2
+- Domain / affected tool: material_graph / `patch_material_graph`
+- Workflow: Delete a material node with incident connections while replacing root property connections.
+- Previous behavior / fallback: Backend/readback were correct, but delta verification retained pre-delete edges unless they were explicitly disconnected; callers had to verify a falsely failed operation independently.
+- Implemented contract: Read the pre-graph when deleting node IDs, subtract incident connections once, and use the actual property_connection_count when post-readback is a summary.
+- Verification: Unit deletion/rebuild regression and repeated full rebuilds of `/Game/PVFeature/TA/FrostedGlass/TrueImposter/M_TI_FrostedBox_1` and its quality variants. Correct node/connection/property counts, successful readback and actual rendered images; 103 tests passed on 2026-09-11.
+- Original verification target retained for history: `/Game/PVFeature/TA/EditorTools/POMBaker/Materials/M_ShallowPudPOM` delete BreakMaterialAttributes and replace roots with MaterialAttributes. This asset was not modified during the 2026-09-11 regression.
+
+### GAP-0007: Preserve dynamic inputs when renaming particle assignments
+
+- Status: done
+- Priority: P1
+- Domain: niagara
+- Workflow: Replace the duplicate constant `Particles.rad` with the original `Particles.Param` curve and bind Center to a particle's world-space position in an existing system.
+- Previous behavior: No native rename or assignment-input binding operation. Rebuilding emitters or using computer interaction is unsuitable; the user explicitly requires MCP for this work.
+- Implemented: Assignment inspection, rename preflight/execution preserving override links and rapid iteration values, and Simulation-to-World position binding. Dry runs do not dirty assets. Connected destination overrides and unrelated conflicting writers are rejected.
+- Validation: 99 Python tests passed; native C++ compilation/linking and user-controlled reload passed. Live `/Game/NS_LFTest` rename preserved the original curve connection and removed duplicate constants. At 1.5s particle/component/MID radius was 0.5000005364; at 3s it was 0. Center and material LightPosition both matched the actual light world position (1234,567,150). Width=30 and Smoothness=5 were preserved. Evidence: Main_Client `tmp/lf_rename_runtime_result.json` and `tmp/lf_rename_center_result.json`.
+- Stability corrections: Newly created read pins are named directly, avoiding editor-only parameter-definition subscription callbacks. Enum pin defaults use member names, not integers. Readback verifies Simulation → World and Apply Scale=true, rather than only checking that a link exists.
+
+
+### GAP-0016: Niagara Component Renderer property binding creation and readback
+
+- Status: done
+- Priority: P1
+- Domain: niagara
+- Affected tools: `get_niagara_renderers`, `set_niagara_component_binding`
+- Workflow: Bind a Niagara float curve to a Blueprint point-light component setter, then update scalar `Param` on its light-function MID.
+- Previous behavior: Generic asset Python cannot edit protected `PropertyBindings`; renderer queries omitted bindings. Unconsumed custom attributes can be optimized out, and assignment targets are not always in graph metadata.
+- Fallback used: Local Python conversion scripts and attempted UI binding before adding typed native support.
+- Implemented contract: Native `set_component_binding` validates editable property, particle dataset/declarations/assignment targets and type conversion; updates one binding with a transaction, recompiles, saves and independently verifies the result. Standalone server: `python -m unreal_niagara.server`.
+- Verification: 93 Python tests passed. ClientEditor/UnrealMCP offline build passed. Live `/Game/NS_LFTest`, emitter `LFPointLight`: initial and repeated binding both verified, one `Param` binding retained; missing attribute and Position-to-float rejected. Simulation at 1.5s produced matching particle/component/MID values `0.5000005364`; at 3s and 3.5s all were exactly zero while the light still existed with intensity 5000.
+- Related stability fix: Native emitter removal closes associated Niagara asset editors before invalidating handles, uses an editor transaction, then requests compilation. Latest observed crash was a stale stack view model dereferencing an erased emitter handle during Tick. Closed-editor structural removal and subsequent simulation passed; an open-editor stress regression has not been performed.
+- Evidence: Main_Client `tmp/lf_mcp_regression.json`, `tmp/lf_verified_fade.json`, `tmp/lf_final_overview.json`. Engine: `F:/GFFEngines/Develop_Maomi/Engine`.
 
 ### GAP-0001: Patch existing material expression properties
 

@@ -109,35 +109,14 @@ Detailed execution rules for function reuse, custom-node constraints, and stop c
 
 ### 4. 应用布局规则（Apply Layout Rules）
 
-When generating `execution.graph.recipe.nodes`, choose readable coordinates.
+When generating `execution.graph.recipe.nodes`, follow [material-graph-layout.md](material-graph-layout.md).
 
-Default layout:
-
-- left-to-right flow
-- shared inputs on the far left
-- one semantic lane per output group
-- utility nodes in the middle
-- material outputs on the right
-
-Recommended lanes:
-
-- `BaseColor`
-- `Opacity` or `OpacityMask`
-- `Normal`
-- `Metallic`
-- `Roughness`
-- `AmbientOcclusion`
-- `Emissive`
-- custom branches below the core PBR lanes
-
-Recommended placement rules:
-
-- place texture coordinates near the top-left
-- place texture and parameter nodes in the first working column
-- place combine or transform nodes in the second column
-- place the final node of each lane close to the material output
-- avoid crossings when a simple lane layout can remove them
-- add reroute nodes in the plan when a branch requires a long shared route
+- derive horizontal columns from dependency depth instead of creation order
+- stack sibling or semantic branches from top to bottom
+- estimate visible bounds before assigning final coordinates
+- create comments after node placement
+- use semantic Named Reroutes for long shared values
+- run `analyze_material_graph_layout` after readback
 
 ### 5. 交付给 UE 执行（Hand Off to UE Execution）
 

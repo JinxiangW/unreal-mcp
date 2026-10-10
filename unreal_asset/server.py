@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from unreal_harness_runtime.editor_guard import make_guarded_tool
+from .import_batch import import_assets_batch, inspect_static_mesh, set_static_mesh_material
+from .texture_array import import_texture_arrays, inspect_texture_arrays
 
 from .tools import (
     create_asset_with_properties,
@@ -30,6 +32,11 @@ from .tools import (
 )
 
 TOOLS = [
+    import_texture_arrays,
+    make_guarded_tool("asset.inspect_texture_arrays", inspect_texture_arrays),
+    import_assets_batch,
+    make_guarded_tool("asset.inspect_static_mesh", inspect_static_mesh),
+    make_guarded_tool("asset.set_static_mesh_material", set_static_mesh_material),
     get_asset_harness_info,
     # Filesystem / commandlet tools — no editor guard needed
     update_texture_group_config,

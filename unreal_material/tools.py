@@ -759,8 +759,9 @@ else:
             changed = unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, parameter_name, texture)
             actual = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(instance, parameter_name)
             actual_path = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(actual) if actual else None
+            expected_path = unreal.EditorAssetLibrary.get_path_name_for_loaded_asset(texture)
             changes.append({{"type": "texture", "parameter": parameter_name, "changed": bool(changed)}})
-            verification.append({{"type": "texture", "parameter": parameter_name, "expected": texture_asset_path, "actual": actual_path, "ok": actual_path == texture_asset_path}})
+            verification.append({{"type": "texture", "parameter": parameter_name, "expected": expected_path, "actual": actual_path, "ok": actual_path == expected_path}})
         except Exception as exc:
             failed.append({{"type": "texture", "parameter": parameter_name, "error": str(exc)}})
 

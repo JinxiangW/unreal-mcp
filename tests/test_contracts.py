@@ -1872,10 +1872,10 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         from unreal_renderdoc import server as renderdoc_server
         from unreal_diagnostics import server as diagnostics_server
 
-        self.assertEqual(len(scene_server.TOOLS), 15)
-        self.assertEqual(len(asset_server.TOOLS), 22)
+        self.assertEqual(len(scene_server.TOOLS), 17)
+        self.assertEqual(len(asset_server.TOOLS), 27)
         self.assertEqual(len(blueprint_server.TOOLS), 12)
-        self.assertEqual(len(material_server.TOOLS), 13)
+        self.assertEqual(len(material_server.TOOLS), 14)
         self.assertEqual(len(material_graph_server.TOOLS), 11)
         self.assertEqual(len(renderdoc_server.TOOLS), 13)
         self.assertEqual(len(diagnostics_server.TOOLS), 10)
@@ -1896,7 +1896,13 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertIn("patch_material_graph", domain_names)
         self.assertIn("request_renderdoc_capture", domain_names)
         self.assertIn("get_editor_ready_state", domain_names)
-        self.assertEqual(len(mcp_server.TOOLS), 95)
+        self.assertIn("import_assets_batch", domain_names)
+        self.assertIn("render_static_mesh_preview", domain_names)
+        self.assertIn("get_material_statistics", domain_names)
+        self.assertIn("import_texture_arrays", domain_names)
+        self.assertIn("inspect_texture_arrays", domain_names)
+        self.assertIn("render_material_data", domain_names)
+        self.assertEqual(len(mcp_server.TOOLS), 103)
 
     def test_slim_mcp_server_exposes_small_discovery_surface(self) -> None:
         from unreal_mcp import slim_server

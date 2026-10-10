@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from unreal_harness_runtime.editor_guard import make_guarded_tool
+from .preview import render_static_mesh_preview
+from .material_data import render_material_data
 
 from .tools import (
     apply_scene_actor_batch,
@@ -23,6 +25,8 @@ from .tools import (
 )
 
 TOOLS = [
+    make_guarded_tool("scene.render_material_data", render_material_data),
+    make_guarded_tool("scene.render_static_mesh_preview", render_static_mesh_preview),
     get_scene_harness_info,
     get_scene_backend_status,
     make_guarded_tool("scene.apply_scene_actor_batch", apply_scene_actor_batch),

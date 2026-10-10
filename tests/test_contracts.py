@@ -1875,8 +1875,8 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertEqual(len(scene_server.TOOLS), 15)
         self.assertEqual(len(asset_server.TOOLS), 22)
         self.assertEqual(len(blueprint_server.TOOLS), 12)
-        self.assertEqual(len(material_server.TOOLS), 12)
-        self.assertEqual(len(material_graph_server.TOOLS), 8)
+        self.assertEqual(len(material_server.TOOLS), 13)
+        self.assertEqual(len(material_graph_server.TOOLS), 11)
         self.assertEqual(len(renderdoc_server.TOOLS), 13)
         self.assertEqual(len(diagnostics_server.TOOLS), 10)
 
@@ -1892,10 +1892,11 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertIn("add_blueprint_node", domain_names)
         self.assertIn("create_blueprint_override", domain_names)
         self.assertIn("get_material_graph", domain_names)
+        self.assertIn("analyze_material_graph_layout", domain_names)
         self.assertIn("patch_material_graph", domain_names)
         self.assertIn("request_renderdoc_capture", domain_names)
         self.assertIn("get_editor_ready_state", domain_names)
-        self.assertEqual(len(mcp_server.TOOLS), 91)
+        self.assertEqual(len(mcp_server.TOOLS), 95)
 
     def test_slim_mcp_server_exposes_small_discovery_surface(self) -> None:
         from unreal_mcp import slim_server

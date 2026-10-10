@@ -13,6 +13,8 @@ from unreal_backend_tcp.tools import (
     release_result_handle,
 )
 
+from .layout import LAYOUT_PROFILE, LAYOUT_THRESHOLDS, analyze_layout
+
 
 def _new_operation_id(action: str) -> str:
     return f"material_graph:{action}:{int(time.time() * 1000)}"
@@ -150,8 +152,28 @@ _UPDATE_NODE_PROPERTY_ALIASES = {
     "MaterialExpressionEditorX": "pos_x",
     "MaterialExpressionEditorY": "pos_y",
     "Desc": "desc",
+    "SizeX": "size_x",
+    "SizeY": "size_y",
 }
 _MATERIAL_EXPRESSION_PREFIX = "MaterialExpression"
+_ATTRIBUTE_NODE_TYPES = {"GetMaterialAttributes", "SetMaterialAttributes"}
+MATERIAL_GRAPH_RECIPE_NODE_EXTENSIONS = {
+    "GetMaterialAttributes": {"attributes": "list[str]"},
+    "SetMaterialAttributes": {"attributes": "list[str]"},
+    "NamedRerouteDeclaration": {"declaration_name": "str", "color": "rgba"},
+    "NamedRerouteUsage": {
+        "declaration_node_id": "str",
+        "declaration_name": "str",
+    },
+    "Comment": {
+        "text": "str",
+        "position": "{x,y}",
+        "size": "{x,y}",
+        "color": "rgba",
+        "font_size": "int",
+        "group_mode": "bool",
+    },
+}
 
 
 def _normalize_update_node_schema(update: Dict[str, Any]) -> Dict[str, Any]:
@@ -213,6 +235,37 @@ def _normalize_node_payload(node: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def _normalize_recipe_node_schema(node: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(node)
+    node_type = str(normalized.get("type") or "")
+    if node_type.startswith(_MATERIAL_EXPRESSION_PREFIX):
+        node_type = node_type[len(_MATERIAL_EXPRESSION_PREFIX) :]
+        normalized["type"] = node_type
+
+    if node_type == "CameraVectorWS":
+        normalized["type"] = "CameraVector"
+    if node_type in {"ScalarParameter", "VectorParameter", "StaticBoolParameter"}:
+        if "value" not in normalized and "default_value" in normalized:
+            normalized["value"] = normalized["default_value"]
+
+    if node_type in _ATTRIBUTE_NODE_TYPES:
+        attributes = normalized.get("attributes", normalized.get("attribute_names", []))
+        if not isinstance(attributes, list) or any(
+            not isinstance(item, str) or not item.strip() for item in attributes
+        ):
+            raise ValueError(f"{node_type}.attributes must be a list of non-empty strings")
+        normalized["attributes"] = [item.strip() for item in attributes]
+
+    if node_type == "NamedRerouteUsage" and not (
+        normalized.get("declaration_node_id") or normalized.get("declaration_name")
+    ):
+        raise ValueError(
+            "NamedRerouteUsage requires declaration_node_id or declaration_name"
+        )
+
+    return normalized
+
+
 def _read_node_property(node: Dict[str, Any], property_name: str) -> Any:
     aliases = [property_name, _UPDATE_NODE_PROPERTY_ALIASES.get(property_name)]
     for alias in aliases:
@@ -250,6 +303,10 @@ def _normalize_graph_payload(
     }
     return {
         "nodes": nodes,
+        "comments": [
+            _normalize_node_payload(comment) if isinstance(comment, dict) else comment
+            for comment in (result.get("comments") or [])
+        ],
         "connections": connections,
         "property_connections": property_connections,
     }
@@ -266,13 +323,20 @@ def get_material_graph_harness_info() -> Dict[str, Any]:
             "graph_read",
             "direct_graph_read",
             "graph_analysis",
+            "layout_analysis",
             "graph_summary",
             "material_node_creation",
             "graph_connections",
             "graph_patch",
             "property_connection_patch",
             "recipe_builds",
+            "material_attribute_nodes",
+            "named_reroutes",
+            "material_comments",
         ],
+        "layout_analysis_profile": LAYOUT_PROFILE,
+        "layout_thresholds": dict(LAYOUT_THRESHOLDS),
+        "recipe_node_extensions": MATERIAL_GRAPH_RECIPE_NODE_EXTENSIONS,
     }
     return {
         "success": True,
@@ -343,6 +407,9 @@ def get_material_graph_summary(asset_path: str) -> Dict[str, Any]:
                 "MaterialFunctionCall",
                 "TextureSample",
                 "TextureObject",
+                "MaterialAttributes",
+                "NamedReroute",
+                "Comment",
             )
         ):
             key_nodes.append(
@@ -356,6 +423,11 @@ def get_material_graph_summary(asset_path: str) -> Dict[str, Any]:
                     "inputs": node.get("inputs"),
                     "outputs": node.get("outputs"),
                     "additional_outputs": node.get("additional_outputs"),
+                    "attribute_names": node.get("attribute_names"),
+                    "declaration_node_id": node.get("declaration_node_id"),
+                    "declaration_name": node.get("declaration_name"),
+                    "declaration_guid": node.get("declaration_guid"),
+                    "text": node.get("text"),
                 }
             )
 
@@ -412,6 +484,7 @@ def analyze_material_graph(
         include_legacy_connection_keys=include_legacy_connection_keys,
     )
     nodes = normalized_graph["nodes"]
+    comments = normalized_graph["comments"]
     connections = normalized_graph["connections"]
     property_connections = normalized_graph["property_connections"]
     asset_path_resolved = result.get("path") or asset_path
@@ -423,6 +496,7 @@ def analyze_material_graph(
     checks = [
         _graph_check(asset_path, "nodes_loaded", True, isinstance(nodes, list)),
         _graph_check(asset_path, "connections_loaded", True, isinstance(connections, list)),
+        _graph_check(asset_path, "comments_loaded", True, isinstance(comments, list)),
         _graph_check(asset_path, "asset_path", requested_asset_path, resolved_asset_path),
     ]
     verification_mode = "structural"
@@ -439,6 +513,16 @@ def analyze_material_graph(
                 "connection_count",
                 result.get("connection_count"),
                 len(connections),
+            )
+        )
+    if "comment_count" in result:
+        verification_mode = "backend_summary"
+        checks.append(
+            _graph_check(
+                asset_path,
+                "comment_count",
+                result.get("comment_count"),
+                len(comments),
             )
         )
     if "property_connection_count" in result:
@@ -465,6 +549,7 @@ def analyze_material_graph(
                 "asset_type": result.get("asset_type"),
                 "node_count": len(nodes),
                 "connection_count": len(connections),
+                "comment_count": len(comments),
                 "property_connection_count": len(property_connections),
                 "node_type_counts": dict(sorted(node_types.items())),
                 "property_connections": sorted(property_connections.keys()),
@@ -479,6 +564,7 @@ def analyze_material_graph(
         "asset_type": result.get("asset_type"),
         "node_count": len(nodes),
         "connection_count": len(connections),
+        "comment_count": len(comments),
         "property_connection_count": len(property_connections),
         "node_type_counts": dict(sorted(node_types.items())),
         "property_connections": property_connections if include_full_graph else sorted(property_connections.keys()),
@@ -486,12 +572,54 @@ def analyze_material_graph(
     if include_full_graph:
         payload["nodes"] = nodes
         payload["connections"] = connections
+        payload["comments"] = comments
         payload["graph"] = {
             "nodes": nodes,
+            "comments": comments,
             "connections": connections,
             "property_connections": property_connections,
         }
     return payload
+
+
+def analyze_material_graph_layout(asset_path: str) -> Dict[str, Any]:
+    """Validate material graph layout without changing the asset."""
+    operation_id = _new_operation_id("analyze_material_graph_layout")
+    graph_result = analyze_material_graph(
+        asset_path,
+        include_full_graph=True,
+        include_legacy_connection_keys=False,
+    )
+    if not graph_result.get("success"):
+        return _structured_graph_failure(
+            operation_id,
+            asset_path,
+            graph_result.get("error", "material graph layout analysis failed"),
+        )
+
+    report = analyze_layout(
+        nodes=graph_result.get("nodes") or [],
+        connections=graph_result.get("connections") or [],
+        comments=graph_result.get("comments") or [],
+    )
+    hard_error_count = report["metrics"]["hard_error_count"]
+    check = _graph_check(asset_path, "layout_hard_error_count", 0, hard_error_count)
+    return {
+        "success": True,
+        "operation_id": operation_id,
+        "domain": "material_graph",
+        "targets": [graph_result.get("asset_path") or asset_path],
+        "applied_changes": [],
+        "failed_changes": [],
+        "post_state": {asset_path: report},
+        "verification": {
+            "verified": bool(check["ok"]),
+            "checks": [check],
+            "mode": "layout_estimate",
+        },
+        "asset_path": graph_result.get("asset_path") or asset_path,
+        **report,
+    }
 
 
 def _count_graph_property_connections(property_connections: Dict[str, Any]) -> int:
@@ -524,10 +652,18 @@ def _run_graph_patch(
 ) -> Dict[str, Any]:
     operation_id = _new_operation_id(operation_name)
     requested_asset_path = _normalize_graph_asset_path(material_name)
+    try:
+        normalized_add_nodes = [
+            _normalize_recipe_node_schema(item)
+            for item in (add_nodes or [])
+            if isinstance(item, dict)
+        ]
+    except ValueError as exc:
+        return _structured_graph_failure(operation_id, material_name, str(exc))
 
     pre_graph = analyze_material_graph(
         material_name,
-        include_full_graph=False,
+        include_full_graph=bool(delete_nodes),
         include_legacy_connection_keys=include_legacy_connection_keys,
     )
     pre_node_count = pre_graph.get("node_count") if pre_graph.get("success") else None
@@ -560,7 +696,7 @@ def _run_graph_patch(
     ]
     result = build_material_graph(
         material_name=material_name,
-        nodes=add_nodes or [],
+        nodes=normalized_add_nodes,
         connections=normalized_connections or None,
         properties=properties,
         property_connections=normalized_property_connections or None,
@@ -587,12 +723,12 @@ def _run_graph_patch(
         return post_graph
 
     builder_result = result.get("result") or {}
-    created_node_count = builder_result.get("node_count", len(add_nodes or []))
+    created_node_count = builder_result.get("node_count", len(normalized_add_nodes))
     created_connection_count = builder_result.get(
         "connection_count",
         len(normalized_connections) + len(normalized_property_connections),
     )
-    requested_node_count = len(add_nodes or [])
+    requested_node_count = len(normalized_add_nodes)
     requested_connection_count = len(normalized_connections)
     requested_property_connection_count = len(normalized_property_connections)
     requested_update_count = len(normalized_update_nodes)
@@ -630,9 +766,20 @@ def _run_graph_patch(
             )
         )
     if pre_connection_count is not None:
+        deleted_ids = set(delete_nodes or [])
+        implicitly_removed = [
+            edge for edge in pre_graph.get("connections", [])
+            if edge.get("source", edge.get("from")) in deleted_ids
+            or edge.get("target", edge.get("to")) in deleted_ids
+        ]
+        explicit_only = [
+            edge for edge in normalized_disconnect_connections
+            if edge.get("source") not in deleted_ids and edge.get("target") not in deleted_ids
+        ]
         expected_post_connections = (
             pre_connection_count
-            - _count_non_material_connections(normalized_disconnect_connections)
+            - _count_non_material_connections(implicitly_removed)
+            - _count_non_material_connections(explicit_only)
             + _count_non_material_connections(normalized_connections)
         )
         checks.append(
@@ -659,7 +806,7 @@ def _run_graph_patch(
                 material_name,
                 "post_property_connection_count",
                 expected_post_property_count,
-                _count_graph_property_connections(post_property_connections),
+                post_graph.get("property_connection_count", _count_graph_property_connections(post_property_connections)),
             )
         )
 
@@ -670,7 +817,7 @@ def _run_graph_patch(
             "value": node.get("type"),
             "node_id": node.get("id"),
         }
-        for node in (add_nodes or [])
+        for node in normalized_add_nodes
     ]
     applied_changes.extend(
         {

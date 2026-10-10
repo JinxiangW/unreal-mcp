@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from unreal_harness_runtime.editor_guard import make_guarded_tool
+from .static_switches import set_material_instance_static_switches
 
 from .tools import (
     create_material_asset,
@@ -20,6 +21,7 @@ from .tools import (
 )
 
 TOOLS = [
+    make_guarded_tool("material.set_material_instance_static_switches", set_material_instance_static_switches),
     get_material_harness_info,
     make_guarded_tool("material.get_material_info", get_material_info),
     make_guarded_tool("material.get_material_dependencies", get_material_dependencies),

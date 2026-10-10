@@ -61,9 +61,24 @@ def build_ue_material_recipe(
         )
 
     if graph_kind == "explicit_graph" and graph.get("dialect") == "ue":
+        nodes = deepcopy(graph.get("nodes") or [])
+        known_node_ids = {
+            node.get("node_id", node.get("id"))
+            for node in nodes
+            if isinstance(node, Mapping)
+        }
+        for comment in deepcopy(graph.get("comments") or []):
+            if not isinstance(comment, Mapping):
+                continue
+            comment_node = dict(comment)
+            comment_node.setdefault("type", "Comment")
+            comment_id = comment_node.get("node_id", comment_node.get("id"))
+            if comment_id not in known_node_ids:
+                nodes.append(comment_node)
+                known_node_ids.add(comment_id)
         return {
             "material_name": material_name or graph.get("asset", {}).get("name") or "M_FromCanonicalIR",
-            "nodes": deepcopy(graph.get("nodes") or []),
+            "nodes": nodes,
             "connections": deepcopy(graph.get("edges") or []),
             "properties": deepcopy(graph.get("material") or {}),
             "source_format": canonical_ir["source"]["format"],
@@ -226,6 +241,7 @@ def _normalize_ue_material_graph_export(payload: Mapping[str, Any]) -> Dict[str,
         "material": {},
         "resources": [],
         "nodes": deepcopy(list(payload.get("nodes") or [])),
+        "comments": deepcopy(list(payload.get("comments") or [])),
         "edges": deepcopy(list(payload.get("connections") or [])),
         "outputs": deepcopy(dict(payload.get("property_connections") or {})),
         "metadata": {},

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from unreal_harness_runtime.editor_guard import make_guarded_tool
+from .samplers import sync_material_texture_samplers
+from .static_switches import ensure_material_static_switch_inputs
 
 from .tools import (
     analyze_material_graph,
+    analyze_material_graph_layout,
     connect_material_nodes,
     create_material_graph_recipe,
     get_material_graph,
@@ -16,10 +19,13 @@ from .tools import (
 )
 
 TOOLS = [
+    make_guarded_tool("material_graph.ensure_material_static_switch_inputs", ensure_material_static_switch_inputs),
+    make_guarded_tool("material_graph.sync_material_texture_samplers", sync_material_texture_samplers),
     get_material_graph_harness_info,
     get_material_graph,
     get_material_graph_summary,
     make_guarded_tool("material_graph.analyze_material_graph", analyze_material_graph),
+    make_guarded_tool("material_graph.analyze_material_graph_layout", analyze_material_graph_layout),
     make_guarded_tool("material_graph.create_material_graph_recipe", create_material_graph_recipe),
     make_guarded_tool("material_graph.connect_material_nodes", connect_material_nodes),
     make_guarded_tool("material_graph.set_material_graph_property_connections", set_material_graph_property_connections),

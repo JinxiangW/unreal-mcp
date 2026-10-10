@@ -39,6 +39,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintGraphCommands::HandleCommand(cons
     {
         return HandleAddEventNode(Params);
     }
+    else if (CommandType == TEXT("create_blueprint_override"))
+    {
+        return HandleCreateBlueprintOverride(Params);
+    }
     else if (CommandType == TEXT("delete_node"))
     {
         return HandleDeleteNode(Params);
@@ -385,4 +389,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintGraphCommands::HandleRenameFuncti
         *OldFunctionName, *NewFunctionName, *BlueprintName);
 
     return FFunctionManager::RenameFunction(Params);
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPBlueprintGraphCommands::HandleCreateBlueprintOverride(const TSharedPtr<FJsonObject>& Params)
+{
+    return FEventManager::CreateBlueprintOverride(Params);
 }

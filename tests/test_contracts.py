@@ -532,6 +532,105 @@ class BlueprintToolContractTests(unittest.TestCase):
             "/Script/Engine.PointLightComponent",
         )
 
+    @patch("unreal_blueprint.tools.raw_create_blueprint_override")
+    def test_create_blueprint_override_returns_structured_native_override(
+        self, mock_create_override
+    ) -> None:
+        mock_create_override.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "created": True,
+                "kind": "function",
+                "override_name": "OnMouseButtonDown",
+                "declaring_class": "/Script/UMG.UserWidget",
+                "blueprint_path": "/Game/Blueprints/WBP_Test.WBP_Test",
+                "graph_name": "OnMouseButtonDown",
+                "graph_id": "graph-guid",
+                "node_id": "entry-guid",
+                "entry_node_id": "entry-guid",
+                "result_node_id": "result-guid",
+            },
+        }
+
+        result = blueprint_tools.create_blueprint_override(
+            blueprint_path="/Game/Blueprints/WBP_Test.WBP_Test",
+            override_name="OnMouseButtonDown",
+            pos_x=-320.0,
+            pos_y=120.0,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["verification"]["verified"])
+        self.assertEqual(result["kind"], "function")
+        self.assertEqual(result["declaring_class"], "/Script/UMG.UserWidget")
+        mock_create_override.assert_called_once_with(
+            blueprint_name="/Game/Blueprints/WBP_Test.WBP_Test",
+            override_name="OnMouseButtonDown",
+            pos_x=-320.0,
+            pos_y=120.0,
+        )
+
+    @patch("unreal_blueprint.tools.raw_create_blueprint_override")
+    def test_create_blueprint_override_preserves_existing_ui_event_result(
+        self, mock_create_override
+    ) -> None:
+        mock_create_override.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "created": False,
+                "kind": "event",
+                "override_name": "PreConstruct",
+                "declaring_class": "/Script/UMG.UserWidget",
+                "blueprint_path": "/Game/UI/WBP_Test.WBP_Test",
+                "graph_name": "EventGraph",
+                "graph_id": "event-graph-guid",
+                "node_id": "existing-preconstruct-guid",
+            },
+        }
+
+        result = blueprint_tools.create_blueprint_override(
+            blueprint_path="/Game/UI/WBP_Test.WBP_Test",
+            override_name="PreConstruct",
+        )
+
+        self.assertTrue(result["success"])
+        self.assertFalse(result["created"])
+        self.assertEqual(result["declaring_class"], "/Script/UMG.UserWidget")
+        self.assertEqual(result["node_id"], "existing-preconstruct-guid")
+
+    @patch("unreal_blueprint.tools.raw_create_blueprint_override")
+    def test_create_blueprint_override_preserves_existing_function_graph_result(
+        self, mock_create_override
+    ) -> None:
+        mock_create_override.return_value = {
+            "status": "success",
+            "result": {
+                "success": True,
+                "created": False,
+                "kind": "function",
+                "override_name": "OnMouseButtonDown",
+                "declaring_class": "/Script/UMG.UserWidget",
+                "blueprint_path": "/Game/UI/WBP_Test.WBP_Test",
+                "graph_name": "OnMouseButtonDown",
+                "graph_id": "function-graph-guid",
+                "node_id": "existing-entry-guid",
+                "entry_node_id": "existing-entry-guid",
+                "result_node_id": "existing-result-guid",
+            },
+        }
+
+        result = blueprint_tools.create_blueprint_override(
+            blueprint_path="/Game/UI/WBP_Test.WBP_Test",
+            override_name="OnMouseButtonDown",
+        )
+
+        self.assertTrue(result["success"])
+        self.assertFalse(result["created"])
+        self.assertEqual(result["entry_node_id"], "existing-entry-guid")
+        self.assertEqual(result["result_node_id"], "existing-result-guid")
+
     def test_upsert_texture_lod_group_lines_appends_missing_group(self) -> None:
         lines = [
             "[GlobalDefaults DeviceProfile]",
@@ -1775,7 +1874,7 @@ class PackagingAndExposureContractTests(unittest.TestCase):
 
         self.assertEqual(len(scene_server.TOOLS), 15)
         self.assertEqual(len(asset_server.TOOLS), 22)
-        self.assertEqual(len(blueprint_server.TOOLS), 11)
+        self.assertEqual(len(blueprint_server.TOOLS), 12)
         self.assertEqual(len(material_server.TOOLS), 12)
         self.assertEqual(len(material_graph_server.TOOLS), 8)
         self.assertEqual(len(renderdoc_server.TOOLS), 13)
@@ -1791,11 +1890,12 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertIn("create_material_asset", domain_names)
         self.assertIn("set_scene_light_intensity", domain_names)
         self.assertIn("add_blueprint_node", domain_names)
+        self.assertIn("create_blueprint_override", domain_names)
         self.assertIn("get_material_graph", domain_names)
         self.assertIn("patch_material_graph", domain_names)
         self.assertIn("request_renderdoc_capture", domain_names)
         self.assertIn("get_editor_ready_state", domain_names)
-        self.assertEqual(len(mcp_server.TOOLS), 90)
+        self.assertEqual(len(mcp_server.TOOLS), 91)
 
     def test_slim_mcp_server_exposes_small_discovery_surface(self) -> None:
         from unreal_mcp import slim_server

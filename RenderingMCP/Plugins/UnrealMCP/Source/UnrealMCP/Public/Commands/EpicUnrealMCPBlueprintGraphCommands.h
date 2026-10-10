@@ -35,6 +35,9 @@ private:
     // Add event node to Blueprint graph
     TSharedPtr<FJsonObject> HandleAddEventNode(const TSharedPtr<FJsonObject>& Params);
 
+    // Create a native event or function override from a parent class signature
+    TSharedPtr<FJsonObject> HandleCreateBlueprintOverride(const TSharedPtr<FJsonObject>& Params);
+
     // Delete node from Blueprint graph (F20)
     TSharedPtr<FJsonObject> HandleDeleteNode(const TSharedPtr<FJsonObject>& Params);
 

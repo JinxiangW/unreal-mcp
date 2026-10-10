@@ -9,6 +9,7 @@ from unreal_backend_tcp.tools import (
     add_blueprint_node as raw_add_blueprint_node,
     analyze_blueprint_graph as raw_analyze_blueprint_graph,
     connect_nodes as raw_connect_nodes,
+    create_blueprint_override as raw_create_blueprint_override,
     get_blueprint_function_details as raw_get_blueprint_function_details,
     get_blueprint_variable_details as raw_get_blueprint_variable_details,
     read_blueprint_content as raw_read_blueprint_content,
@@ -89,6 +90,7 @@ def get_blueprint_harness_info() -> Dict[str, Any]:
             "graph_node_discovery",
             "graph_node_creation",
             "graph_connections",
+            "native_override_creation",
             "pin_default_updates",
         ],
     }
@@ -540,6 +542,84 @@ def add_blueprint_node(
         "failed_changes": [],
         "post_state": {identifier: body},
         "verification": {"verified": True, "checks": []},
+        **body,
+    }
+
+
+def create_blueprint_override(
+    blueprint_path: str | None = None,
+    blueprint_name: str | None = None,
+    override_name: str = "",
+    pos_x: float = 0.0,
+    pos_y: float = 0.0,
+) -> Dict[str, Any]:
+    """Create a native Blueprint override with the inherited event or function signature."""
+    operation_id = _new_operation_id("create_blueprint_override")
+    try:
+        identifier, resolved_name = _resolve_blueprint_identifier(
+            blueprint_path=blueprint_path,
+            blueprint_name=blueprint_name,
+        )
+    except ValueError as exc:
+        return _structured_blueprint_failure(operation_id, "", str(exc))
+
+    normalized_override_name = override_name.strip()
+    if not normalized_override_name:
+        return _structured_blueprint_failure(
+            operation_id, identifier, "override_name must not be empty"
+        )
+
+    result = raw_create_blueprint_override(
+        blueprint_name=resolved_name,
+        override_name=normalized_override_name,
+        pos_x=pos_x,
+        pos_y=pos_y,
+    )
+    if not _result_success(result):
+        body = _result_body(result)
+        return _structured_blueprint_failure(
+            operation_id,
+            identifier,
+            body.get("error", "create_blueprint_override failed"),
+        )
+
+    body = _result_body(result)
+    required_fields = ("kind", "declaring_class", "graph_id", "node_id")
+    checks = [
+        {
+            "target": identifier,
+            "field": field,
+            "expected": "non-empty",
+            "actual": body.get(field),
+            "ok": bool(body.get(field)),
+        }
+        for field in required_fields
+    ]
+    verified = all(check["ok"] for check in checks)
+    failed_changes = [] if verified else [
+        {
+            "target": identifier,
+            "field": "override",
+            "error": "Backend response is missing native override identity fields",
+        }
+    ]
+    return {
+        "success": verified,
+        "operation_id": operation_id,
+        "domain": "blueprint",
+        "targets": [identifier],
+        "applied_changes": [
+            {
+                "target": identifier,
+                "field": "override",
+                "value": normalized_override_name,
+                "kind": body.get("kind"),
+                "created": body.get("created", False),
+            }
+        ] if verified else [],
+        "failed_changes": failed_changes,
+        "post_state": {identifier: body},
+        "verification": {"verified": verified, "checks": checks},
         **body,
     }
 

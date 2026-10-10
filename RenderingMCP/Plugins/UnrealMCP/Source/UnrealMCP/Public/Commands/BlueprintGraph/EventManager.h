@@ -7,6 +7,8 @@
 
 class UK2Node_Event;
 class UEdGraph;
+class UBlueprint;
+class UFunction;
 
 /**
  * Manages Blueprint event node creation
@@ -30,6 +32,13 @@ public:
 	 */
 	static TSharedPtr<FJsonObject> AddEventNode(const TSharedPtr<FJsonObject>& Params);
 
+	/**
+	 * Create a native Blueprint override using the declaration found in the parent class hierarchy.
+	 * Event-compatible functions are added to the event graph; functions with outputs are added as
+	 * native function graphs with the inherited signature.
+	 */
+	static TSharedPtr<FJsonObject> CreateBlueprintOverride(const TSharedPtr<FJsonObject>& Params);
+
 private:
 	/**
 	 * Create an event node in the specified graph
@@ -48,6 +57,14 @@ private:
 	 * @return Existing event node or nullptr if not found
 	 */
 	static UK2Node_Event* FindExistingEventNode(UEdGraph* Graph, const FString& EventName);
+
+	static TSharedPtr<FJsonObject> CreateOverrideSuccessResponse(
+		const UBlueprint* Blueprint,
+		const UFunction* OverrideFunction,
+		const UEdGraph* Graph,
+		const UK2Node_Event* EventNode,
+		bool bCreated,
+		bool bIsEvent);
 
 	/**
 	 * Load a Blueprint by name

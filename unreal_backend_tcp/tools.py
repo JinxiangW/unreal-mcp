@@ -411,6 +411,25 @@ def add_blueprint_node(
 
 
 @with_unreal_connection
+def create_blueprint_override(
+    blueprint_name: str,
+    override_name: str,
+    pos_x: float = 0.0,
+    pos_y: float = 0.0,
+) -> Dict[str, Any]:
+    """Create a native event or function override from the Blueprint parent class."""
+    return send_command(
+        "create_blueprint_override",
+        {
+            "blueprint_name": blueprint_name,
+            "override_name": override_name,
+            "pos_x": pos_x,
+            "pos_y": pos_y,
+        },
+    )
+
+
+@with_unreal_connection
 def connect_nodes(
     blueprint_name: str,
     source_node_id: str,

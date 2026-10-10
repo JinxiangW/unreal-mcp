@@ -14,6 +14,7 @@ from unreal_blueprint.server import TOOLS as BLUEPRINT_TOOLS
 from unreal_diagnostics.server import TOOLS as DIAGNOSTICS_TOOLS
 from unreal_material.server import TOOLS as MATERIAL_TOOLS
 from unreal_material_graph.server import TOOLS as MATERIAL_GRAPH_TOOLS
+from unreal_niagara.server import TOOLS as NIAGARA_TOOLS
 from unreal_renderdoc.server import TOOLS as RENDERDOC_TOOLS
 from unreal_scene.server import TOOLS as SCENE_TOOLS
 
@@ -43,6 +44,7 @@ TOOLS = [
     *BLUEPRINT_TOOLS,
     *MATERIAL_TOOLS,
     *MATERIAL_GRAPH_TOOLS,
+    *NIAGARA_TOOLS,
     *RENDERDOC_TOOLS,
     *_diag_tools,
 ]

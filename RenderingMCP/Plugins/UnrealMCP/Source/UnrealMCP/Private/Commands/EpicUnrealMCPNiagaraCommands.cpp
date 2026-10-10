@@ -6,6 +6,10 @@
 #include "NiagaraEmitterHandle.h"
 #include "NiagaraScript.h"
 #include "NiagaraRendererProperties.h"
+#include "NiagaraComponentRendererProperties.h"
+#include "ScopedTransaction.h"
+#include "Editor.h"
+#include "Subsystems/AssetEditorSubsystem.h"
 #include "NiagaraSimulationStageBase.h"
 #include "NiagaraTypes.h"
 #include "NiagaraParameterStore.h"
@@ -26,6 +30,7 @@
 #include "NiagaraNodeInput.h"
 #include "NiagaraNodeOutput.h"
 #include "NiagaraNodeFunctionCall.h"
+#include "NiagaraNodeAssignment.h"
 #include "NiagaraNodeOp.h"
 #include "NiagaraNodeCustomHlsl.h"
 #include "NiagaraScriptSource.h"
@@ -38,6 +43,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSimCache.h"
 #include "EngineUtils.h"
+#include "Commands/NiagaraParameterOperations.h"
 
 FEpicUnrealMCPNiagaraCommands::FEpicUnrealMCPNiagaraCommands()
 {
@@ -540,6 +546,25 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::GetRendererDetails(UNiaga
     RendererType.RemoveFromEnd(TEXT("Properties"));
     RendererJson->SetStringField(TEXT("type"), RendererType);
     RendererJson->SetBoolField(TEXT("is_enabled"), Renderer->GetIsEnabled());
+    RendererJson->SetStringField(TEXT("path"), Renderer->GetPathName());
+    if (const UNiagaraComponentRendererProperties* Components = Cast<UNiagaraComponentRendererProperties>(Renderer))
+    {
+        RendererJson->SetStringField(TEXT("component_class"), GetPathNameSafe(Components->ComponentType.Get()));
+        RendererJson->SetStringField(TEXT("template_component"), GetPathNameSafe(Components->TemplateComponent));
+        TArray<TSharedPtr<FJsonValue>> Bindings;
+        for (const FNiagaraComponentPropertyBinding& Binding : Components->PropertyBindings)
+        {
+            TSharedPtr<FJsonObject> Item = MakeShared<FJsonObject>();
+            Item->SetStringField(TEXT("property"), Binding.PropertyName.ToString());
+            Item->SetStringField(TEXT("attribute"), Binding.AttributeBinding.GetParamMapBindableVariable().GetName().ToString());
+            Item->SetStringField(TEXT("attribute_type"), Binding.AttributeBinding.GetType().GetName());
+            Item->SetStringField(TEXT("property_type"), Binding.PropertyType.GetName());
+            Item->SetStringField(TEXT("setter"), Binding.MetadataSetterName.ToString());
+            Item->SetBoolField(TEXT("attribute_exists"), Binding.AttributeBinding.DoesBindingExistOnSource());
+            Bindings.Add(MakeShared<FJsonValueObject>(Item));
+        }
+        RendererJson->SetArrayField(TEXT("property_bindings"), Bindings);
+    }
     
     return RendererJson;
 }
@@ -743,7 +768,16 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::ProcessEmitterOperation(U
         
         TSet<FGuid> IdsToDelete;
         IdsToDelete.Add(Handle->GetId());
+        // An open Niagara stack retains emitter-handle view models. Removing
+        // handles directly underneath it leaves dangling entries on its next tick.
+        if (GEditor)
+        {
+            GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->CloseAllEditorsForAsset(System);
+        }
+        FScopedTransaction Transaction(NSLOCTEXT("UnrealMCP", "RemoveNiagaraEmitter", "Remove Niagara emitter"));
+        System->Modify();
         System->RemoveEmitterHandlesById(IdsToDelete);
+        System->RequestCompile(false);
         
         Result->SetBoolField(TEXT("success"), true);
         Result->SetStringField(TEXT("action"), TEXT("remove"));
@@ -1110,6 +1144,171 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::ProcessRendererOperation(
         Result->SetStringField(TEXT("emitter_name"), EmitterName);
         Result->SetNumberField(TEXT("renderer_index"), Index);
         Result->SetBoolField(TEXT("value"), bEnabled);
+    }
+    else if (Action == TEXT("set_component_binding"))
+    {
+        auto Fail = [&Result](const FString& Error)
+        {
+            Result->SetBoolField(TEXT("success"), false);
+            Result->SetStringField(TEXT("error"), Error);
+            return Result;
+        };
+        FString PropertyName, AttributeName, SetterName;
+        if (!Op->TryGetStringField(TEXT("property"), PropertyName) || PropertyName.IsEmpty() ||
+            !Op->TryGetStringField(TEXT("attribute"), AttributeName) || !AttributeName.StartsWith(TEXT("Particles.")))
+        {
+            return Fail(TEXT("property and a Particles.* attribute are required"));
+        }
+        Op->TryGetStringField(TEXT("setter"), SetterName);
+        UNiagaraComponentRendererProperties* Components = Cast<UNiagaraComponentRendererProperties>(Renderer);
+        if (!Components || !Components->TemplateComponent)
+        {
+            return Fail(TEXT("Renderer must have a component template"));
+        }
+        FProperty* Property = FindFProperty<FProperty>(Components->TemplateComponent->GetClass(), *PropertyName);
+        if (!Property || !Property->HasAnyPropertyFlags(CPF_Edit) || Property->HasAnyPropertyFlags(CPF_EditConst))
+        {
+            return Fail(TEXT("Component property does not exist or is not editable"));
+        }
+        const FNiagaraTypeDefinition PropertyType = UNiagaraComponentRendererProperties::ToNiagaraType(Property);
+        if (!PropertyType.IsValid())
+        {
+            return Fail(TEXT("Unsupported component property type"));
+        }
+        // Prefer compiled types, but allow declared graph attributes which were
+        // optimized out before a renderer requested them.
+        System->RequestCompile(false);
+        System->WaitForCompilationComplete(false, false);
+        const int32 EmitterIndex = System->GetEmitterHandles().IndexOfByPredicate(
+            [Handle](const FNiagaraEmitterHandle& Item) { return &Item == Handle; });
+        if (!System->GetEmitterCompiledData().IsValidIndex(EmitterIndex))
+        {
+            return Fail(TEXT("Emitter compiled data is unavailable"));
+        }
+        FNiagaraVariable Attribute;
+        const FName DataSetName(*AttributeName.RightChop(10));
+        for (const FNiagaraVariable& Variable : System->GetEmitterCompiledData()[EmitterIndex]->DataSetCompiledData.Variables)
+        {
+            if (Variable.GetName() == DataSetName || Variable.GetName() == FName(*AttributeName))
+            {
+                Attribute = Variable;
+                Attribute.SetName(FName(*AttributeName));
+                break;
+            }
+        }
+        if (!Attribute.IsValid())
+        {
+            const UNiagaraScriptSource* Source = Cast<UNiagaraScriptSource>(EmitterData->GraphSource);
+            if (Source && Source->NodeGraph)
+            {
+                for (const auto& Entry : Source->NodeGraph->GetAllMetaData())
+                {
+                    if (Entry.Key.GetName() == FName(*AttributeName))
+                    {
+                        Attribute = Entry.Key;
+                        break;
+                    }
+                }
+                // Set Parameters nodes can own custom targets without adding
+                // them to the graph's shared metadata map.
+                for (UEdGraphNode* Node : Source->NodeGraph->Nodes)
+                {
+                    if (const UNiagaraNodeAssignment* Assignment = Cast<UNiagaraNodeAssignment>(Node))
+                    {
+                        for (const FNiagaraVariable& Target : Assignment->GetAssignmentTargets())
+                        {
+                            if (Target.GetName() == FName(*AttributeName))
+                            {
+                                if (Attribute.IsValid() && Attribute.GetType() != Target.GetType())
+                                {
+                                    return Fail(TEXT("Attribute has conflicting types in graph declarations"));
+                                }
+                                Attribute = Target;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (!Attribute.IsValid())
+        {
+            return Fail(TEXT("Particle attribute is missing from compiled data and graph declarations"));
+        }
+        if (!UNiagaraComponentRendererProperties::IsConvertible(Attribute.GetType(), PropertyType))
+        {
+            return Fail(FString::Printf(TEXT("Attribute type %s is incompatible with property type %s"), *Attribute.GetType().GetName(), *PropertyType.GetName()));
+        }
+        if (SetterName.IsEmpty())
+        {
+            SetterName = Property->GetMetaData(TEXT("BlueprintSetter"));
+            if (SetterName.IsEmpty() && Components->TemplateComponent->FindFunction(FName(TEXT("Set") + PropertyName)))
+            {
+                SetterName = TEXT("Set") + PropertyName;
+            }
+        }
+        if (!SetterName.IsEmpty())
+        {
+            UFunction* Setter = Components->TemplateComponent->FindFunction(FName(*SetterName));
+            FProperty* ValueParameter = nullptr;
+            if (Setter)
+            {
+                for (TFieldIterator<FProperty> It(Setter); It; ++It)
+                {
+                    if (It->HasAnyPropertyFlags(CPF_Parm) && !It->HasAnyPropertyFlags(CPF_ReturnParm))
+                    {
+                        ValueParameter = *It;
+                        break;
+                    }
+                }
+            }
+            if (!ValueParameter || ValueParameter->HasAnyPropertyFlags(CPF_OutParm) ||
+                (UNiagaraComponentRendererProperties::ToNiagaraType(ValueParameter) != PropertyType &&
+                 UNiagaraComponentRendererProperties::ToNiagaraType(ValueParameter) != Attribute.GetType()))
+            {
+                return Fail(TEXT("Setter is missing or its first parameter has an incompatible type"));
+            }
+        }
+        FScopedTransaction Transaction(NSLOCTEXT("UnrealMCP", "SetComponentBinding", "Set Niagara component property binding"));
+        System->Modify();
+        Components->Modify();
+        FNiagaraComponentPropertyBinding Binding;
+        Binding.PropertyName = Property->GetFName();
+        Binding.PropertyType = PropertyType;
+        Binding.MetadataSetterName = FName(*SetterName);
+        Binding.AttributeBinding.Setup(Attribute, Attribute);
+        Binding.AttributeBinding.SetValue(Attribute.GetName(), Handle->GetInstance(), ENiagaraRendererSourceDataMode::Particles);
+        Components->PropertyBindings.RemoveAll([&Binding](const FNiagaraComponentPropertyBinding& Existing)
+        {
+            return Existing.PropertyName == Binding.PropertyName;
+        });
+        Components->PropertyBindings.Add(Binding);
+        FPropertyChangedEvent Changed(FindFProperty<FProperty>(Components->GetClass(), TEXT("PropertyBindings")));
+        Components->PostEditChangeProperty(Changed);
+        System->RequestCompile(false);
+        Result->SetBoolField(TEXT("success"), true);
+        Result->SetStringField(TEXT("action"), Action);
+        Result->SetObjectField(TEXT("post_state"), GetRendererDetails(Components));
+    }
+    else if (Action == TEXT("remove_component_binding"))
+    {
+        FString PropertyName;
+        UNiagaraComponentRendererProperties* Components = Cast<UNiagaraComponentRendererProperties>(Renderer);
+        if (!Components || !Op->TryGetStringField(TEXT("property"), PropertyName) || PropertyName.IsEmpty())
+        {
+            Result->SetBoolField(TEXT("success"), false);
+            Result->SetStringField(TEXT("error"), TEXT("A component renderer and property name are required"));
+            return Result;
+        }
+        FScopedTransaction Transaction(NSLOCTEXT("UnrealMCP", "RemoveComponentBinding", "Remove Niagara component property binding"));
+        System->Modify();
+        Components->Modify();
+        const int32 Removed = Components->PropertyBindings.RemoveAll([&](const FNiagaraComponentPropertyBinding& Binding) { return Binding.PropertyName == FName(*PropertyName); });
+        FPropertyChangedEvent Changed(FindFProperty<FProperty>(Components->GetClass(), TEXT("PropertyBindings")));
+        Components->PostEditChangeProperty(Changed);
+        System->RequestCompile(false);
+        Result->SetBoolField(TEXT("success"), true);
+        Result->SetNumberField(TEXT("removed_count"), Removed);
+        Result->SetObjectField(TEXT("post_state"), GetRendererDetails(Components));
     }
     else
     {
@@ -2151,6 +2350,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::ExtractGraphFromScript(UN
     Result->SetNumberField(TEXT("node_count"), NodesArray.Num());
     Result->SetArrayField(TEXT("connections"), ConnectionsArray);
     Result->SetNumberField(TEXT("connection_count"), ConnectionsArray.Num());
+    Result->SetArrayField(TEXT("assignments"), MCPNiagaraParameters::Snapshot(*Graph)->GetArrayField(TEXT("assignments")));
     
     // Get rapid iteration parameters
     TArray<TSharedPtr<FJsonValue>> ParametersArray;
@@ -2468,6 +2668,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleUpdateNiagaraGraph(
     TArray<TSharedPtr<FJsonValue>> ResultsArray;
     int32 SuccessCount = 0;
     int32 FailCount = 0;
+    bool bOnlyInspect = true;
 
     for (const TSharedPtr<FJsonValue>& OpValue : *OperationsArray)
     {
@@ -2475,9 +2676,104 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleUpdateNiagaraGraph(
         if (!Op.IsValid()) continue;
 
         FString Action = Op->GetStringField(TEXT("action"));
+        bool bOperationDryRun = Action == TEXT("rename_particle_parameter") || Action == TEXT("bind_particle_position");
+        if (bOperationDryRun) Op->TryGetBoolField(TEXT("dry_run"), bOperationDryRun);
+        if (Action != TEXT("inspect_assignments") && !bOperationDryRun) bOnlyInspect = false;
         TSharedPtr<FJsonObject> OpResult = MakeShareable(new FJsonObject);
 
-        if (Action == TEXT("add_module"))
+        if (Action == TEXT("inspect_assignments"))
+        {
+            OpResult->SetBoolField(TEXT("success"), true);
+            OpResult->SetObjectField(TEXT("post_state"), MCPNiagaraParameters::Snapshot(*Graph));
+            SuccessCount++;
+        }
+        else if (Action == TEXT("rename_particle_parameter") || Action == TEXT("bind_particle_position"))
+        {
+            FNiagaraEmitterHandle* Handle = NiagaraSystem ? FindEmitterHandle(NiagaraSystem, EmitterName) : nullptr;
+            if (!Handle) OpResult = MCPNiagaraParameters::Failure(TEXT("A system emitter is required"));
+            else if (Action == TEXT("rename_particle_parameter")) OpResult = MCPNiagaraParameters::Rename(*NiagaraSystem, *Handle, *Graph, *Op);
+            else OpResult = MCPNiagaraParameters::BindPosition(*NiagaraSystem, *Graph, *Op);
+            if (OpResult->GetBoolField(TEXT("success"))) SuccessCount++; else FailCount++;
+        }
+        else if (Action == TEXT("add_parameter_assignments"))
+        {
+            const TArray<TSharedPtr<FJsonValue>>* Parameters = nullptr;
+            TArray<FNiagaraVariable> Variables;
+            TArray<FString> Defaults;
+            TSet<FName> Names;
+            FString Error;
+            if (!Op->TryGetArrayField(TEXT("parameters"), Parameters) || Parameters->IsEmpty() || Parameters->Num() > 32)
+            {
+                Error = TEXT("parameters must contain 1-32 entries");
+            }
+            else
+            {
+                for (const TSharedPtr<FJsonValue>& Value : *Parameters)
+                {
+                    const TSharedPtr<FJsonObject>* Parameter = nullptr;
+                    FString Name, Type, SourceName;
+                    if (!Value->TryGetObject(Parameter) || !(*Parameter)->TryGetStringField(TEXT("name"), Name) ||
+                        !Name.StartsWith(TEXT("Particles.")) || Name.Len() <= 10 || !(*Parameter)->TryGetStringField(TEXT("type"), Type) || Names.Contains(FName(*Name)))
+                    {
+                        Error = TEXT("Each entry requires a unique Particles.* name and type");
+                        break;
+                    }
+                    Names.Add(FName(*Name));
+                    double Number;
+                    if (Type == TEXT("float") && (*Parameter)->TryGetNumberField(TEXT("value"), Number) && FMath::IsFinite(Number) && FMath::IsFinite(static_cast<float>(Number)))
+                    {
+                        Variables.Emplace(FNiagaraTypeDefinition::GetFloatDef(), FName(*Name));
+                        Defaults.Add(FString::SanitizeFloat(Number));
+                    }
+                    else if (Type == TEXT("position") && (*Parameter)->TryGetStringField(TEXT("source"), SourceName) && SourceName == TEXT("Engine.Owner.Position"))
+                    {
+                        Variables.Emplace(FNiagaraTypeDefinition::GetPositionDef(), FName(*Name));
+                        Defaults.Add(SourceName);
+                    }
+                    else
+                    {
+                        Error = TEXT("Supported inputs: finite float value, or position sourced from Engine.Owner.Position");
+                        break;
+                    }
+                }
+            }
+            UNiagaraNodeOutput* Output = nullptr;
+            for (UEdGraphNode* Node : Graph->Nodes)
+            {
+                UNiagaraNodeOutput* Candidate = Cast<UNiagaraNodeOutput>(Node);
+                if (Candidate && (Candidate->GetUsage() == Script->GetUsage() ||
+                    (Script->GetUsage() == ENiagaraScriptUsage::ParticleSpawnScriptInterpolated && Candidate->GetUsage() == ENiagaraScriptUsage::ParticleSpawnScript)))
+                {
+                    Output = Candidate;
+                    break;
+                }
+            }
+            if (!Output && Error.IsEmpty()) Error = TEXT("Script output not found");
+            if (Error.IsEmpty())
+            {
+                FScopedTransaction Transaction(NSLOCTEXT("UnrealMCP", "AddNiagaraParameters", "Add Niagara parameter assignments"));
+                if (NiagaraSystem) NiagaraSystem->Modify();
+                Script->Modify();
+                UNiagaraNodeAssignment* Assignment = FNiagaraStackGraphUtilities::AddParameterModuleToStack(Variables, *Output, INDEX_NONE, Defaults);
+                if (Assignment)
+                {
+                    Graph->NotifyGraphChanged();
+                    if (NiagaraSystem) NiagaraSystem->RequestCompile(false);
+                    OpResult->SetBoolField(TEXT("success"), true);
+                    OpResult->SetStringField(TEXT("module_name"), Assignment->GetName());
+                    OpResult->SetNumberField(TEXT("parameter_count"), Variables.Num());
+                    SuccessCount++;
+                }
+                else Error = TEXT("Could not create parameter assignment module");
+            }
+            if (!Error.IsEmpty())
+            {
+                OpResult->SetBoolField(TEXT("success"), false);
+                OpResult->SetStringField(TEXT("error"), Error);
+                FailCount++;
+            }
+        }
+        else if (Action == TEXT("add_module"))
         {
             FString ModulePath;
             if (!Op->TryGetStringField(TEXT("module_path"), ModulePath))
@@ -2687,12 +2983,12 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPNiagaraCommands::HandleUpdateNiagaraGraph(
         ResultsArray.Add(MakeShareable(new FJsonValueObject(OpResult)));
     }
 
-    // Mark dirty
-    if (NiagaraSystem)
+    // Inspection and dry runs must not dirty assets.
+    if (!bOnlyInspect && NiagaraSystem)
     {
         NiagaraSystem->MarkPackageDirty();
     }
-    else
+    else if (!bOnlyInspect)
     {
         Script->MarkPackageDirty();
     }

@@ -1896,13 +1896,17 @@ class PackagingAndExposureContractTests(unittest.TestCase):
         self.assertIn("patch_material_graph", domain_names)
         self.assertIn("request_renderdoc_capture", domain_names)
         self.assertIn("get_editor_ready_state", domain_names)
+        self.assertIn("get_niagara_renderers", domain_names)
+        self.assertIn("set_niagara_component_binding", domain_names)
+        self.assertIn("rename_niagara_particle_parameter", domain_names)
+        self.assertIn("bind_niagara_particle_position", domain_names)
         self.assertIn("import_assets_batch", domain_names)
         self.assertIn("render_static_mesh_preview", domain_names)
         self.assertIn("get_material_statistics", domain_names)
         self.assertIn("import_texture_arrays", domain_names)
         self.assertIn("inspect_texture_arrays", domain_names)
         self.assertIn("render_material_data", domain_names)
-        self.assertEqual(len(mcp_server.TOOLS), 103)
+        self.assertEqual(len(mcp_server.TOOLS), 108)
 
     def test_slim_mcp_server_exposes_small_discovery_surface(self) -> None:
         from unreal_mcp import slim_server
